@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* ========== Light Theme ========== */
+:root {
+    --background: #FFFFFF;
+    --foreground: #000000;
+
+    --card: #F2F2F7;
+    --card-foreground: #000000;
+
+    --popover: #F2F2F7;
+    --popover-foreground: #000000;
+
+    --primary: #18181b;
+    --primary-foreground: #FFFFFF;
+
+    --secondary: #F2F2F7;
+    --secondary-foreground: #18181b;
+
+    --muted: #78788033;
+    --muted-foreground: #71717a;
+
+    --accent: #F2F2F7;
+    --accent-foreground: #18181b;
+
+    --destructive: #ef4444;
+    --destructive-foreground: #FFFFFF;
+
+    --border: #C6C6C8;
+    --input: #e4e4e7;
+    --ring: #a1a1aa;
+
+    --text: #000000;
+    --text-muted: #71717a;
+
+    --blue: #007AFF;
+    --green: #34C759;
+    --red: #FF3B30;
+    --orange: #FF9500;
+    --yellow: #FFCC00;
+    --pink: #FF2D92;
+    --purple: #AF52DE;
+    --teal: #5AC8FA;
+    --indigo: #5856D6;
+}
+
+/* ========== Dark Theme ========== */
+.dark {
+    --background: #000000;
+    --foreground: #FFFFFF;
+
+    --card: #1C1C1E;
+    --card-foreground: #FFFFFF;
+
+    --popover: #18181b;
+    --popover-foreground: #FFFFFF;
+
+    --primary: #e4e4e7;
+    --primary-foreground: #18181b;
+
+    --secondary: #1C1C1E;
+    --secondary-foreground: #FFFFFF;
+
+    --muted: #78788033;
+    --muted-foreground: #a1a1aa;
+
+    --accent: #1C1C1E;
+    --accent-foreground: #FFFFFF;
+
+    --destructive: #dc2626;
+    --destructive-foreground: #FFFFFF;
+
+    --border: #38383A;
+    --input: rgba(255, 255, 255, 0.15);
+    --ring: #71717a;
+
+    --text: #FFFFFF;
+    --text-muted: #a1a1aa;
+
+    --blue: #0A84FF;
+    --green: #30D158;
+    --red: #FF453A;
+    --orange: #FF9F0A;
+    --yellow: #FFD60A;
+    --pink: #FF375F;
+    --purple: #BF5AF2;
+    --teal: #64D2FF;
+    --indigo: #5E5CE6;
+}
+
+@theme {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-text: var(--text);
+    --color-text-muted: var(--text-muted);
+
+    --color-blue: var(--blue);
+    --color-green: var(--green);
+    --color-red: var(--red);
+    --color-orange: var(--orange);
+    --color-yellow: var(--yellow);
+    --color-pink: var(--pink);
+    --color-purple: var(--purple);
+    --color-teal: var(--teal);
+    --color-indigo: var(--indigo);
+}
