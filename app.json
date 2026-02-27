@@ -1,43 +1,39 @@
 {
-  "expo": {
-    "name": "voice2text",
-    "slug": "voice2text",
-    "version": "1.0.0",
-
-    "scheme": "voice2text",
-    "platforms": ["ios", "android"],
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": ["expo-router", "expo-localization"],
-    "experiments": {
-      "typedRoutes": true,
-
-      "tsconfigPaths": true
-    },
-
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-
-    "userInterfaceStyle": "light",
-
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": ["**/*"],
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.voice2text.beta"
+    "expo": {
+        "name": "voice2text",
+        "slug": "voice2text",
+        "version": "1.0.0",
+        "scheme": "voice2text",
+        "platforms": ["ios", "android"],
+        "web": {
+            "bundler": "metro",
+            "output": "static",
+            "favicon": "./assets/favicon.png"
+        },
+        "plugins": ["expo-router", "expo-localization", "./plugins/withSherpaOnnx"],
+        "experiments": {
+            "typedRoutes": true,
+            "tsconfigPaths": true
+        },
+        "orientation": "portrait",
+        "icon": "./assets/icon.png",
+        "userInterfaceStyle": "light",
+        "splash": {
+            "image": "./assets/splash.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#ffffff"
+        },
+        "assetBundlePatterns": ["**/*"],
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.voice2text.beta"
+        },
+        "android": {
+            "adaptiveIcon": {
+                "foregroundImage": "./assets/adaptive-icon.png",
+                "backgroundColor": "#ffffff"
+            },
+            "package": "com.voice2text.beta"
+        }
     }
-  }
 }

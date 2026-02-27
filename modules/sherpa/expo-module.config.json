@@ -1,0 +1,7 @@
+{
+    "name": "SherpaOnnx",
+    "platforms": ["android"],
+    "android": {
+        "modules": ["expo.modules.sherpa.SherpaOnnxModule"]
+    }
+}
