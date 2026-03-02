@@ -14,20 +14,24 @@ function ensureDependency(buildGradle) {
     );
 }
 
-function copyDirRecursive(srcDir, destDir) {
+function syncModelPackages(srcDir, destDir) {
+    fs.rmSync(destDir, { recursive: true, force: true });
+    fs.mkdirSync(destDir, { recursive: true });
+
     if (!fs.existsSync(srcDir)) {
         return;
     }
-    fs.mkdirSync(destDir, { recursive: true });
 
     for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+        if (!entry.isFile()) {
+            continue;
+        }
+        if (!/\.(zip|json)$/i.test(entry.name)) {
+            continue;
+        }
         const src = path.join(srcDir, entry.name);
         const dest = path.join(destDir, entry.name);
-        if (entry.isDirectory()) {
-            copyDirRecursive(src, dest);
-        } else if (entry.isFile()) {
-            fs.copyFileSync(src, dest);
-        }
+        fs.copyFileSync(src, dest);
     }
 }
 
@@ -54,7 +58,7 @@ module.exports = function withSherpaOnnx(config) {
 
             const modelSrcDir = path.join(projectRoot, 'assets/sherpa/models');
             const modelDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/models');
-            copyDirRecursive(modelSrcDir, modelDestDir);
+            syncModelPackages(modelSrcDir, modelDestDir);
 
             return config;
         },

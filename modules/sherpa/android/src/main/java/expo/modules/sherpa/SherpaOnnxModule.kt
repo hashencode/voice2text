@@ -13,9 +13,14 @@ import com.k2fsa.sherpa.onnx.WaveReader
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.zip.ZipInputStream
 
 class SherpaOnnxModule : Module() {
   private val executor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -58,6 +63,124 @@ class SherpaOnnxModule : Module() {
         }
       }
     }
+
+    AsyncFunction("getFileSha256") { filePath: String, promise: Promise ->
+      executor.execute {
+        try {
+          val cleanPath = filePath.removePrefix("file://")
+          val file = File(cleanPath)
+          if (!file.exists() || !file.isFile) {
+            throw IllegalArgumentException("File does not exist: $cleanPath")
+          }
+
+          val digest = MessageDigest.getInstance("SHA-256")
+          FileInputStream(file).use { fis ->
+            val buffer = ByteArray(8192)
+            var read = fis.read(buffer)
+            while (read > 0) {
+              digest.update(buffer, 0, read)
+              read = fis.read(buffer)
+            }
+          }
+          val sha256 = digest.digest().joinToString("") { "%02x".format(it) }
+          promise.resolve(
+            mapOf(
+              "size" to file.length().toDouble(),
+              "sha256" to sha256,
+            ),
+          )
+        } catch (e: Exception) {
+          promise.reject("ERR_SHERPA_SHA256", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("unzipFile") { zipPath: String, destDir: String, promise: Promise ->
+      executor.execute {
+        try {
+          val cleanZipPath = zipPath.removePrefix("file://")
+          val cleanDestDir = destDir.removePrefix("file://")
+          val zipFile = File(cleanZipPath)
+          if (!zipFile.exists() || !zipFile.isFile) {
+            throw IllegalArgumentException("Zip file does not exist: $cleanZipPath")
+          }
+
+          val destination = File(cleanDestDir)
+          destination.mkdirs()
+
+          val destCanonical = destination.canonicalPath + File.separator
+
+          ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+              val outFile = File(destination, entry.name)
+              val outCanonical = outFile.canonicalPath
+              if (!outCanonical.startsWith(destCanonical)) {
+                throw IllegalArgumentException("Invalid zip entry path: ${entry.name}")
+              }
+
+              if (entry.isDirectory) {
+                outFile.mkdirs()
+              } else {
+                outFile.parentFile?.mkdirs()
+                FileOutputStream(outFile).use { fos ->
+                  val buffer = ByteArray(8192)
+                  var read = zis.read(buffer)
+                  while (read > 0) {
+                    fos.write(buffer, 0, read)
+                    read = zis.read(buffer)
+                  }
+                }
+              }
+              zis.closeEntry()
+              entry = zis.nextEntry
+            }
+          }
+
+          promise.resolve(
+            mapOf(
+              "ok" to true,
+              "destDir" to destination.absolutePath,
+            ),
+          )
+        } catch (e: Exception) {
+          promise.reject("ERR_SHERPA_UNZIP", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("copyAssetFile") { assetPath: String, destPath: String, promise: Promise ->
+      executor.execute {
+        try {
+          val cleanDestPath = destPath.removePrefix("file://")
+          val assetManager =
+            appContext.reactContext?.assets ?: throw IllegalStateException("React context is not available")
+
+          val outFile = File(cleanDestPath)
+          outFile.parentFile?.mkdirs()
+
+          assetManager.open(assetPath).use { input ->
+            FileOutputStream(outFile).use { output ->
+              val buffer = ByteArray(8192)
+              var read = input.read(buffer)
+              while (read > 0) {
+                output.write(buffer, 0, read)
+                read = input.read(buffer)
+              }
+            }
+          }
+
+          promise.resolve(
+            mapOf(
+              "ok" to true,
+              "destPath" to outFile.absolutePath,
+            ),
+          )
+        } catch (e: Exception) {
+          promise.reject("ERR_SHERPA_COPY_ASSET_FILE", e.message, e)
+        }
+      }
+    }
   }
 
   private fun transcribeWave(waveData: WaveData, options: Map<String, Any?>?): Map<String, Any?> {
@@ -80,7 +203,7 @@ class SherpaOnnxModule : Module() {
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
 
     val useFileModelDir = !modelDir.isNullOrBlank()
-    val baseModelDir = if (useFileModelDir) modelDir!! else modelDirAsset
+    val baseModelDir = if (useFileModelDir) modelDir!!.removePrefix("file://") else modelDirAsset
 
     val assetManager =
       if (useFileModelDir) {
