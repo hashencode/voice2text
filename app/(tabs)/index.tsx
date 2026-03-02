@@ -6,14 +6,19 @@ import { DefaultLayout } from '~/components/DefaultLayout';
 
 import { Asset } from 'expo-asset';
 import { Button } from '~/components/ui/button';
-import SherpaOnnx, { ensureModelReady } from '~/modules/sherpa';
+import SherpaOnnx, { ensureModelReady, listLocalModels } from '~/modules/sherpa';
 
 export default function Home() {
     const [downloading, setDownloading] = useState(false);
     const [downloadStatus, setDownloadStatus] = useState('未开始下载');
 
-    const modelId = 'streaming-zipformer-en-2023-06-26' as const;
+    const modelId = 'zipformer-zh-en-2023-11-22' as const;
     const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
+
+    const getModels = async () => {
+        const res = await listLocalModels();
+        console.info('@log', res);
+    };
 
     const handleDownloadModel = async () => {
         setDownloading(true);
@@ -65,6 +70,7 @@ export default function Home() {
                 </Button>
                 <Button disabled>{downloadStatus}</Button>
                 <Button onPress={handleClick}>识别</Button>
+                <Button onPress={getModels}>获取模型列表</Button>
             </View>
         </DefaultLayout>
     );

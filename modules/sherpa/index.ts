@@ -360,6 +360,17 @@ export async function isModelDownloaded(modelId: SherpaModelId): Promise<boolean
     return hasExtractedModelFiles(modelId);
 }
 
+export async function listLocalModels(): Promise<SherpaModelId[]> {
+    const modelIds = Object.keys(SHERPA_MODEL_PRESETS) as SherpaModelId[];
+    const existing: SherpaModelId[] = [];
+    for (const modelId of modelIds) {
+        if (await hasExtractedModelFiles(modelId)) {
+            existing.push(modelId);
+        }
+    }
+    return existing;
+}
+
 export async function downloadModel(modelId: SherpaModelId, options: DownloadModelOptions = {}): Promise<string> {
     const modelDir = getDownloadedModelDir(modelId);
     const packagesDir = getDownloadedPackagesRootDir();
@@ -509,6 +520,7 @@ const SherpaOnnx = {
     ensureModelReady,
     initializeBundledModel,
     isModelDownloaded,
+    listLocalModels,
     getDownloadedModelDir,
     transcribeWavByDownloadedModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
         return NativeSherpaOnnx.transcribeWav(path, getSherpaDownloadedModelOptions(modelId, overrides));
