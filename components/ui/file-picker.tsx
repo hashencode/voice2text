@@ -2,11 +2,10 @@ import { Button, ButtonVariant } from '@/components/ui/button';
 import { TextX } from '@/components/ui/text';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { CORNERS, FONT_SIZE } from '@/theme/globals';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Image, X } from 'lucide-react-native';
 import React, { forwardRef, useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { ScrollView, TouchableOpacity, ViewStyle } from 'react-native';
 
 export type FileType = 'image' | 'document' | 'all';
 
@@ -57,7 +56,7 @@ export const FilePicker = forwardRef<FilePickerMethods, FilePickerProps>(
             fileType = 'all',
             multiple = false,
             maxFiles = 10,
-            maxSizeBytes = 10 * 1024 * 1024, // 10MB default
+            maxSizeBytes = 50 * 1024 * 1024, // 50MB default
             allowedExtensions,
             placeholder = 'Select files',
             disabled = false,
@@ -193,22 +192,22 @@ export const FilePicker = forwardRef<FilePickerMethods, FilePickerProps>(
         };
 
         return (
-            <View style={[styles.container]}>
+            <View className="w-full">
                 {/* File Picker Button */}
                 <Button
                     variant={variant}
                     onPress={handlePickerPress}
                     disabled={disabled}
-                    style={[styles.pickerButton, style]}
+                    style={[{ justifyContent: 'flex-start', paddingHorizontal: 16, minHeight: 48 }, style]}
                     accessibilityLabel={accessibilityLabel || `Select ${fileType} files`}
                     accessibilityHint={accessibilityHint || 'Opens file picker'}>
-                    <View style={styles.buttonContent}>
+                    <View className="flex-row items-center gap-3">
                         {fileType === 'image' ? (
                             <Image size={20} color={disabled ? mutedTextColor : primaryColor} />
                         ) : (
                             <File size={20} color={disabled ? mutedTextColor : primaryColor} />
                         )}
-                        <TextX style={[styles.buttonText, { color: disabled ? mutedTextColor : textColor }]}>
+                        <TextX className="text-base font-normal" style={{ color: disabled ? mutedTextColor : textColor }}>
                             {selectedFiles.length > 0
                                 ? `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`
                                 : placeholder}
@@ -218,23 +217,28 @@ export const FilePicker = forwardRef<FilePickerMethods, FilePickerProps>(
 
                 {/* Selected Files Preview */}
                 {selectedFiles.length > 0 && (
-                    <ScrollView style={styles.filesContainer} showsVerticalScrollIndicator={false}>
+                    <ScrollView className="mt-3 max-h-[300px]" showsVerticalScrollIndicator={false}>
                         {selectedFiles.map((file, index) => (
-                            <View key={`${file.uri}-${index}`} style={[styles.fileItem, { backgroundColor, borderColor }]}>
-                                <View style={styles.fileInfo}>
+                            <View
+                                key={`${file.uri}-${index}`}
+                                className="mb-2 flex-row items-center justify-between rounded-xl border p-3"
+                                style={{ backgroundColor, borderColor }}>
+                                <View className="flex-1 flex-row items-center gap-3">
                                     {getFileIcon(file.name)}
-                                    <View style={styles.fileDetails}>
-                                        <TextX style={[styles.fileName, { color: textColor }]} numberOfLines={1}>
+                                    <View className="flex-1">
+                                        <TextX className="text-base font-medium" style={{ color: textColor }} numberOfLines={1}>
                                             {file.name}
                                         </TextX>
                                         {showFileInfo && file.size && (
-                                            <TextX style={[styles.fileSize, { color: mutedTextColor }]}>{formatFileSize(file.size)}</TextX>
+                                            <TextX className="mt-0.5 text-sm" style={{ color: mutedTextColor }}>
+                                                {formatFileSize(file.size)}
+                                            </TextX>
                                         )}
                                     </View>
                                 </View>
                                 <TouchableOpacity
                                     onPress={() => removeFile(index)}
-                                    style={styles.removeButton}
+                                    className="p-1"
                                     accessibilityLabel={`Remove ${file.name}`}>
                                     <X size={16} color={mutedTextColor} />
                                 </TouchableOpacity>
@@ -248,59 +252,6 @@ export const FilePicker = forwardRef<FilePickerMethods, FilePickerProps>(
 );
 
 FilePicker.displayName = 'FilePicker';
-
-const styles = StyleSheet.create({
-    container: {
-        width: '100%',
-    },
-    pickerButton: {
-        justifyContent: 'flex-start',
-        paddingHorizontal: 16,
-        minHeight: 48,
-    },
-    buttonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    buttonText: {
-        fontSize: FONT_SIZE,
-        fontWeight: '400',
-    },
-    filesContainer: {
-        marginTop: 12,
-        maxHeight: 300,
-    },
-    fileItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 12,
-        borderRadius: CORNERS,
-        borderWidth: 1,
-        marginBottom: 8,
-    },
-    fileInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        gap: 12,
-    },
-    fileDetails: {
-        flex: 1,
-    },
-    fileName: {
-        fontSize: FONT_SIZE,
-        fontWeight: '500',
-    },
-    fileSize: {
-        fontSize: 14,
-        marginTop: 2,
-    },
-    removeButton: {
-        padding: 4,
-    },
-});
 
 // Export utility functions for external use
 export const createFileFromUri = async (uri: string, name?: string): Promise<SelectedFile> => {
@@ -366,7 +317,7 @@ export interface UseFilePickerReturn {
 export function useFilePicker(options: UseFilePickerOptions = {}): UseFilePickerReturn {
     const {
         maxFiles = 10,
-        maxSizeBytes = 10 * 1024 * 1024, // 10MB default
+        maxSizeBytes = 50 * 1024 * 1024, // 50MB default
         allowedExtensions,
         onError,
     } = options;

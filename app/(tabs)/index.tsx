@@ -6,7 +6,7 @@ import { DefaultLayout } from '~/components/DefaultLayout';
 
 import { Asset } from 'expo-asset';
 import { Button } from '~/components/ui/button';
-import { FilePicker } from '~/components/ui/file-picker';
+import { FilePicker, useFilePicker } from '~/components/ui/file-picker';
 import SherpaOnnx, { ensureModelReady, listLocalModels } from '~/modules/sherpa';
 
 export default function Home() {
@@ -20,6 +20,8 @@ export default function Home() {
         const res = await listLocalModels();
         console.info('@log', res);
     };
+
+    const { files } = useFilePicker();
 
     const handleDownloadModel = async () => {
         setDownloading(true);
@@ -80,6 +82,7 @@ export default function Home() {
                     maxFiles={5}
                     placeholder="Select your files"
                 />
+                {console.log(files)}
             </View>
         </DefaultLayout>
     );
