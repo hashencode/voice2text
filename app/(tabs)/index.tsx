@@ -1,13 +1,28 @@
 import { Stack } from 'expo-router';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
 import { Asset } from 'expo-asset';
 import { Button } from '~/components/ui/button';
-import SherpaOnnx from '~/modules/sherpa';
+import SherpaOnnx, { downloadModel, isModelDownloaded } from '~/modules/sherpa';
 
 export default function Home() {
+    const [downloading, setDownloading] = useState(false);
+
+    const modelId = 'streaming-zipformer-bilingual-zh-en-2023-02-20' as const;
+
+    const handleDownloadModel = async () => {
+        setDownloading(true);
+        try {
+            const localDir = await downloadModel(modelId);
+            console.info('@log model downloaded', modelId, localDir);
+        } finally {
+            setDownloading(false);
+        }
+    };
+
     const handleClick = async () => {
         // 1. 加载 asset
         const asset = Asset.fromModule(require('@/assets/0.wav'));
@@ -17,7 +32,11 @@ export default function Home() {
         const fileUri = asset.localUri;
         console.info('@log', fileUri);
         if (fileUri) {
-            const r1 = await SherpaOnnx.transcribeWav(fileUri);
+            const downloaded = await isModelDownloaded(modelId);
+            if (!downloaded) {
+                throw new Error(`Model not downloaded: ${modelId}`);
+            }
+            const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(fileUri, modelId);
             console.info('@log', r1.text);
         }
     };
@@ -25,7 +44,12 @@ export default function Home() {
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
-            <Button onPress={handleClick}>123</Button>
+            <View style={{ gap: 12 }}>
+                <Button loading={downloading} onPress={handleDownloadModel}>
+                    下载模型
+                </Button>
+                <Button onPress={handleClick}>识别</Button>
+            </View>
         </DefaultLayout>
     );
 }

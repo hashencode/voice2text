@@ -7,6 +7,7 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
+import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig
 import com.k2fsa.sherpa.onnx.WaveData
 import com.k2fsa.sherpa.onnx.WaveReader
 import expo.modules.kotlin.Promise
@@ -61,9 +62,12 @@ class SherpaOnnxModule : Module() {
 
   private fun transcribeWave(waveData: WaveData, options: Map<String, Any?>?): Map<String, Any?> {
     val modelDirAsset = options?.getString("modelDirAsset") ?: DEFAULT_MODEL_DIR_ASSET
-    val encoder = options?.getString("encoder") ?: "encoder.int8.onnx"
-    val decoder = options?.getString("decoder") ?: "decoder.int8.onnx"
-    val joiner = options?.getString("joiner") ?: "joiner.int8.onnx"
+    val modelDir = options?.getString("modelDir")
+    val modelType = options?.getString("modelType") ?: "transducer"
+    val encoder = options?.getString("encoder") ?: "encoder.onnx"
+    val decoder = options?.getString("decoder") ?: "decoder.onnx"
+    val joiner = options?.getString("joiner") ?: "joiner.onnx"
+    val model = options?.getString("model") ?: "model.onnx"
     val tokens = options?.getString("tokens") ?: "tokens.txt"
 
     val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
@@ -75,23 +79,50 @@ class SherpaOnnxModule : Module() {
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
 
-    val assetManager =
-      appContext.reactContext?.assets ?: throw IllegalStateException("React context is not available")
+    val useFileModelDir = !modelDir.isNullOrBlank()
+    val baseModelDir = if (useFileModelDir) modelDir!! else modelDirAsset
 
-    val transducerConfig =
-      OfflineTransducerModelConfig(
-        joinAssetPath(modelDirAsset, encoder),
-        joinAssetPath(modelDirAsset, decoder),
-        joinAssetPath(modelDirAsset, joiner),
-      )
+    val assetManager =
+      if (useFileModelDir) {
+        null
+      } else {
+        appContext.reactContext?.assets ?: throw IllegalStateException("React context is not available")
+      }
+
+    fun resolveModelPath(name: String): String {
+      return if (useFileModelDir) {
+        File(baseModelDir, name).absolutePath
+      } else {
+        joinAssetPath(baseModelDir, name)
+      }
+    }
 
     val modelConfig = OfflineModelConfig().apply {
-      this.transducer = transducerConfig
-      this.tokens = joinAssetPath(modelDirAsset, tokens)
+      this.tokens = resolveModelPath(tokens)
       this.numThreads = numThreads
       this.provider = provider
       this.debug = debug
-      this.modelType = "transducer"
+      this.modelType = modelType
+    }
+
+    when (modelType) {
+      "transducer", "zipformer", "zipformer2" -> {
+        modelConfig.transducer =
+          OfflineTransducerModelConfig(
+            resolveModelPath(encoder),
+            resolveModelPath(decoder),
+            resolveModelPath(joiner),
+          )
+      }
+      "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
+        modelConfig.zipformerCtc = OfflineZipformerCtcModelConfig().apply {
+          this.model = resolveModelPath(model)
+        }
+        modelConfig.modelType = "zipformer2_ctc"
+      }
+      else -> {
+        throw IllegalArgumentException("Unsupported modelType: $modelType")
+      }
     }
 
     val recognizerConfig = OfflineRecognizerConfig().apply {
