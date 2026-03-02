@@ -6,6 +6,7 @@ import { DefaultLayout } from '~/components/DefaultLayout';
 
 import { Asset } from 'expo-asset';
 import { Button } from '~/components/ui/button';
+import { FilePicker } from '~/components/ui/file-picker';
 import SherpaOnnx, { ensureModelReady, listLocalModels } from '~/modules/sherpa';
 
 export default function Home() {
@@ -71,6 +72,14 @@ export default function Home() {
                 <Button disabled>{downloadStatus}</Button>
                 <Button onPress={handleClick}>识别</Button>
                 <Button onPress={getModels}>获取模型列表</Button>
+                <FilePicker
+                    onFilesSelected={files => console.log('Selected files:', files)}
+                    onError={error => console.error('Error:', error)}
+                    fileType="all"
+                    multiple={true}
+                    maxFiles={5}
+                    placeholder="Select your files"
+                />
             </View>
         </DefaultLayout>
     );
