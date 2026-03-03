@@ -33,13 +33,42 @@ export type SherpaTranscribeResult = {
     numSamples: number;
 };
 
+export type SherpaRealtimeOptions = SherpaTranscribeOptions & {
+    emitIntervalMs?: number;
+    enableEndpoint?: boolean;
+};
+
+export type SherpaRealtimeResultEvent = {
+    type: 'partial' | 'final' | 'error';
+    text?: string;
+    tokens?: string[];
+    timestamps?: number[];
+    isFinal?: boolean;
+    isEndpoint?: boolean;
+    sampleRate?: number;
+    message?: string;
+};
+
+export type SherpaRealtimeStateEvent = {
+    state: 'starting' | 'running' | 'stopped' | 'error';
+    error?: string | null;
+};
+
+type SherpaRealtimeSubscription = {
+    remove(): void;
+};
+
 type SherpaOnnxNative = {
     hello(): string;
+    isRealtimeTranscribing(): boolean;
+    startRealtimeTranscription(options?: SherpaRealtimeOptions): Promise<{ started: boolean }>;
+    stopRealtimeTranscription(): Promise<{ stopped: boolean }>;
     transcribeWav(path: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     transcribeAssetWav(assetPath: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     getFileSha256(filePath: string): Promise<{ size: number; sha256: string }>;
     unzipFile(zipPath: string, destDir: string): Promise<{ ok: boolean; destDir: string }>;
     copyAssetFile(assetPath: string, destPath: string): Promise<{ ok: boolean; destPath: string }>;
+    addListener(eventName: string, listener: (event: any) => void): SherpaRealtimeSubscription;
 };
 
 export const SHERPA_MODEL_PRESETS = {
@@ -527,6 +556,18 @@ const SherpaOnnx = {
     },
     transcribeAssetWavByDownloadedModel(assetPath: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
         return NativeSherpaOnnx.transcribeAssetWav(assetPath, getSherpaDownloadedModelOptions(modelId, overrides));
+    },
+    startRealtimeTranscriptionByModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
+        return NativeSherpaOnnx.startRealtimeTranscription(getSherpaModelOptions(modelId, overrides));
+    },
+    startRealtimeTranscriptionByDownloadedModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
+        return NativeSherpaOnnx.startRealtimeTranscription(getSherpaDownloadedModelOptions(modelId, overrides));
+    },
+    addRealtimeResultListener(listener: (event: SherpaRealtimeResultEvent) => void): SherpaRealtimeSubscription {
+        return NativeSherpaOnnx.addListener('onRealtimeTranscription', listener);
+    },
+    addRealtimeStateListener(listener: (event: SherpaRealtimeStateEvent) => void): SherpaRealtimeSubscription {
+        return NativeSherpaOnnx.addListener('onRealtimeState', listener);
     },
 };
 

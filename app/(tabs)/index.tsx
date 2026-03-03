@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
@@ -8,15 +8,24 @@ import { AudioRecorder } from '~/components/ui/audio-recorder';
 import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
-import SherpaOnnx, { ensureModelReady, listLocalModels } from '~/modules/sherpa';
+import SherpaOnnx, {
+    ensureModelReady,
+    listLocalModels,
+    type SherpaRealtimeResultEvent,
+    type SherpaRealtimeStateEvent,
+} from '~/modules/sherpa';
 
 export default function Home() {
     const [downloading, setDownloading] = useState(false);
     const [downloadStatus, setDownloadStatus] = useState('未开始下载');
     const [modelsListText, setModelsListText] = useState('');
     const [conversionText, setConversionText] = useState('');
+    const [realtimeState, setRealtimeState] = useState('stopped');
+    const [realtimePartialText, setRealtimePartialText] = useState('');
+    const [realtimeFinalText, setRealtimeFinalText] = useState('');
 
-    const modelId = 'zipformer-zh-en-2023-11-22' as const;
+    const fileModelId = 'zipformer-zh-en-2023-11-22' as const;
+    const realtimeModelId = 'streaming-zipformer-bilingual-zh-en-2023-02-20' as const;
     const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
 
     const getModels = async () => {
@@ -34,7 +43,7 @@ export default function Home() {
     const handleDownloadModel = async () => {
         setDownloading(true);
         try {
-            const localDir = await ensureModelReady(modelId, {
+            const localDir = await ensureModelReady(realtimeModelId, {
                 baseUrl: MODEL_BASE_URL,
                 onProgress: progress => {
                     if (progress.phase === 'downloading-zip') {
@@ -51,7 +60,7 @@ export default function Home() {
                     }
                 },
             });
-            console.info('@log model downloaded', modelId, localDir);
+            console.info('@log model downloaded', realtimeModelId, localDir);
         } finally {
             setDownloading(false);
         }
@@ -59,11 +68,51 @@ export default function Home() {
 
     const handleConversion = async (uri: string) => {
         if (uri) {
-            await ensureModelReady(modelId, { baseUrl: uri });
-            const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, modelId);
+            await ensureModelReady(fileModelId, { baseUrl: MODEL_BASE_URL });
+            const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, fileModelId);
             setConversionText(r1.text);
         }
     };
+
+    const startRealtime = async () => {
+        await ensureModelReady(realtimeModelId, { baseUrl: MODEL_BASE_URL });
+        setRealtimePartialText('');
+        setRealtimeFinalText('');
+        await SherpaOnnx.startRealtimeTranscriptionByDownloadedModel(realtimeModelId, {
+            sampleRate: 16000,
+            emitIntervalMs: 150,
+            enableEndpoint: false,
+        });
+    };
+
+    const stopRealtime = async () => {
+        await SherpaOnnx.stopRealtimeTranscription();
+    };
+
+    useEffect(() => {
+        const resultSub = SherpaOnnx.addRealtimeResultListener((event: SherpaRealtimeResultEvent) => {
+            if (event.type === 'partial') {
+                setRealtimePartialText(event.text ?? '');
+            } else if (event.type === 'final') {
+                const text = event.text ?? '';
+                if (text) {
+                    setRealtimeFinalText(prev => (prev ? `${prev}\n${text}` : text));
+                }
+                setRealtimePartialText('');
+            } else if (event.type === 'error') {
+                setRealtimePartialText(`识别错误: ${event.message ?? 'unknown'}`);
+            }
+        });
+
+        const stateSub = SherpaOnnx.addRealtimeStateListener((event: SherpaRealtimeStateEvent) => {
+            setRealtimeState(event.state);
+        });
+
+        return () => {
+            resultSub.remove();
+            stateSub.remove();
+        };
+    }, []);
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
@@ -77,6 +126,17 @@ export default function Home() {
                 <TextX>{modelsListText}</TextX>
                 <Button onPress={pickDocument}>选择文件</Button>
                 <TextX>{conversionText}</TextX>
+
+                <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
+                    开始实时识别
+                </Button>
+                <Button onPress={stopRealtime} disabled={realtimeState !== 'running'}>
+                    停止实时识别
+                </Button>
+                <TextX>实时状态: {realtimeState}</TextX>
+                <TextX>实时中间结果: {realtimePartialText}</TextX>
+                <TextX>实时最终结果: {realtimeFinalText}</TextX>
+
                 <AudioRecorder
                     quality="high"
                     showWaveform={true}

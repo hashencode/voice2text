@@ -11,7 +11,8 @@ import '~/utils/interop';
 
 export default function RootLayout() {
     useEffect(() => {
-        initializeBundledModel('zipformer-zh-en-2023-11-22').catch(error => {
+        // initializeBundledModel('zipformer-zh-en-2023-11-22').catch(error => {
+        initializeBundledModel('streaming-zipformer-bilingual-zh-en-2023-02-20').catch(error => {
             console.error('[sherpa] initialize bundled model failed', error);
         });
     }, []);

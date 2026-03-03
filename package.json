@@ -39,7 +39,6 @@
         "lodash": "^4.17.23",
         "lucide-react-native": "^0.562.0",
         "nativewind": "latest",
-        "prettier-plugin-organize-imports": "^4.3.0",
         "react": "19.2.0",
         "react-dom": "19.2.0",
         "react-i18next": "^14.0.1",
@@ -61,6 +60,7 @@
         "eslint-config-prettier": "^10.1.2",
         "prettier": "^3.2.5",
         "prettier-plugin-tailwindcss": "^0.5.11",
+        "prettier-plugin-organize-imports": "^4.3.0",
         "tailwindcss": "^3.4.0",
         "typescript": "~5.9.2"
     },

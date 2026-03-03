@@ -211,7 +211,6 @@ export function useFilePicker(options: UseFilePickerOptions = {}): UseFilePicker
     }, [errors.length, files.length, maxFiles]);
 
     useUpdateEffect(() => {
-        console.info('@log', 123);
         onFilesSelected?.(files);
     }, [files, onFilesSelected]);
 
