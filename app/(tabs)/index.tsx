@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
+import { AudioRecorder } from '~/components/ui/audio-recorder';
 import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
@@ -76,6 +77,14 @@ export default function Home() {
                 <TextX>{modelsListText}</TextX>
                 <Button onPress={pickDocument}>选择文件</Button>
                 <TextX>{conversionText}</TextX>
+                <AudioRecorder
+                    quality="high"
+                    showWaveform={true}
+                    showTimer={true}
+                    onRecordingComplete={uri => {
+                        console.log('Recording saved to:', uri);
+                    }}
+                />
             </View>
         </DefaultLayout>
     );
