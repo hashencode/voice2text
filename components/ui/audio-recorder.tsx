@@ -54,8 +54,8 @@ export function AudioRecorder({
 
     // Animation values using react-native-reanimated
     const recordingPulse = useSharedValue(1);
-    const durationInterval = useRef<number | null>(null);
-    const meteringInterval = useRef<number | null>(null);
+    const durationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+    const meteringInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Request permissions on mount
     useEffect(() => {

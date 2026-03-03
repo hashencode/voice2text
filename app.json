@@ -10,7 +10,15 @@
             "output": "static",
             "favicon": "./assets/favicon.png"
         },
-        "plugins": ["expo-router", "expo-localization", "./plugins/withSherpaOnnx"],
+        "plugins": [
+            "expo-router",
+            "expo-localization",
+            "./plugins/withSherpaOnnx",
+            "expo-image",
+            "expo-web-browser",
+            "expo-font",
+            "expo-asset"
+        ],
         "experiments": {
             "typedRoutes": true,
             "tsconfigPaths": true
