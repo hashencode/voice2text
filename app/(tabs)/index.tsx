@@ -4,24 +4,31 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
-import { Asset } from 'expo-asset';
 import { Button } from '~/components/ui/button';
-import { FilePicker, useFilePicker } from '~/components/ui/file-picker';
+import { TextX } from '~/components/ui/text';
+import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, { ensureModelReady, listLocalModels } from '~/modules/sherpa';
 
 export default function Home() {
     const [downloading, setDownloading] = useState(false);
     const [downloadStatus, setDownloadStatus] = useState('未开始下载');
+    const [modelsListText, setModelsListText] = useState('');
+    const [conversionText, setConversionText] = useState('');
 
     const modelId = 'zipformer-zh-en-2023-11-22' as const;
     const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
 
     const getModels = async () => {
         const res = await listLocalModels();
-        console.info('@log', res);
+        setModelsListText(JSON.stringify(res));
+        console.info('@log', typeof res);
     };
 
-    const { files } = useFilePicker();
+    const { pickDocument } = useFilePicker({
+        multiple: true,
+        onFilesSelected: selected => handleConversion(selected[0]?.uri),
+        onError: error => console.error('Error:', error),
+    });
 
     const handleDownloadModel = async () => {
         setDownloading(true);
@@ -49,18 +56,11 @@ export default function Home() {
         }
     };
 
-    const handleClick = async () => {
-        // 1. 加载 asset
-        const asset = Asset.fromModule(require('@/assets/0.wav'));
-        // 2. 确保文件已经下载到本地
-        await asset.downloadAsync();
-        // 3. 获取 fileUri
-        const fileUri = asset.localUri;
-        console.info('@log', fileUri);
-        if (fileUri) {
-            await ensureModelReady(modelId, { baseUrl: MODEL_BASE_URL });
-            const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(fileUri, modelId);
-            console.info('@log', r1.text);
+    const handleConversion = async (uri: string) => {
+        if (uri) {
+            await ensureModelReady(modelId, { baseUrl: uri });
+            const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, modelId);
+            setConversionText(r1.text);
         }
     };
 
@@ -71,18 +71,11 @@ export default function Home() {
                 <Button loading={downloading} onPress={handleDownloadModel}>
                     下载模型
                 </Button>
-                <Button disabled>{downloadStatus}</Button>
-                <Button onPress={handleClick}>识别</Button>
+                <TextX>{downloadStatus}</TextX>
                 <Button onPress={getModels}>获取模型列表</Button>
-                <FilePicker
-                    onFilesSelected={files => console.log('Selected files:', files)}
-                    onError={error => console.error('Error:', error)}
-                    fileType="all"
-                    multiple={true}
-                    maxFiles={5}
-                    placeholder="Select your files"
-                />
-                {console.log(files)}
+                <TextX>{modelsListText}</TextX>
+                <Button onPress={pickDocument}>选择文件</Button>
+                <TextX>{conversionText}</TextX>
             </View>
         </DefaultLayout>
     );
