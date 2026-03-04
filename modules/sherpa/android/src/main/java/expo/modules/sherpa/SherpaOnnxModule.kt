@@ -29,14 +29,18 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
 class SherpaOnnxModule : Module() {
   private val executor: ExecutorService = Executors.newSingleThreadExecutor()
   private val realtimeExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+  private val wavRecordExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
   @Volatile
   private var realtimeRunning = false
@@ -50,7 +54,26 @@ class SherpaOnnxModule : Module() {
   @Volatile
   private var realtimeStream: OnlineStream? = null
 
+  @Volatile
+  private var wavRecordingRunning = false
+
+  @Volatile
+  private var wavAudioRecord: AudioRecord? = null
+
+  @Volatile
+  private var wavOutputFile: File? = null
+
+  @Volatile
+  private var wavSampleRate = DEFAULT_SAMPLE_RATE
+
+  @Volatile
+  private var wavWrittenBytes: Long = 0
+
+  @Volatile
+  private var wavStopLatch: CountDownLatch? = null
+
   private val realtimeLock = Any()
+  private val wavLock = Any()
 
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
@@ -58,8 +81,10 @@ class SherpaOnnxModule : Module() {
 
     OnDestroy {
       stopRealtimeInternal()
+      stopWavRecordingInternal()
       executor.shutdownNow()
       realtimeExecutor.shutdownNow()
+      wavRecordExecutor.shutdownNow()
     }
 
     Function("hello") {
@@ -68,6 +93,92 @@ class SherpaOnnxModule : Module() {
 
     Function("isRealtimeTranscribing") {
       realtimeRunning
+    }
+
+    Function("isWavRecording") {
+      wavRecordingRunning
+    }
+
+    AsyncFunction("startWavRecording") { options: Map<String, Any?>?, promise: Promise ->
+      synchronized(wavLock) {
+        if (wavRecordingRunning) {
+          promise.reject("ERR_WAV_RECORDING_ALREADY_RUNNING", "WAV recording is already running", null)
+          return@AsyncFunction
+        }
+
+        try {
+          val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
+          val outputPath =
+            options?.getString("path")?.removePrefix("file://")
+              ?: run {
+                val cacheDir =
+                  appContext.reactContext?.cacheDir ?: throw IllegalStateException("React context is not available")
+                File(cacheDir, "recording-${System.currentTimeMillis()}.wav").absolutePath
+              }
+
+          val outFile = File(outputPath)
+          outFile.parentFile?.mkdirs()
+          if (outFile.exists()) {
+            outFile.delete()
+          }
+
+          val audioRecord = createAudioRecord(sampleRate)
+          FileOutputStream(outFile).use { fos ->
+            fos.write(ByteArray(WAV_HEADER_SIZE))
+            fos.flush()
+          }
+
+          wavRecordingRunning = true
+          wavAudioRecord = audioRecord
+          wavOutputFile = outFile
+          wavSampleRate = sampleRate
+          wavWrittenBytes = 0
+          wavStopLatch = CountDownLatch(1)
+
+          wavRecordExecutor.execute {
+            runWavRecordingLoop(outFile, audioRecord, sampleRate)
+          }
+
+          promise.resolve(
+            mapOf(
+              "path" to outFile.absolutePath,
+              "sampleRate" to sampleRate,
+            ),
+          )
+        } catch (e: Exception) {
+          wavRecordingRunning = false
+          wavAudioRecord?.release()
+          wavAudioRecord = null
+          wavOutputFile = null
+          wavStopLatch = null
+          promise.reject("ERR_WAV_RECORDING_START", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("stopWavRecording") { promise: Promise ->
+      val latch = wavStopLatch
+      val outputFile = wavOutputFile
+      val sampleRate = wavSampleRate
+
+      stopWavRecordingInternal()
+
+      if (latch != null) {
+        latch.await(5, TimeUnit.SECONDS)
+      }
+
+      val path = outputFile?.absolutePath
+      if (path.isNullOrBlank()) {
+        promise.reject("ERR_WAV_RECORDING_STOP", "No WAV recording file found", null)
+      } else {
+        promise.resolve(
+          mapOf(
+            "path" to path,
+            "sampleRate" to sampleRate,
+            "numSamples" to (wavWrittenBytes / 2).toDouble(),
+          ),
+        )
+      }
     }
 
     AsyncFunction("startRealtimeTranscription") { options: Map<String, Any?>?, promise: Promise ->
@@ -419,6 +530,102 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun stopWavRecordingInternal() {
+    wavRecordingRunning = false
+    try {
+      wavAudioRecord?.stop()
+    } catch (_: Exception) {
+    }
+  }
+
+  private fun runWavRecordingLoop(outputFile: File, audioRecord: AudioRecord, sampleRate: Int) {
+    var localWrittenBytes = 0L
+    try {
+      audioRecord.startRecording()
+      FileOutputStream(outputFile, true).use { fos ->
+        val shortBuffer = ShortArray(DEFAULT_AUDIO_BUFFER_SAMPLES)
+        val byteBuffer = ByteArray(DEFAULT_AUDIO_BUFFER_SAMPLES * 2)
+
+        while (wavRecordingRunning) {
+          val read = audioRecord.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
+          if (read <= 0) {
+            continue
+          }
+
+          var offset = 0
+          for (i in 0 until read) {
+            val sample = shortBuffer[i].toInt()
+            byteBuffer[offset] = (sample and 0xFF).toByte()
+            byteBuffer[offset + 1] = ((sample shr 8) and 0xFF).toByte()
+            offset += 2
+          }
+          fos.write(byteBuffer, 0, offset)
+          localWrittenBytes += offset.toLong()
+        }
+        fos.flush()
+      }
+    } finally {
+      try {
+        audioRecord.stop()
+      } catch (_: Exception) {
+      }
+      audioRecord.release()
+
+      try {
+        writeWavHeader(outputFile, localWrittenBytes, sampleRate)
+      } catch (_: Exception) {
+      }
+
+      wavWrittenBytes = localWrittenBytes
+      wavAudioRecord = null
+      wavRecordingRunning = false
+      wavStopLatch?.countDown()
+    }
+  }
+
+  private fun writeWavHeader(file: File, pcmDataBytes: Long, sampleRate: Int) {
+    val numChannels = 1
+    val bitsPerSample = 16
+    val byteRate = sampleRate * numChannels * bitsPerSample / 8
+    val blockAlign = numChannels * bitsPerSample / 8
+    val dataSize = pcmDataBytes.toInt()
+    val riffChunkSize = 36 + dataSize
+
+    RandomAccessFile(file, "rw").use { raf ->
+      raf.seek(0)
+      raf.writeBytes("RIFF")
+      raf.write(intToLittleEndianBytes(riffChunkSize))
+      raf.writeBytes("WAVE")
+      raf.writeBytes("fmt ")
+      raf.write(intToLittleEndianBytes(16))
+      raf.write(shortToLittleEndianBytes(1))
+      raf.write(shortToLittleEndianBytes(numChannels.toShort()))
+      raf.write(intToLittleEndianBytes(sampleRate))
+      raf.write(intToLittleEndianBytes(byteRate))
+      raf.write(shortToLittleEndianBytes(blockAlign.toShort()))
+      raf.write(shortToLittleEndianBytes(bitsPerSample.toShort()))
+      raf.writeBytes("data")
+      raf.write(intToLittleEndianBytes(dataSize))
+    }
+  }
+
+  private fun intToLittleEndianBytes(value: Int): ByteArray {
+    return byteArrayOf(
+      (value and 0xFF).toByte(),
+      ((value shr 8) and 0xFF).toByte(),
+      ((value shr 16) and 0xFF).toByte(),
+      ((value shr 24) and 0xFF).toByte(),
+    )
+  }
+
+  private fun shortToLittleEndianBytes(value: Short): ByteArray {
+    val v = value.toInt()
+    return byteArrayOf(
+      (v and 0xFF).toByte(),
+      ((v shr 8) and 0xFF).toByte(),
+    )
+  }
+
   private fun sendRealtimeResult(
     result: OnlineRecognizerResult,
     isFinal: Boolean,
@@ -640,5 +847,6 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_NUM_THREADS = 2
     private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 2048
     private const val DEFAULT_EMIT_INTERVAL_MS = 150
+    private const val WAV_HEADER_SIZE = 44
   }
 }

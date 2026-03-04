@@ -1,10 +1,10 @@
+import { AudioModule } from 'expo-audio';
 import { Stack } from 'expo-router';
 
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
-import { AudioRecorder } from '~/components/ui/audio-recorder';
 import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
@@ -23,6 +23,9 @@ export default function Home() {
     const [realtimeState, setRealtimeState] = useState('stopped');
     const [realtimePartialText, setRealtimePartialText] = useState('');
     const [realtimeFinalText, setRealtimeFinalText] = useState('');
+    const [isRecordingByButton, setIsRecordingByButton] = useState(false);
+    const [recordingActionLoading, setRecordingActionLoading] = useState(false);
+    const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
 
     const fileModelId = 'paraformer-trilingual-zh-cantonese-en' as const;
     const realtimeModelId = 'streaming-paraformer-bilingual-zh-en' as const;
@@ -70,6 +73,45 @@ export default function Home() {
             await ensureModelReady(fileModelId, { baseUrl: MODEL_BASE_URL });
             const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, fileModelId);
             setConversionText(r1.text);
+        }
+    };
+
+    const toggleRecordAndTranscribe = async () => {
+        if (recordingActionLoading) {
+            return;
+        }
+
+        setRecordingActionLoading(true);
+        try {
+            if (!isRecordingByButton) {
+                const permission = await AudioModule.requestRecordingPermissionsAsync();
+                if (!permission.granted) {
+                    setRecordingStatusText('录音权限未授予');
+                    return;
+                }
+
+                await SherpaOnnx.startWavRecording({ sampleRate: 16000 });
+                setIsRecordingByButton(true);
+                setRecordingStatusText('录音中，再次点击停止并识别');
+                return;
+            }
+
+            const wavResult = await SherpaOnnx.stopWavRecording();
+            setIsRecordingByButton(false);
+
+            if (!wavResult.path) {
+                setRecordingStatusText('停止录音失败，未拿到音频文件');
+                return;
+            }
+
+            setRecordingStatusText('录音完成，识别中...');
+            await handleConversion(wavResult.path);
+            setRecordingStatusText('识别完成');
+        } catch (error) {
+            setIsRecordingByButton(false);
+            setRecordingStatusText(`录音/识别失败: ${(error as Error).message}`);
+        } finally {
+            setRecordingActionLoading(false);
         }
     };
 
@@ -124,8 +166,11 @@ export default function Home() {
                 <Button onPress={getModels}>获取模型列表</Button>
                 <TextX>模型列表：{modelsListText}</TextX>
                 <Button onPress={pickDocument}>选择文件</Button>
+                <Button loading={recordingActionLoading} onPress={toggleRecordAndTranscribe}>
+                    {isRecordingByButton ? '停止录音并识别' : '开始录音'}
+                </Button>
+                <TextX>录音状态：{recordingStatusText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
-
                 <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
                     开始实时识别
                 </Button>
@@ -135,15 +180,6 @@ export default function Home() {
                 <TextX>实时状态: {realtimeState}</TextX>
                 <TextX>实时中间结果: {realtimePartialText}</TextX>
                 <TextX>实时最终结果: {realtimeFinalText}</TextX>
-
-                <AudioRecorder
-                    quality="high"
-                    showWaveform={true}
-                    showTimer={true}
-                    onRecordingComplete={uri => {
-                        console.log('Recording saved to:', uri);
-                    }}
-                />
             </View>
         </DefaultLayout>
     );

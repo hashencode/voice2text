@@ -61,6 +61,9 @@ type SherpaRealtimeSubscription = {
 type SherpaOnnxNative = {
     hello(): string;
     isRealtimeTranscribing(): boolean;
+    isWavRecording(): boolean;
+    startWavRecording(options?: { path?: string; sampleRate?: number }): Promise<{ path: string; sampleRate: number }>;
+    stopWavRecording(): Promise<{ path: string; sampleRate: number; numSamples: number }>;
     startRealtimeTranscription(options?: SherpaRealtimeOptions): Promise<{ started: boolean }>;
     stopRealtimeTranscription(): Promise<{ stopped: boolean }>;
     transcribeWav(path: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
@@ -569,12 +572,14 @@ export async function downloadModel(modelId: SherpaModelId, options: DownloadMod
             options.onProgress?.({ modelId, phase: 'verifying' });
             const zipOk = await verifyZipByMeta(modelId, localMeta);
             if (zipOk) {
+                console.info(`[sherpa] local package hit, extracting directly: ${modelId}`);
                 options.onProgress?.({ modelId, phase: 'extracting' });
                 await extractModelZip(modelId, localMeta);
                 await removeModelPackageFiles(modelId);
                 options.onProgress?.({ modelId, phase: 'ready', percent: 1 });
                 return modelDir;
             }
+            console.warn(`[sherpa] local package verification failed, falling back to remote download: ${modelId}`);
             await removeModelPackageFiles(modelId);
             localMeta = null;
         }
@@ -591,6 +596,7 @@ export async function downloadModel(modelId: SherpaModelId, options: DownloadMod
         options.onProgress?.({ modelId, phase: 'verifying' });
         const zipOk = await verifyZipByMeta(modelId, localMeta);
         if (!zipOk) {
+            console.warn(`[sherpa] downloaded package verification failed, cleaning local package and retry required: ${modelId}`);
             await removeModelPackageFiles(modelId);
             throw new Error(`Downloaded zip integrity check failed for model: ${modelId}`);
         }
