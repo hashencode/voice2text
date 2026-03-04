@@ -5,6 +5,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
@@ -12,11 +13,13 @@ import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
+import com.k2fsa.sherpa.onnx.OnlineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizerResult
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
+import com.k2fsa.sherpa.onnx.OnlineZipformer2CtcModelConfig
 import com.k2fsa.sherpa.onnx.WaveData
 import com.k2fsa.sherpa.onnx.WaveReader
 import expo.modules.kotlin.Promise
@@ -254,6 +257,7 @@ class SherpaOnnxModule : Module() {
       sendRealtimeState("starting")
 
       val modelContext = resolveModelContext(options)
+      val modelType = options.getString("modelType") ?: "transducer"
       val sampleRate = options.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
       val featureDim = options.getInt("featureDim") ?: DEFAULT_FEATURE_DIM
       val numThreads = options.getInt("numThreads") ?: DEFAULT_NUM_THREADS
@@ -266,16 +270,49 @@ class SherpaOnnxModule : Module() {
       val enableEndpoint = options.getBoolean("enableEndpoint") ?: false
 
       val modelConfig = OnlineModelConfig().apply {
-        this.tokens = modelContext.resolveModelPath(options.getString("tokens") ?: "tokens.txt")
+        val tokens = options.getString("tokens")
+        this.tokens =
+          if (!tokens.isNullOrBlank()) {
+            modelContext.resolveModelPath(tokens)
+          } else if (modelType == "paraformer") {
+            ""
+          } else {
+            modelContext.resolveModelPath("tokens.txt")
+          }
         this.numThreads = numThreads
         this.provider = provider
         this.debug = debug
-        this.modelType = "transducer"
-        this.transducer = OnlineTransducerModelConfig(
-          modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx"),
-          modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx"),
-          modelContext.resolveModelPath(options.getString("joiner") ?: "joiner.onnx"),
-        )
+        when (modelType) {
+          "transducer", "zipformer", "zipformer2" -> {
+            this.modelType = "transducer"
+            this.transducer = OnlineTransducerModelConfig(
+              modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx"),
+              modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx"),
+              modelContext.resolveModelPath(options.getString("joiner") ?: "joiner.onnx"),
+            )
+          }
+          "paraformer" -> {
+            val paraformerEncoder = options.getString("encoder")
+            val paraformerDecoder = options.getString("decoder")
+            if (paraformerEncoder.isNullOrBlank() || paraformerDecoder.isNullOrBlank()) {
+              throw IllegalArgumentException("Realtime paraformer requires encoder and decoder model files")
+            }
+            this.modelType = "paraformer"
+            this.paraformer = OnlineParaformerModelConfig(
+              modelContext.resolveModelPath(paraformerEncoder),
+              modelContext.resolveModelPath(paraformerDecoder),
+            )
+          }
+          "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
+            this.modelType = "zipformer2_ctc"
+            this.zipformer2Ctc = OnlineZipformer2CtcModelConfig(
+              modelContext.resolveModelPath(options.getString("model") ?: "model.onnx"),
+            )
+          }
+          else -> {
+            throw IllegalArgumentException("Unsupported realtime modelType: $modelType")
+          }
+        }
       }
 
       val recognizerConfig = OnlineRecognizerConfig().apply {
@@ -477,7 +514,7 @@ class SherpaOnnxModule : Module() {
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
     val joiner = options?.getString("joiner") ?: "joiner.onnx"
     val model = options?.getString("model") ?: "model.onnx"
-    val tokens = options?.getString("tokens") ?: "tokens.txt"
+    val tokens = options?.getString("tokens")
 
     val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
     val featureDim = options?.getInt("featureDim") ?: DEFAULT_FEATURE_DIM
@@ -489,7 +526,14 @@ class SherpaOnnxModule : Module() {
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
 
     val modelConfig = OfflineModelConfig().apply {
-      this.tokens = modelContext.resolveModelPath(tokens)
+      this.tokens =
+        if (!tokens.isNullOrBlank()) {
+          modelContext.resolveModelPath(tokens)
+        } else if (modelType == "paraformer") {
+          ""
+        } else {
+          modelContext.resolveModelPath("tokens.txt")
+        }
       this.numThreads = numThreads
       this.provider = provider
       this.debug = debug
@@ -510,6 +554,12 @@ class SherpaOnnxModule : Module() {
           this.model = modelContext.resolveModelPath(model)
         }
         modelConfig.modelType = "zipformer2_ctc"
+      }
+      "paraformer" -> {
+        modelConfig.paraformer = OfflineParaformerModelConfig().apply {
+          this.model = modelContext.resolveModelPath(model)
+        }
+        modelConfig.modelType = "paraformer"
       }
       else -> {
         throw IllegalArgumentException("Unsupported modelType: $modelType")
@@ -584,7 +634,7 @@ class SherpaOnnxModule : Module() {
   companion object {
     private const val REALTIME_EVENT_NAME = "onRealtimeTranscription"
     private const val REALTIME_STATE_EVENT_NAME = "onRealtimeState"
-    private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/models/zipformer-multi-zh-hans"
+    private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/models/zipformer-ctc-zh-int8-2025-07-03"
     private const val DEFAULT_SAMPLE_RATE = 16000
     private const val DEFAULT_FEATURE_DIM = 80
     private const val DEFAULT_NUM_THREADS = 2

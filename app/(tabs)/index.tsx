@@ -24,14 +24,13 @@ export default function Home() {
     const [realtimePartialText, setRealtimePartialText] = useState('');
     const [realtimeFinalText, setRealtimeFinalText] = useState('');
 
-    const fileModelId = 'zipformer-zh-en-2023-11-22' as const;
-    const realtimeModelId = 'streaming-zipformer-bilingual-zh-en-2023-02-20' as const;
+    const fileModelId = 'paraformer-trilingual-zh-cantonese-en' as const;
+    const realtimeModelId = 'streaming-paraformer-bilingual-zh-en' as const;
     const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
 
     const getModels = async () => {
         const res = await listLocalModels();
         setModelsListText(JSON.stringify(res));
-        console.info('@log', typeof res);
     };
 
     const { pickDocument } = useFilePicker({
@@ -121,11 +120,11 @@ export default function Home() {
                 <Button loading={downloading} onPress={handleDownloadModel}>
                     下载模型
                 </Button>
-                <TextX>{downloadStatus}</TextX>
+                <TextX>模型状态：{downloadStatus}</TextX>
                 <Button onPress={getModels}>获取模型列表</Button>
-                <TextX>{modelsListText}</TextX>
+                <TextX>模型列表：{modelsListText}</TextX>
                 <Button onPress={pickDocument}>选择文件</Button>
-                <TextX>{conversionText}</TextX>
+                <TextX>离线翻译结果：{conversionText}</TextX>
 
                 <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
                     开始实时识别
