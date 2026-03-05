@@ -1,9 +1,0 @@
-{
-  "version": "0.0.1",
-  "sha256": "bafd94b48e198915ecf60279db0391b8dd1459be74a9e1f5db2d0b96a40a8974",
-  "files": {
-    "encoder.onnx": "8d80f145ebcfb1a34f6bf3d27be0f298eed4305531c8a31cf6b5d8eff266a384",
-    "decoder.onnx": "d2b315f45ee321ef6f21eb08c8c24d0855d8933fbaaa3301219bf5f710ad7df2",
-    "tokens.txt": "306cd27f03c1a714eca7108e03d66b7dc042abe8c258b44c199a7ed9838dd930"
-  }
-}
