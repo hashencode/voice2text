@@ -1,9 +1,5 @@
-import { Stack } from 'expo-router';
+import { DefaultLayout } from '~/components/DefaultLayout';
 
 export default function Home() {
-    return (
-        <>
-            <Stack.Screen options={{ title: 'Tab Two' }} />
-        </>
-    );
+    return <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}></DefaultLayout>;
 }

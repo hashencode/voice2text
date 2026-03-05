@@ -22,17 +22,28 @@ function syncModelPackages(srcDir, destDir) {
         return;
     }
 
-    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
-        if (!entry.isFile()) {
-            continue;
+    const ALLOWED_EXTENSIONS = /\.(zip|json|onnx|txt)$/i;
+
+    function copyRecursively(currentSrc, currentDest) {
+        fs.mkdirSync(currentDest, { recursive: true });
+        for (const entry of fs.readdirSync(currentSrc, { withFileTypes: true })) {
+            const srcPath = path.join(currentSrc, entry.name);
+            const destPath = path.join(currentDest, entry.name);
+            if (entry.isDirectory()) {
+                copyRecursively(srcPath, destPath);
+                continue;
+            }
+            if (!entry.isFile()) {
+                continue;
+            }
+            if (!ALLOWED_EXTENSIONS.test(entry.name)) {
+                continue;
+            }
+            fs.copyFileSync(srcPath, destPath);
         }
-        if (!/\.(zip|json)$/i.test(entry.name)) {
-            continue;
-        }
-        const src = path.join(srcDir, entry.name);
-        const dest = path.join(destDir, entry.name);
-        fs.copyFileSync(src, dest);
     }
+
+    copyRecursively(srcDir, destDir);
 }
 
 module.exports = function withSherpaOnnx(config) {

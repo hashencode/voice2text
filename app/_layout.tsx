@@ -13,7 +13,11 @@ export default function RootLayout() {
     useEffect(() => {
         // Temporary test: extract all bundled model zips in assets/sherpa/models.
         const runExtractAllModelsTest = async () => {
-            for (const modelId of ['streaming-zipformer-zh-int8-2025-06-30', 'zipformer-ctc-zh-int8-2025-07-03']) {
+            for (const modelId of [
+                // 'zipformer-zh-streaming',
+                // 'zipformer-ctc-zh',
+                'funasr-nano',
+            ]) {
                 try {
                     await initializeBundledModel(modelId as SherpaModelId);
                     console.info('[sherpa] bundled model extracted', modelId);

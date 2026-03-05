@@ -5,11 +5,23 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?: 'transducer' | 'zipformer' | 'zipformer2' | 'zipformer2_ctc' | 'zipformer_ctc' | 'ctc' | 'paraformer' | string;
+    modelType?:
+        | 'transducer'
+        | 'zipformer'
+        | 'zipformer2'
+        | 'zipformer2_ctc'
+        | 'zipformer_ctc'
+        | 'ctc'
+        | 'funasr_nano'
+        | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
     model?: string;
+    encoderAdaptor?: string;
+    llm?: string;
+    embedding?: string;
+    tokenizer?: string; // FunASR Nano expects tokenizer directory (e.g. Qwen3-0.6B), not tokenizer.json file path
     tokens?: string;
     sampleRate?: number;
     featureDim?: number;
@@ -75,32 +87,27 @@ type SherpaOnnxNative = {
 };
 
 export const SHERPA_MODEL_PRESETS = {
-    'streaming-zipformer-zh-int8-2025-06-30': {
+    'zipformer-zh-streaming': {
         modelType: 'transducer',
-        modelDirAsset: 'sherpa/models/streaming-zipformer-zh-int8-2025-06-30',
+        modelDirAsset: 'sherpa/models/zipformer-zh-streaming',
         encoder: 'encoder.onnx',
         decoder: 'decoder.onnx',
         joiner: 'joiner.onnx',
         tokens: 'tokens.txt',
     },
-    'streaming-paraformer-bilingual-zh-en': {
-        modelType: 'paraformer',
-        modelDirAsset: 'sherpa/models/streaming-paraformer-bilingual-zh-en',
-        encoder: 'encoder.onnx',
-        decoder: 'decoder.onnx',
-        tokens: 'tokens.txt',
-    },
-    'paraformer-trilingual-zh-cantonese-en': {
-        modelType: 'paraformer',
-        modelDirAsset: 'sherpa/models/paraformer-trilingual-zh-cantonese-en',
-        model: 'model.onnx',
-        tokens: 'tokens.txt',
-    },
-    'zipformer-ctc-zh-int8-2025-07-03': {
+    'zipformer-ctc-zh': {
         modelType: 'zipformer2_ctc',
-        modelDirAsset: 'sherpa/models/zipformer-ctc-zh-int8-2025-07-03',
+        modelDirAsset: 'sherpa/models/zipformer-ctc-zh',
         model: 'model.onnx',
         tokens: 'tokens.txt',
+    },
+    'funasr-nano': {
+        modelType: 'funasr_nano',
+        modelDirAsset: 'sherpa/models/funasr-nano',
+        encoderAdaptor: 'encoder_adaptor.onnx',
+        llm: 'llm.onnx',
+        embedding: 'embedding.onnx',
+        tokenizer: 'Qwen3-0.6B',
     },
 } as const satisfies Record<string, SherpaTranscribeOptions>;
 
@@ -116,10 +123,16 @@ export function getSherpaModelOptions(modelId: SherpaModelId, overrides: SherpaT
 const SHERPA_CDN_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models';
 
 export const SHERPA_REMOTE_MODEL_FILES: Record<SherpaModelId, string[]> = {
-    'streaming-zipformer-zh-int8-2025-06-30': ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
-    'streaming-paraformer-bilingual-zh-en': ['encoder.onnx', 'decoder.onnx', 'tokens.txt'],
-    'paraformer-trilingual-zh-cantonese-en': ['model.onnx', 'tokens.txt'],
-    'zipformer-ctc-zh-int8-2025-07-03': ['model.onnx', 'tokens.txt'],
+    'zipformer-zh-streaming': ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
+    'zipformer-ctc-zh': ['model.onnx', 'tokens.txt'],
+    'funasr-nano': [
+        'encoder_adaptor.onnx',
+        'llm.onnx',
+        'embedding.onnx',
+        'Qwen3-0.6B/tokenizer.json',
+        'Qwen3-0.6B/vocab.json',
+        'Qwen3-0.6B/merges.txt',
+    ],
 };
 
 type DownloadModelOptions = {
@@ -138,6 +151,10 @@ type ExtractedModelValidation = {
     ok: boolean;
     issues: string[];
 };
+
+function isValidSha256(value: unknown): value is string {
+    return typeof value === 'string' && /^[a-fA-F0-9]{64}$/.test(value);
+}
 
 export type DownloadModelProgress = {
     modelId: SherpaModelId;
@@ -336,7 +353,7 @@ function parseAndValidateMeta(content: string): ModelPackageMeta {
     if (typeof parsed.version !== 'string' || parsed.version.length === 0) {
         throw new Error('Invalid model meta: version');
     }
-    if (typeof parsed.sha256 !== 'string' || parsed.sha256.length < 32) {
+    if (!isValidSha256(parsed.sha256)) {
         throw new Error('Invalid model meta: sha256');
     }
     if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
@@ -345,7 +362,7 @@ function parseAndValidateMeta(content: string): ModelPackageMeta {
 
     const normalizedFiles: Record<string, string> = {};
     for (const [name, hash] of Object.entries(parsed.files as Record<string, unknown>)) {
-        if (typeof hash !== 'string' || hash.length < 32) {
+        if (!isValidSha256(hash)) {
             throw new Error(`Invalid model meta: files.${name}`);
         }
         normalizedFiles[name] = hash.toLowerCase();
@@ -700,13 +717,8 @@ const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
 
 function assertRealtimeCompatibleOptions(options: SherpaTranscribeOptions, modelId: SherpaModelId): void {
     const modelType = options.modelType ?? 'transducer';
-    if (modelType === 'paraformer') {
-        const hasEncoderDecoder = !!options.encoder && !!options.decoder;
-        if (!hasEncoderDecoder) {
-            throw new Error(
-                `Model ${modelId} is not compatible with realtime paraformer (missing encoder/decoder). Use offline transcribeWav instead.`,
-            );
-        }
+    if (modelType === 'funasr_nano') {
+        throw new Error(`Model ${modelId} is offline-only (funasr_nano). Use transcribeWav instead of realtime transcription.`);
     }
 }
 

@@ -28,8 +28,8 @@ export default function Home() {
     const [recordingActionLoading, setRecordingActionLoading] = useState(false);
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
 
-    const fileModelId = 'paraformer-trilingual-zh-cantonese-en' as const;
-    const realtimeModelId = 'streaming-paraformer-bilingual-zh-en' as const;
+    const fileModelId = 'funasr-nano' as const;
+    const realtimeModelId = 'zipformer-zh-streaming' as const;
     const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
 
     const getModels = async () => {
@@ -71,7 +71,6 @@ export default function Home() {
 
     const handleConversion = async (uri: string) => {
         if (uri) {
-            await ensureModelReady(fileModelId, { baseUrl: MODEL_BASE_URL });
             const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, fileModelId);
             setConversionText(r1.text);
         }
@@ -143,7 +142,7 @@ export default function Home() {
             } else if (event.type === 'final') {
                 const text = event.text ?? '';
                 if (text) {
-                    setRealtimeFinalText(prev => (prev ? `${prev}\n${text}` : text));
+                    setRealtimeFinalText(prev => (prev ? `${prev}${text}` : text));
                 }
                 setRealtimePartialText('');
             } else if (event.type === 'error') {

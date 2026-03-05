@@ -5,7 +5,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
-import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
+import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
@@ -13,7 +13,6 @@ import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
-import com.k2fsa.sherpa.onnx.OnlineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizerResult
@@ -334,15 +333,50 @@ class SherpaOnnxModule : Module() {
           val outFile = File(cleanDestPath)
           outFile.parentFile?.mkdirs()
 
-          assetManager.open(assetPath).use { input ->
-            FileOutputStream(outFile).use { output ->
-              val buffer = ByteArray(8192)
-              var read = input.read(buffer)
-              while (read > 0) {
-                output.write(buffer, 0, read)
-                read = input.read(buffer)
+          val normalizedAssetPath = assetPath.trim().removePrefix("/")
+          val candidateAssetPaths = linkedSetOf<String>()
+          candidateAssetPaths.add(normalizedAssetPath)
+          candidateAssetPaths.add(normalizedAssetPath.removePrefix("assets/"))
+          if (normalizedAssetPath.startsWith("sherpa/")) {
+            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/"))
+          }
+          if (normalizedAssetPath.startsWith("sherpa/models/")) {
+            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/"))
+            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/models/"))
+            candidateAssetPaths.add("models/${normalizedAssetPath.removePrefix("sherpa/models/")}")
+          }
+
+          var lastError: Exception? = null
+          var copied = false
+
+          for (candidate in candidateAssetPaths) {
+            try {
+              assetManager.open(candidate).use { input ->
+                FileOutputStream(outFile).use { output ->
+                  val buffer = ByteArray(8192)
+                  var read = input.read(buffer)
+                  while (read > 0) {
+                    output.write(buffer, 0, read)
+                    read = input.read(buffer)
+                  }
+                }
               }
+              copied = true
+              break
+            } catch (e: Exception) {
+              lastError = e
             }
+          }
+
+          if (!copied) {
+            throw IllegalArgumentException(
+              "Asset not found for '$assetPath'. Tried: ${candidateAssetPaths.joinToString()}",
+              lastError,
+            )
+          }
+
+          if (!outFile.exists() || outFile.length() <= 0L) {
+            throw IllegalStateException("Copied asset is empty: ${outFile.absolutePath}")
           }
 
           promise.resolve(
@@ -385,8 +419,6 @@ class SherpaOnnxModule : Module() {
         this.tokens =
           if (!tokens.isNullOrBlank()) {
             modelContext.resolveModelPath(tokens)
-          } else if (modelType == "paraformer") {
-            ""
           } else {
             modelContext.resolveModelPath("tokens.txt")
           }
@@ -400,18 +432,6 @@ class SherpaOnnxModule : Module() {
               modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx"),
               modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx"),
               modelContext.resolveModelPath(options.getString("joiner") ?: "joiner.onnx"),
-            )
-          }
-          "paraformer" -> {
-            val paraformerEncoder = options.getString("encoder")
-            val paraformerDecoder = options.getString("decoder")
-            if (paraformerEncoder.isNullOrBlank() || paraformerDecoder.isNullOrBlank()) {
-              throw IllegalArgumentException("Realtime paraformer requires encoder and decoder model files")
-            }
-            this.modelType = "paraformer"
-            this.paraformer = OnlineParaformerModelConfig(
-              modelContext.resolveModelPath(paraformerEncoder),
-              modelContext.resolveModelPath(paraformerDecoder),
             )
           }
           "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
@@ -721,6 +741,10 @@ class SherpaOnnxModule : Module() {
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
     val joiner = options?.getString("joiner") ?: "joiner.onnx"
     val model = options?.getString("model") ?: "model.onnx"
+    val encoderAdaptor = options?.getString("encoderAdaptor") ?: "encoder_adaptor.onnx"
+    val llm = options?.getString("llm") ?: "llm.onnx"
+    val embedding = options?.getString("embedding") ?: "embedding.onnx"
+    val tokenizer = options?.getString("tokenizer") ?: "Qwen3-0.6B"
     val tokens = options?.getString("tokens")
 
     val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
@@ -736,7 +760,7 @@ class SherpaOnnxModule : Module() {
       this.tokens =
         if (!tokens.isNullOrBlank()) {
           modelContext.resolveModelPath(tokens)
-        } else if (modelType == "paraformer") {
+        } else if (modelType == "funasr_nano") {
           ""
         } else {
           modelContext.resolveModelPath("tokens.txt")
@@ -762,11 +786,20 @@ class SherpaOnnxModule : Module() {
         }
         modelConfig.modelType = "zipformer2_ctc"
       }
-      "paraformer" -> {
-        modelConfig.paraformer = OfflineParaformerModelConfig().apply {
-          this.model = modelContext.resolveModelPath(model)
+      "funasr_nano" -> {
+        val tokenizerDir =
+          if (tokenizer.endsWith(".json")) {
+            File(tokenizer).parent ?: tokenizer
+          } else {
+            tokenizer
+          }
+        modelConfig.funasrNano = OfflineFunAsrNanoModelConfig().apply {
+          this.encoderAdaptor = modelContext.resolveModelPath(encoderAdaptor)
+          this.llm = modelContext.resolveModelPath(llm)
+          this.embedding = modelContext.resolveModelPath(embedding)
+          this.tokenizer = modelContext.resolveModelPath(tokenizerDir)
         }
-        modelConfig.modelType = "paraformer"
+        modelConfig.modelType = "funasr_nano"
       }
       else -> {
         throw IllegalArgumentException("Unsupported modelType: $modelType")
@@ -841,7 +874,7 @@ class SherpaOnnxModule : Module() {
   companion object {
     private const val REALTIME_EVENT_NAME = "onRealtimeTranscription"
     private const val REALTIME_STATE_EVENT_NAME = "onRealtimeState"
-    private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/models/zipformer-ctc-zh-int8-2025-07-03"
+    private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/models/zipformer-ctc-zh"
     private const val DEFAULT_SAMPLE_RATE = 16000
     private const val DEFAULT_FEATURE_DIM = 80
     private const val DEFAULT_NUM_THREADS = 2
