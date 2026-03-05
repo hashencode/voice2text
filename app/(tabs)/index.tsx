@@ -21,6 +21,7 @@ export default function Home() {
     const [modelsListText, setModelsListText] = useState('');
     const [conversionText, setConversionText] = useState('');
     const [realtimeState, setRealtimeState] = useState('stopped');
+    const [permissionStatusText, setPermissionStatusText] = useState('未知');
     const [realtimePartialText, setRealtimePartialText] = useState('');
     const [realtimeFinalText, setRealtimeFinalText] = useState('');
     const [isRecordingByButton, setIsRecordingByButton] = useState(false);
@@ -126,6 +127,11 @@ export default function Home() {
         });
     };
 
+    const requestRecordingPermissionOnly = async () => {
+        const permission = await AudioModule.requestRecordingPermissionsAsync();
+        setPermissionStatusText(permission.granted ? '已授予' : '未授予');
+    };
+
     const stopRealtime = async () => {
         await SherpaOnnx.stopRealtimeTranscription();
     };
@@ -159,6 +165,8 @@ export default function Home() {
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <View style={{ gap: 12 }}>
+                <Button onPress={requestRecordingPermissionOnly}>获取录音权限</Button>
+                <TextX>录音权限：{permissionStatusText}</TextX>
                 <Button loading={downloading} onPress={handleDownloadModel}>
                     下载模型
                 </Button>
