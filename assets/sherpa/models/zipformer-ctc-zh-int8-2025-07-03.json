@@ -1,0 +1,8 @@
+{
+  "version": "0.0.1",
+  "sha256": "6e8fd8071d1208a2007f9a9241093613a7e4ebe975d3bbf4a49218e17788800b",
+  "files": {
+    "model.onnx": "e291b9c468b651e2697caa09bc684326c3addc6a019e78eb537cfd1a8248ca07",
+    "tokens.txt": "6fed8c6c248516f38e7faa19404b57413e8ce259f1cbc1fa4aebc86eac32fdfd"
+  }
+}
