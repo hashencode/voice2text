@@ -1,2 +1,2 @@
-assets/sherpa/models/zipformer-ctc-zh.zip filter=lfs diff=lfs merge=lfs -text
-assets/sherpa/models/zipformer-zh-streaming.zip filter=lfs diff=lfs merge=lfs -text
+assets/sherpa/asr/zipformer-ctc-zh.zip filter=lfs diff=lfs merge=lfs -text
+assets/sherpa/asr/zipformer-zh-streaming.zip filter=lfs diff=lfs merge=lfs -text
