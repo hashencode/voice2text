@@ -1,14 +1,38 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { AudioModule } from 'expo-audio';
 import { Stack } from 'expo-router';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
 import { Button } from '~/components/ui/button';
+import { SwitchX } from '~/components/ui/switch';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
-import SherpaOnnx, { ensureModelReady, type SherpaRealtimeResultEvent, type SherpaRealtimeStateEvent } from '~/modules/sherpa';
+import SherpaOnnx, {
+    ensureModelReady,
+    SHERPA_MODEL_PRESETS,
+    type SherpaModelId,
+    type SherpaOutputMode,
+    type SherpaRealtimeResultEvent,
+    type SherpaRealtimeStateEvent,
+} from '~/modules/sherpa';
+import { getCurrentModelByOutputMode } from '~/utils/model-selection';
+
+const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zipformer-ctc-zh';
+const DEFAULT_STREAMING_MODEL: SherpaModelId = 'zipformer-zh-streaming';
+
+function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaModelId): SherpaModelId {
+    const selected = getCurrentModelByOutputMode(outputMode);
+    if (!selected || !(selected in SHERPA_MODEL_PRESETS)) {
+        return fallback;
+    }
+    if (SHERPA_MODEL_PRESETS[selected].outputMode !== outputMode) {
+        return fallback;
+    }
+    return selected;
+}
 
 export default function Home() {
     const [conversionText, setConversionText] = useState('');
@@ -16,13 +40,19 @@ export default function Home() {
     const [permissionStatusText, setPermissionStatusText] = useState('未知');
     const [realtimePartialText, setRealtimePartialText] = useState('');
     const [realtimeFinalText, setRealtimeFinalText] = useState('');
+    const [realtimeVadInfo, setRealtimeVadInfo] = useState('unknown');
+    const [vadEnabled, setVadEnabled] = useState(true);
     const [isRecordingByButton, setIsRecordingByButton] = useState(false);
     const [recordingActionLoading, setRecordingActionLoading] = useState(false);
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
-
-    const fileModelId = 'funasr-nano' as const;
-    const realtimeModelId = 'zipformer-zh-streaming' as const;
+    const [fileModelId, setFileModelId] = useState<SherpaModelId>(DEFAULT_NON_STREAMING_MODEL);
+    const [realtimeModelId, setRealtimeModelId] = useState<SherpaModelId>(DEFAULT_STREAMING_MODEL);
     const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
+
+    const refreshSelectedModels = useCallback(() => {
+        setFileModelId(resolveSelectedModel('non-streaming', DEFAULT_NON_STREAMING_MODEL));
+        setRealtimeModelId(resolveSelectedModel('streaming', DEFAULT_STREAMING_MODEL));
+    }, []);
 
     const { pickDocument } = useFilePicker({
         multiple: true,
@@ -77,13 +107,22 @@ export default function Home() {
     };
 
     const startRealtime = async () => {
+        const permission = await AudioModule.requestRecordingPermissionsAsync();
+        if (!permission.granted) {
+            setPermissionStatusText('未授予');
+            setRealtimePartialText('识别错误: 录音权限未授予');
+            return;
+        }
+        setPermissionStatusText('已授予');
         await ensureModelReady(realtimeModelId, { baseUrl: MODEL_BASE_URL });
         setRealtimePartialText('');
         setRealtimeFinalText('');
+        setRealtimeVadInfo('starting');
         await SherpaOnnx.startRealtimeTranscriptionByDownloadedModel(realtimeModelId, {
             sampleRate: 16000,
             emitIntervalMs: 150,
             enableEndpoint: false,
+            enableVad: vadEnabled,
         });
     };
 
@@ -95,6 +134,16 @@ export default function Home() {
     const stopRealtime = async () => {
         await SherpaOnnx.stopRealtimeTranscription();
     };
+
+    useEffect(() => {
+        refreshSelectedModels();
+    }, [refreshSelectedModels]);
+
+    useFocusEffect(
+        useCallback(() => {
+            refreshSelectedModels();
+        }, [refreshSelectedModels]),
+    );
 
     useEffect(() => {
         const resultSub = SherpaOnnx.addRealtimeResultListener((event: SherpaRealtimeResultEvent) => {
@@ -113,6 +162,9 @@ export default function Home() {
 
         const stateSub = SherpaOnnx.addRealtimeStateListener((event: SherpaRealtimeStateEvent) => {
             setRealtimeState(event.state);
+            const vadStatus = event.vadActive ? 'active' : 'inactive';
+            const vadInfo = event.vadInfo ?? 'none';
+            setRealtimeVadInfo(`${vadStatus} | ${vadInfo}`);
         });
 
         return () => {
@@ -125,6 +177,8 @@ export default function Home() {
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <View style={{ gap: 12 }}>
+                <TextX>文件识别模型：{fileModelId}</TextX>
+                <TextX>实时识别模型：{realtimeModelId}</TextX>
                 <Button onPress={requestRecordingPermissionOnly}>获取录音权限</Button>
                 <TextX>录音权限：{permissionStatusText}</TextX>
                 <Button onPress={pickDocument}>选择文件</Button>
@@ -132,7 +186,12 @@ export default function Home() {
                     {isRecordingByButton ? '停止录音并识别' : '开始录音'}
                 </Button>
                 <TextX>录音状态：{recordingStatusText}</TextX>
+
                 <TextX>离线翻译结果：{conversionText}</TextX>
+                <View className="flex flex-row items-center">
+                    <TextX>VAD 开关：{vadEnabled ? '开启' : '关闭'}</TextX>
+                    <SwitchX value={vadEnabled} onValueChange={setVadEnabled} />
+                </View>
                 <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
                     开始实时识别
                 </Button>
@@ -140,6 +199,7 @@ export default function Home() {
                     停止实时识别
                 </Button>
                 <TextX>实时状态: {realtimeState}</TextX>
+                <TextX>VAD运行状态: {realtimeVadInfo}</TextX>
                 <TextX>实时中间结果: {realtimePartialText}</TextX>
                 <TextX>实时最终结果: {realtimeFinalText}</TextX>
             </View>

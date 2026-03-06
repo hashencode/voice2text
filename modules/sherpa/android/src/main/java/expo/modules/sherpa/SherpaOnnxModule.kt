@@ -19,6 +19,9 @@ import com.k2fsa.sherpa.onnx.OnlineRecognizerResult
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineZipformer2CtcModelConfig
+import com.k2fsa.sherpa.onnx.TenVadModelConfig
+import com.k2fsa.sherpa.onnx.Vad
+import com.k2fsa.sherpa.onnx.VadModelConfig
 import com.k2fsa.sherpa.onnx.WaveData
 import com.k2fsa.sherpa.onnx.WaveReader
 import expo.modules.kotlin.Promise
@@ -395,8 +398,11 @@ class SherpaOnnxModule : Module() {
   private fun runRealtimeTranscription(options: Map<String, Any?>) {
     var recognizer: OnlineRecognizer? = null
     var stream: OnlineStream? = null
+    var vad: Vad? = null
     var audioRecord: AudioRecord? = null
     var lastText = ""
+    var vadActive = false
+    var vadInfo = "disabled"
 
     try {
       sendRealtimeState("starting")
@@ -413,6 +419,8 @@ class SherpaOnnxModule : Module() {
       val blankPenalty = options.getFloat("blankPenalty") ?: 0f
       val emitIntervalMs = options.getInt("emitIntervalMs") ?: DEFAULT_EMIT_INTERVAL_MS
       val enableEndpoint = options.getBoolean("enableEndpoint") ?: false
+      val vadModel = options.getString("vadModel")
+      val enableVad = options.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
 
       val modelConfig = OnlineModelConfig().apply {
         val tokens = options.getString("tokens")
@@ -457,6 +465,47 @@ class SherpaOnnxModule : Module() {
 
       recognizer = OnlineRecognizer(modelContext.assetManager, recognizerConfig)
       stream = recognizer.createStream()
+      if (enableVad && !vadModel.isNullOrBlank()) {
+        try {
+          val vadModelPath = modelContext.resolveModelPath(vadModel)
+          val normalizedVadPath = vadModelPath.lowercase()
+          val useTenVad = normalizedVadPath.contains("ten-vad")
+          if (!useTenVad) {
+            println("[sherpa] Unsupported VAD model file for this runtime: $vadModelPath. Fallback without VAD.")
+            vadInfo = "unsupported model: $vadModelPath"
+          } else {
+          val vadThreshold = options.getFloat("vadThreshold") ?: 0.35f
+          val vadMinSilenceDuration = options.getFloat("vadMinSilenceDuration") ?: 0.9f
+          val vadMinSpeechDuration = options.getFloat("vadMinSpeechDuration") ?: 0.18f
+          val vadWindowSize = options.getInt("vadWindowSize") ?: 256
+          val vadMaxSpeechDuration = options.getFloat("vadMaxSpeechDuration") ?: 15.0f
+          val vadModelConfig = VadModelConfig().apply {
+            this.sampleRate = sampleRate
+            this.numThreads = numThreads
+            this.provider = provider
+            this.debug = debug
+            this.tenVadModelConfig = TenVadModelConfig().apply {
+              this.model = vadModelPath
+              this.threshold = vadThreshold
+              this.minSilenceDuration = vadMinSilenceDuration
+              this.minSpeechDuration = vadMinSpeechDuration
+              this.windowSize = vadWindowSize
+              this.maxSpeechDuration = vadMaxSpeechDuration
+            }
+          }
+          vad = Vad(modelContext.assetManager, vadModelConfig)
+          vadActive = true
+          vadInfo = "enabled:ten:$vadModelPath"
+          println("[sherpa] VAD enabled. model=$vadModelPath type=ten")
+          }
+        } catch (e: Exception) {
+          println("[sherpa] VAD initialization failed. fallback without VAD: ${e.message}")
+          vad = null
+          vadInfo = "init failed: ${e.message ?: "unknown"}"
+        }
+      } else {
+        vadInfo = if (enableVad) "enabled but vadModel empty" else "disabled by option"
+      }
 
       audioRecord = createAudioRecord(sampleRate)
 
@@ -465,7 +514,7 @@ class SherpaOnnxModule : Module() {
       realtimeAudioRecord = audioRecord
 
       audioRecord.startRecording()
-      sendRealtimeState("running")
+      sendRealtimeState("running", null, vadActive, vadInfo)
 
       val shortBuffer = ShortArray(DEFAULT_AUDIO_BUFFER_SAMPLES)
       var lastEmitTime = 0L
@@ -481,29 +530,59 @@ class SherpaOnnxModule : Module() {
           samples[i] = shortBuffer[i] / 32768.0f
         }
 
-        stream.acceptWaveform(samples, sampleRate)
-
-        while (recognizer.isReady(stream)) {
-          recognizer.decode(stream)
-        }
-
-        val now = System.currentTimeMillis()
-        if (now - lastEmitTime >= emitIntervalMs.toLong()) {
-          val partial = recognizer.getResult(stream)
-          if (partial.text != lastText) {
-            lastText = partial.text
-            sendRealtimeResult(partial, false, false, sampleRate)
+        if (vad != null) {
+          vad.acceptWaveform(samples)
+          while (!vad.empty()) {
+            val segment = vad.front()
+            vad.pop()
+            stream.acceptWaveform(segment.samples, sampleRate)
+            while (recognizer.isReady(stream)) {
+              recognizer.decode(stream)
+            }
+            val segmentResult = recognizer.getResult(stream)
+            if (segmentResult.text.isNotBlank()) {
+              lastText = ""
+              sendRealtimeResult(segmentResult, true, true, sampleRate)
+              recognizer.reset(stream)
+            }
           }
-          lastEmitTime = now
-        }
+        } else {
+          stream.acceptWaveform(samples, sampleRate)
 
-        if (enableEndpoint && recognizer.isEndpoint(stream)) {
-          val endpointResult = recognizer.getResult(stream)
-          if (endpointResult.text.isNotBlank()) {
-            lastText = ""
-            sendRealtimeResult(endpointResult, true, true, sampleRate)
+          while (recognizer.isReady(stream)) {
+            recognizer.decode(stream)
           }
-          recognizer.reset(stream)
+
+          val now = System.currentTimeMillis()
+          if (now - lastEmitTime >= emitIntervalMs.toLong()) {
+            val partial = recognizer.getResult(stream)
+            if (partial.text != lastText) {
+              lastText = partial.text
+              sendRealtimeResult(partial, false, false, sampleRate)
+            }
+            lastEmitTime = now
+          }
+
+          if (enableEndpoint && recognizer.isEndpoint(stream)) {
+            val endpointResult = recognizer.getResult(stream)
+            if (endpointResult.text.isNotBlank()) {
+              lastText = ""
+              sendRealtimeResult(endpointResult, true, true, sampleRate)
+            }
+            recognizer.reset(stream)
+          }
+        }
+      }
+
+      if (vad != null) {
+        vad.flush()
+        while (!vad.empty()) {
+          val segment = vad.front()
+          vad.pop()
+          stream.acceptWaveform(segment.samples, sampleRate)
+          while (recognizer.isReady(stream)) {
+            recognizer.decode(stream)
+          }
         }
       }
 
@@ -516,9 +595,9 @@ class SherpaOnnxModule : Module() {
       if (finalResult.text.isNotBlank()) {
         sendRealtimeResult(finalResult, true, false, sampleRate)
       }
-      sendRealtimeState("stopped")
+      sendRealtimeState("stopped", null, vadActive, vadInfo)
     } catch (e: Exception) {
-      sendRealtimeState("error", e.message ?: "unknown")
+      sendRealtimeState("error", e.message ?: "unknown", vadActive, vadInfo)
       sendEvent(
         REALTIME_EVENT_NAME,
         mapOf(
@@ -532,6 +611,7 @@ class SherpaOnnxModule : Module() {
       } catch (_: Exception) {
       }
       audioRecord?.release()
+      vad?.release()
       stream?.release()
       recognizer?.release()
 
@@ -666,12 +746,19 @@ class SherpaOnnxModule : Module() {
     )
   }
 
-  private fun sendRealtimeState(state: String, error: String? = null) {
+  private fun sendRealtimeState(
+    state: String,
+    error: String? = null,
+    vadActive: Boolean? = null,
+    vadInfo: String? = null,
+  ) {
     sendEvent(
       REALTIME_STATE_EVENT_NAME,
       mapOf(
         "state" to state,
         "error" to error,
+        "vadActive" to vadActive,
+        "vadInfo" to vadInfo,
       ),
     )
   }
@@ -726,10 +813,24 @@ class SherpaOnnxModule : Module() {
     val assetManager: android.content.res.AssetManager?,
   ) {
     fun resolveModelPath(name: String): String {
+      val normalized = name.removePrefix("file://").trim()
+      if (normalized.isEmpty()) {
+        return normalized
+      }
+
       return if (useFileModelDir) {
-        File(baseModelDir, name).absolutePath
+        val file = File(normalized)
+        if (file.isAbsolute) {
+          file.absolutePath
+        } else {
+          File(baseModelDir, normalized).absolutePath
+        }
       } else {
-        if (baseModelDir.endsWith("/")) "$baseModelDir$name" else "$baseModelDir/$name"
+        if (normalized.startsWith("sherpa/") || normalized.startsWith("models/")) {
+          normalized
+        } else {
+          if (baseModelDir.endsWith("/")) "$baseModelDir$normalized" else "$baseModelDir/$normalized"
+        }
       }
     }
   }
@@ -878,7 +979,7 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_SAMPLE_RATE = 16000
     private const val DEFAULT_FEATURE_DIM = 80
     private const val DEFAULT_NUM_THREADS = 2
-    private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 2048
+    private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 512
     private const val DEFAULT_EMIT_INTERVAL_MS = 150
     private const val WAV_HEADER_SIZE = 44
   }

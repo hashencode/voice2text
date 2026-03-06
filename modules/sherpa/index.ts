@@ -23,6 +23,13 @@ export type SherpaTranscribeOptions = {
     decodingMethod?: 'greedy_search' | 'modified_beam_search' | string;
     maxActivePaths?: number;
     blankPenalty?: number;
+    enableVad?: boolean;
+    vadModel?: string;
+    vadThreshold?: number;
+    vadMinSilenceDuration?: number;
+    vadMinSpeechDuration?: number;
+    vadWindowSize?: number;
+    vadMaxSpeechDuration?: number;
 };
 
 export type SherpaTranscribeResult = {
@@ -56,6 +63,8 @@ export type SherpaRealtimeResultEvent = {
 export type SherpaRealtimeStateEvent = {
     state: 'starting' | 'running' | 'stopped' | 'error';
     error?: string | null;
+    vadActive?: boolean;
+    vadInfo?: string | null;
 };
 
 export type SherpaOutputMode = 'streaming' | 'non-streaming';
@@ -90,6 +99,8 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'transducer',
         modelDirAsset: 'sherpa/models/zipformer-zh-streaming',
         outputMode: 'streaming',
+        enableVad: true,
+        vadModel: 'sherpa/vad/ten-vad.onnx',
         encoder: 'encoder.onnx',
         decoder: 'decoder.onnx',
         joiner: 'joiner.onnx',
@@ -771,6 +782,36 @@ export function getSherpaDownloadedModelOptions(modelId: SherpaModelId, override
     };
 }
 
+async function ensureDownloadedVadModelPath(options: SherpaTranscribeOptions): Promise<SherpaTranscribeOptions> {
+    const vadModel = options.vadModel?.trim();
+    if (!vadModel) {
+        return options;
+    }
+
+    const isAssetPath = vadModel.startsWith('sherpa/') || vadModel.startsWith('models/');
+    if (!isAssetPath) {
+        return options;
+    }
+
+    const fileName = vadModel.split('/').filter(Boolean).pop();
+    if (!fileName) {
+        return options;
+    }
+
+    const vadRootDir = `${ensureDocumentDirectory()}sherpa/vad/`;
+    const destPath = `${vadRootDir}${fileName}`;
+    await FileSystem.makeDirectoryAsync(vadRootDir, { intermediates: true });
+    const info = await FileSystem.getInfoAsync(destPath);
+    if (!info.exists || info.isDirectory || typeof info.size !== 'number' || info.size <= 0) {
+        await NativeSherpaOnnx.copyAssetFile(vadModel, destPath);
+    }
+
+    return {
+        ...options,
+        vadModel: destPath,
+    };
+}
+
 const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
 
 function assertRealtimeCompatibleOptions(options: SherpaTranscribeOptions, modelId: SherpaModelId): void {
@@ -807,8 +848,8 @@ const SherpaOnnx = {
         assertRealtimeCompatibleOptions(options, modelId);
         return NativeSherpaOnnx.startRealtimeTranscription(options);
     },
-    startRealtimeTranscriptionByDownloadedModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
-        const options = getSherpaDownloadedModelOptions(modelId, overrides);
+    async startRealtimeTranscriptionByDownloadedModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
+        const options = await ensureDownloadedVadModelPath(getSherpaDownloadedModelOptions(modelId, overrides));
         assertRealtimeCompatibleOptions(options, modelId);
         return NativeSherpaOnnx.startRealtimeTranscription(options);
     },
