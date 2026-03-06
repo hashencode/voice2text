@@ -5,15 +5,7 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?:
-        | 'transducer'
-        | 'zipformer'
-        | 'zipformer2'
-        | 'zipformer2_ctc'
-        | 'zipformer_ctc'
-        | 'ctc'
-        | 'funasr_nano'
-        | string;
+    modelType?: 'transducer' | 'zipformer' | 'zipformer2' | 'zipformer2_ctc' | 'zipformer_ctc' | 'ctc' | 'funasr_nano' | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
@@ -66,6 +58,8 @@ export type SherpaRealtimeStateEvent = {
     error?: string | null;
 };
 
+export type SherpaOutputMode = 'streaming' | 'non-streaming';
+
 type SherpaRealtimeSubscription = {
     remove(): void;
 };
@@ -86,54 +80,64 @@ type SherpaOnnxNative = {
     addListener(eventName: string, listener: (event: any) => void): SherpaRealtimeSubscription;
 };
 
+type SherpaModelPreset = SherpaTranscribeOptions & {
+    outputMode: SherpaOutputMode;
+    requiredFiles: readonly string[];
+};
+
 export const SHERPA_MODEL_PRESETS = {
     'zipformer-zh-streaming': {
         modelType: 'transducer',
         modelDirAsset: 'sherpa/models/zipformer-zh-streaming',
+        outputMode: 'streaming',
         encoder: 'encoder.onnx',
         decoder: 'decoder.onnx',
         joiner: 'joiner.onnx',
         tokens: 'tokens.txt',
+        requiredFiles: ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
     },
     'zipformer-ctc-zh': {
         modelType: 'zipformer2_ctc',
         modelDirAsset: 'sherpa/models/zipformer-ctc-zh',
+        outputMode: 'non-streaming',
         model: 'model.onnx',
         tokens: 'tokens.txt',
+        requiredFiles: ['model.onnx', 'tokens.txt'],
     },
     'funasr-nano': {
         modelType: 'funasr_nano',
         modelDirAsset: 'sherpa/models/funasr-nano',
+        outputMode: 'non-streaming',
         encoderAdaptor: 'encoder_adaptor.onnx',
         llm: 'llm.onnx',
         embedding: 'embedding.onnx',
         tokenizer: 'Qwen3-0.6B',
+        requiredFiles: [
+            'encoder_adaptor.onnx',
+            'llm.onnx',
+            'embedding.onnx',
+            'Qwen3-0.6B/tokenizer.json',
+            'Qwen3-0.6B/vocab.json',
+            'Qwen3-0.6B/merges.txt',
+        ],
     },
-} as const satisfies Record<string, SherpaTranscribeOptions>;
+} as const satisfies Record<string, SherpaModelPreset>;
 
 export type SherpaModelId = keyof typeof SHERPA_MODEL_PRESETS;
 
 export function getSherpaModelOptions(modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}): SherpaTranscribeOptions {
+    const {
+        outputMode: _ignoredOutputMode,
+        requiredFiles: _ignoredRequiredFiles,
+        ...presetWithoutRequiredFields
+    } = SHERPA_MODEL_PRESETS[modelId];
     return {
-        ...SHERPA_MODEL_PRESETS[modelId],
+        ...presetWithoutRequiredFields,
         ...overrides,
     };
 }
 
 const SHERPA_CDN_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models';
-
-export const SHERPA_REMOTE_MODEL_FILES: Record<SherpaModelId, string[]> = {
-    'zipformer-zh-streaming': ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
-    'zipformer-ctc-zh': ['model.onnx', 'tokens.txt'],
-    'funasr-nano': [
-        'encoder_adaptor.onnx',
-        'llm.onnx',
-        'embedding.onnx',
-        'Qwen3-0.6B/tokenizer.json',
-        'Qwen3-0.6B/vocab.json',
-        'Qwen3-0.6B/merges.txt',
-    ],
-};
 
 type DownloadModelOptions = {
     baseUrl?: string;
@@ -254,7 +258,7 @@ async function removeMarker(path: string): Promise<void> {
     await safeDelete(path);
 }
 
-async function validateRequiredFilesInDir(baseDir: string, requiredFiles: string[]): Promise<ExtractedModelValidation> {
+async function validateRequiredFilesInDir(baseDir: string, requiredFiles: readonly string[]): Promise<ExtractedModelValidation> {
     const issues: string[] = [];
     for (const file of requiredFiles) {
         const filePath = `${baseDir}${file}`;
@@ -276,7 +280,7 @@ async function validateRequiredFilesInDir(baseDir: string, requiredFiles: string
 
 async function validateExtractedModelFiles(modelId: SherpaModelId): Promise<ExtractedModelValidation> {
     const modelDir = getDownloadedModelDir(modelId);
-    const requiredFiles = SHERPA_REMOTE_MODEL_FILES[modelId];
+    const requiredFiles = SHERPA_MODEL_PRESETS[modelId].requiredFiles;
     const dirInfo = await FileSystem.getInfoAsync(modelDir);
     if (!dirInfo.exists || !dirInfo.isDirectory) {
         return { ok: false, issues: ['model directory is missing'] };
@@ -295,7 +299,7 @@ async function validateExtractedModelFiles(modelId: SherpaModelId): Promise<Extr
 
 async function verifyExtractedModelHashes(modelId: SherpaModelId, meta: ModelPackageMeta): Promise<ExtractedModelValidation> {
     const modelDir = getDownloadedModelDir(modelId);
-    const requiredFiles = SHERPA_REMOTE_MODEL_FILES[modelId];
+    const requiredFiles = SHERPA_MODEL_PRESETS[modelId].requiredFiles;
     const issues: string[] = [];
 
     for (const file of requiredFiles) {
@@ -400,7 +404,7 @@ async function hasExtractedModelFiles(modelId: SherpaModelId): Promise<boolean> 
     return check.ok;
 }
 
-async function resolveExtractedSourceDir(tempDir: string, requiredFiles: string[]): Promise<string | null> {
+async function resolveExtractedSourceDir(tempDir: string, requiredFiles: readonly string[]): Promise<string | null> {
     const inRoot = await Promise.all(requiredFiles.map(name => FileSystem.getInfoAsync(`${tempDir}${name}`)));
     if (inRoot.every(i => i.exists)) {
         return tempDir;
@@ -427,7 +431,7 @@ async function extractModelZip(modelId: SherpaModelId, meta: ModelPackageMeta): 
     const tempDir = getModelExtractTempDir(modelId);
     const stageDir = getModelExtractStageDir(modelId);
     const extractingMarker = getModelExtractingMarkerPath(modelId);
-    const requiredFiles = SHERPA_REMOTE_MODEL_FILES[modelId];
+    const requiredFiles = SHERPA_MODEL_PRESETS[modelId].requiredFiles;
 
     await writeMarker(extractingMarker, `extracting:${modelId}`);
     try {
@@ -552,6 +556,25 @@ export async function isModelDownloaded(modelId: SherpaModelId): Promise<boolean
     return hasExtractedModelFiles(modelId);
 }
 
+export async function getInstalledModelVersion(modelId: SherpaModelId): Promise<string | null> {
+    const versionPath = getModelVersionFilePath(modelId);
+    const info = await FileSystem.getInfoAsync(versionPath);
+    if (!info.exists || info.isDirectory) {
+        return null;
+    }
+    const content = await FileSystem.readAsStringAsync(versionPath);
+    const version = content.trim();
+    return version.length > 0 ? version : null;
+}
+
+export async function uninstallModel(modelId: SherpaModelId): Promise<void> {
+    await withModelLock(modelId, async () => {
+        await recoverInterruptedState(modelId);
+        await safeDelete(getDownloadedModelDir(modelId));
+        await removeModelPackageFiles(modelId);
+    });
+}
+
 export async function listLocalModels(): Promise<SherpaModelId[]> {
     const modelIds = Object.keys(SHERPA_MODEL_PRESETS) as SherpaModelId[];
     const existing: SherpaModelId[] = [];
@@ -567,6 +590,7 @@ export async function downloadModel(modelId: SherpaModelId, options: DownloadMod
     return withModelLock(modelId, async () => {
         const modelDir = getDownloadedModelDir(modelId);
         const packagesDir = getDownloadedPackagesRootDir();
+        console.info(`[sherpa] [step 3] checking private package cache: ${modelId}`);
         await FileSystem.makeDirectoryAsync(packagesDir, { intermediates: true });
         await FileSystem.makeDirectoryAsync(getDownloadedModelsRootDir(), { intermediates: true });
         await recoverInterruptedState(modelId);
@@ -586,6 +610,7 @@ export async function downloadModel(modelId: SherpaModelId, options: DownloadMod
         const localZipExists = (await FileSystem.getInfoAsync(getModelZipPath(modelId))).exists;
 
         if (localMeta && localZipExists) {
+            console.info(`[sherpa] [step 3] private package cache hit: ${modelId}`);
             options.onProgress?.({ modelId, phase: 'verifying' });
             const zipOk = await verifyZipByMeta(modelId, localMeta);
             if (zipOk) {
@@ -599,15 +624,21 @@ export async function downloadModel(modelId: SherpaModelId, options: DownloadMod
             console.warn(`[sherpa] local package verification failed, falling back to remote download: ${modelId}`);
             await removeModelPackageFiles(modelId);
             localMeta = null;
+        } else {
+            console.info(`[sherpa] [step 3] private package cache miss: ${modelId}`);
         }
 
         if (!localMeta) {
+            console.info(`[sherpa] [step 4] downloading meta from remote: ${modelId}`);
             localMeta = await downloadModelMeta(modelId, baseUrl, options.onProgress);
         }
 
         const zipExistsAfterMeta = (await FileSystem.getInfoAsync(getModelZipPath(modelId))).exists;
         if (!zipExistsAfterMeta) {
+            console.info(`[sherpa] [step 4] downloading zip from remote: ${modelId}`);
             await downloadModelZipWithResume(modelId, baseUrl, options.onProgress);
+        } else {
+            console.info(`[sherpa] [step 3] using cached zip in private packages: ${modelId}`);
         }
 
         options.onProgress?.({ modelId, phase: 'verifying' });
@@ -628,14 +659,16 @@ export async function downloadModel(modelId: SherpaModelId, options: DownloadMod
 
 export async function ensureModelReady(modelId: SherpaModelId, options: DownloadModelOptions = {}): Promise<string> {
     const modelDir = getDownloadedModelDir(modelId);
+    console.info(`[sherpa] [step 1] checking extracted model dir: ${modelId}`);
     const extractedCheck = await validateExtractedModelFiles(modelId);
 
     if (!options.force && extractedCheck.ok) {
-        console.info(`[sherpa] model already ready, skip ensure: ${modelId}`);
+        console.info(`[sherpa] [step 1] extracted model dir hit, ready: ${modelId}`);
         await removeModelPackageFiles(modelId);
         options.onProgress?.({ modelId, phase: 'ready', percent: 1 });
         return modelDir;
     }
+    console.info(`[sherpa] [step 1] extracted model dir miss: ${modelId}`);
 
     if (!options.force) {
         const hasZip = (await FileSystem.getInfoAsync(getModelZipPath(modelId))).exists;
@@ -643,8 +676,28 @@ export async function ensureModelReady(modelId: SherpaModelId, options: Download
         if (!hasZip && !hasJson && (await FileSystem.getInfoAsync(modelDir)).exists) {
             throw new Error(`Model files are invalid for ${modelId}: ${extractedCheck.issues.join('; ')}`);
         }
+
+        // Prefer bundled assets first. If bundled files are absent, fall back to remote download.
+        console.info(`[sherpa] [step 2] checking bundled assets in assets/sherpa/models: ${modelId}`);
+        try {
+            return await initializeBundledModel(modelId, {
+                onProgress: options.onProgress,
+            });
+        } catch (error) {
+            const message = (error as Error)?.message ?? String(error);
+            const isBundledAssetMissing =
+                message.includes('Asset not found') ||
+                message.includes('ERR_SHERPA_COPY_ASSET_FILE') ||
+                message.includes('Bundled model meta is missing or invalid');
+            if (!isBundledAssetMissing) {
+                console.warn(`[sherpa] [step 2] bundled assets found but init failed, fallback to step 3/4: ${modelId}`, error);
+            } else {
+                console.info(`[sherpa] [step 2] bundled assets miss, continue to step 3/4: ${modelId}`);
+            }
+        }
     }
 
+    console.info(`[sherpa] continue with [step 3 -> step 4] flow: ${modelId}`);
     return downloadModel(modelId, options);
 }
 
@@ -705,7 +758,12 @@ export async function initializeBundledModel(modelId: SherpaModelId, options: In
 }
 
 export function getSherpaDownloadedModelOptions(modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}): SherpaTranscribeOptions {
-    const { modelDirAsset: _ignoredModelDirAsset, ...presetWithoutAssetPath } = SHERPA_MODEL_PRESETS[modelId];
+    const {
+        modelDirAsset: _ignoredModelDirAsset,
+        outputMode: _ignoredOutputMode,
+        requiredFiles: _ignoredRequiredFiles,
+        ...presetWithoutAssetPath
+    } = SHERPA_MODEL_PRESETS[modelId];
     return {
         ...presetWithoutAssetPath,
         modelDir: getDownloadedModelDir(modelId),
@@ -734,7 +792,9 @@ const SherpaOnnx = {
     ensureModelReady,
     initializeBundledModel,
     isModelDownloaded,
+    getInstalledModelVersion,
     listLocalModels,
+    uninstallModel,
     getDownloadedModelDir,
     transcribeWavByDownloadedModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
         return NativeSherpaOnnx.transcribeWav(path, getSherpaDownloadedModelOptions(modelId, overrides));

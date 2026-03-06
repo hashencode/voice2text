@@ -8,17 +8,9 @@ import { DefaultLayout } from '~/components/DefaultLayout';
 import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
-import SherpaOnnx, {
-    ensureModelReady,
-    listLocalModels,
-    type SherpaRealtimeResultEvent,
-    type SherpaRealtimeStateEvent,
-} from '~/modules/sherpa';
+import SherpaOnnx, { ensureModelReady, type SherpaRealtimeResultEvent, type SherpaRealtimeStateEvent } from '~/modules/sherpa';
 
 export default function Home() {
-    const [downloading, setDownloading] = useState(false);
-    const [downloadStatus, setDownloadStatus] = useState('未开始下载');
-    const [modelsListText, setModelsListText] = useState('');
     const [conversionText, setConversionText] = useState('');
     const [realtimeState, setRealtimeState] = useState('stopped');
     const [permissionStatusText, setPermissionStatusText] = useState('未知');
@@ -32,42 +24,11 @@ export default function Home() {
     const realtimeModelId = 'zipformer-zh-streaming' as const;
     const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
 
-    const getModels = async () => {
-        const res = await listLocalModels();
-        setModelsListText(JSON.stringify(res));
-    };
-
     const { pickDocument } = useFilePicker({
         multiple: true,
         onFilesSelected: selected => handleConversion(selected[0]?.uri),
         onError: error => console.error('Error:', error),
     });
-
-    const handleDownloadModel = async () => {
-        setDownloading(true);
-        try {
-            const localDir = await ensureModelReady(realtimeModelId, {
-                baseUrl: MODEL_BASE_URL,
-                onProgress: progress => {
-                    if (progress.phase === 'downloading-zip') {
-                        const percent = progress.percent ? `${Math.round(progress.percent * 100)}%` : '';
-                        setDownloadStatus(`下载中 ${percent}`.trim());
-                    } else if (progress.phase === 'verifying') {
-                        setDownloadStatus('校验中');
-                    } else if (progress.phase === 'extracting') {
-                        setDownloadStatus('解压中');
-                    } else if (progress.phase === 'ready') {
-                        setDownloadStatus('模型就绪');
-                    } else {
-                        setDownloadStatus('获取模型信息');
-                    }
-                },
-            });
-            console.info('@log model downloaded', realtimeModelId, localDir);
-        } finally {
-            setDownloading(false);
-        }
-    };
 
     const handleConversion = async (uri: string) => {
         if (uri) {
@@ -166,12 +127,6 @@ export default function Home() {
             <View style={{ gap: 12 }}>
                 <Button onPress={requestRecordingPermissionOnly}>获取录音权限</Button>
                 <TextX>录音权限：{permissionStatusText}</TextX>
-                <Button loading={downloading} onPress={handleDownloadModel}>
-                    下载模型
-                </Button>
-                <TextX>模型状态：{downloadStatus}</TextX>
-                <Button onPress={getModels}>获取模型列表</Button>
-                <TextX>模型列表：{modelsListText}</TextX>
                 <Button onPress={pickDocument}>选择文件</Button>
                 <Button loading={recordingActionLoading} onPress={toggleRecordAndTranscribe}>
                     {isRecordingByButton ? '停止录音并识别' : '开始录音'}

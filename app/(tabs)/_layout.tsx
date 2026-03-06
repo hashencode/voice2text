@@ -16,9 +16,9 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
-                name="me"
+                name="libs"
                 options={{
-                    title: 'Me',
+                    title: 'Libs',
                     tabBarIcon: ({ color }) => <Smile color={color} />,
                 }}
             />
