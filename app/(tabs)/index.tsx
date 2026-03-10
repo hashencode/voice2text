@@ -23,6 +23,8 @@ import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/
 
 const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zipformer-ctc-zh';
 const DEFAULT_STREAMING_MODEL: SherpaModelId = 'zipformer-zh-streaming';
+const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/segmentation/pyannote-segmentation.onnx';
+const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/speaker-embedding/3dspeaker_campplus_sv_zh-cn.onnx';
 
 function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaModelId): SherpaModelId {
     const selected = getCurrentModelByOutputMode(outputMode);
@@ -55,17 +57,19 @@ function compareModelVersion(left: string, right: string): number {
 
 export default function Home() {
     const [conversionText, setConversionText] = useState('');
+    const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
     const [realtimeState, setRealtimeState] = useState('stopped');
     const [realtimePartialText, setRealtimePartialText] = useState('');
     const [realtimeFinalText, setRealtimeFinalText] = useState('');
     const [realtimeVadInfo, setRealtimeVadInfo] = useState('unknown');
     const [vadEnabled, setVadEnabled] = useState(true);
+    const [speakerDiarizationEnabled, setSpeakerDiarizationEnabled] = useState(false);
     const [isRecordingByButton, setIsRecordingByButton] = useState(false);
     const [recordingActionLoading, setRecordingActionLoading] = useState(false);
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
 
     const checkCurrentModelVersions = useCallback(async () => {
-        const currentModels: Array<{ outputMode: SherpaOutputMode; modelId: SherpaModelId }> = [
+        const currentModels: { outputMode: SherpaOutputMode; modelId: SherpaModelId }[] = [
             { outputMode: 'nonStreaming', modelId: resolveSelectedModel('nonStreaming', DEFAULT_NON_STREAMING_MODEL) },
             { outputMode: 'streaming', modelId: resolveSelectedModel('streaming', DEFAULT_STREAMING_MODEL) },
         ];
@@ -88,27 +92,40 @@ export default function Home() {
     }, []);
 
     const { pickDocument } = useFilePicker({
-        multiple: true,
-        onFilesSelected: selected => handleConversion(selected[0]?.uri),
+        multiple: false,
         onError: error => console.error('Error:', error),
     });
 
     const runRecognitionPreflight = useCallback(async (kind: 'file' | 'recording' | 'realtime'): Promise<boolean> => {
-        const modelId =
-            kind === 'realtime'
-                ? getCurrentModelByOutputMode('streaming', { withDefault: true })
-                : getCurrentModelByOutputMode('nonStreaming', { withDefault: true });
+        const modelId = kind === 'realtime' ? getCurrentModelByOutputMode('streaming') : getCurrentModelByOutputMode('nonStreaming');
         return runRecognitionPreflightTool({
             kind,
             modelId,
         });
     }, []);
 
-    const handleConversion = async (uri: string) => {
-        if (uri) {
-            const currentModelId = getCurrentModelByOutputMode('nonStreaming', { withDefault: true });
-            const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, currentModelId);
+    const handleConversion = async (uri?: string): Promise<boolean> => {
+        if (!uri) {
+            setFileRecognitionStatusText('未获取到文件路径');
+            return false;
+        }
+
+        setFileRecognitionStatusText('文件识别中...');
+        try {
+            const currentModelId = getCurrentModelByOutputMode('nonStreaming');
+            const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, currentModelId, {
+                enableSpeakerDiarization: speakerDiarizationEnabled,
+                speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
+                speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
+            });
             setConversionText(r1.text);
+            setFileRecognitionStatusText('文件识别完成');
+            return true;
+        } catch (error) {
+            const message = (error as Error).message ?? 'unknown';
+            setFileRecognitionStatusText(`文件识别失败: ${message}`);
+            console.error('[file-recognition] failed', error);
+            return false;
         }
     };
 
@@ -117,8 +134,9 @@ export default function Home() {
         if (!canContinue) {
             return;
         }
-        await pickDocument();
-    }, [pickDocument, runRecognitionPreflight]);
+        const selected = await pickDocument({ multiple: false });
+        await handleConversion(selected[0]?.uri);
+    }, [pickDocument, runRecognitionPreflight, handleConversion]);
 
     const toggleRecordAndTranscribe = async () => {
         if (recordingActionLoading) {
@@ -165,7 +183,7 @@ export default function Home() {
             setRealtimePartialText('识别错误: 权限未授予或模型未安装');
             return;
         }
-        const currentModelId = getCurrentModelByOutputMode('streaming', { withDefault: true });
+        const currentModelId = getCurrentModelByOutputMode('streaming');
         setRealtimePartialText('');
         setRealtimeFinalText('');
         setRealtimeVadInfo('starting');
@@ -173,7 +191,10 @@ export default function Home() {
             sampleRate: 16000,
             emitIntervalMs: 150,
             enableEndpoint: false,
-            enableVad: vadEnabled,
+            enableVad: vadEnabled || speakerDiarizationEnabled,
+            enableSpeakerDiarization: speakerDiarizationEnabled,
+            speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
+            speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
         });
     };
 
@@ -220,17 +241,21 @@ export default function Home() {
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View style={{ gap: 12 }}>
+            <View className="gap-4 p-4">
                 <Button onPress={handlePickDocument}>选择文件</Button>
                 <Button loading={recordingActionLoading} onPress={toggleRecordAndTranscribe}>
                     {isRecordingByButton ? '停止录音并识别' : '开始录音'}
                 </Button>
                 <TextX>录音状态：{recordingStatusText}</TextX>
-
+                <TextX>文件识别状态：{fileRecognitionStatusText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
                 <View className="flex flex-row items-center">
                     <TextX>VAD 开关：{vadEnabled ? '开启' : '关闭'}</TextX>
                     <SwitchX value={vadEnabled} onValueChange={setVadEnabled} />
+                </View>
+                <View className="flex flex-row items-center">
+                    <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
+                    <SwitchX value={speakerDiarizationEnabled} onValueChange={setSpeakerDiarizationEnabled} />
                 </View>
                 <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
                     开始实时识别

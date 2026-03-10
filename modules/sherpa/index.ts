@@ -30,6 +30,14 @@ export type SherpaTranscribeOptions = {
     vadMinSpeechDuration?: number;
     vadWindowSize?: number;
     vadMaxSpeechDuration?: number;
+    enableSpeakerDiarization?: boolean;
+    speakerSegmentationModel?: string;
+    speakerEmbeddingModel?: string;
+    speakerMinDurationOn?: number;
+    speakerMinDurationOff?: number;
+    speakerNumClusters?: number;
+    speakerClusteringThreshold?: number;
+    speakerSimilarityThreshold?: number;
 };
 
 export type SherpaTranscribeResult = {
@@ -800,34 +808,45 @@ export function getSherpaDownloadedModelOptions(modelId: SherpaModelId, override
     };
 }
 
-async function ensureDownloadedVadModelPath(options: SherpaTranscribeOptions): Promise<SherpaTranscribeOptions> {
-    const vadModel = options.vadModel?.trim();
-    if (!vadModel) {
+async function ensureDownloadedAuxModelPath(
+    options: SherpaTranscribeOptions,
+    key: 'vadModel' | 'speakerSegmentationModel' | 'speakerEmbeddingModel',
+    subDir: string,
+): Promise<SherpaTranscribeOptions> {
+    const modelPath = options[key]?.trim();
+    if (!modelPath) {
         return options;
     }
 
-    const isAssetPath = vadModel.startsWith('sherpa/') || vadModel.startsWith('models/');
+    const isAssetPath = modelPath.startsWith('sherpa/') || modelPath.startsWith('models/');
     if (!isAssetPath) {
         return options;
     }
 
-    const fileName = vadModel.split('/').filter(Boolean).pop();
+    const fileName = modelPath.split('/').filter(Boolean).pop();
     if (!fileName) {
         return options;
     }
 
-    const vadRootDir = `${ensureDocumentDirectory()}sherpa/vad/`;
-    const destPath = `${vadRootDir}${fileName}`;
-    await FileSystem.makeDirectoryAsync(vadRootDir, { intermediates: true });
+    const rootDir = `${ensureDocumentDirectory()}sherpa/${subDir}/`;
+    const destPath = `${rootDir}${fileName}`;
+    await FileSystem.makeDirectoryAsync(rootDir, { intermediates: true });
     const info = await FileSystem.getInfoAsync(destPath);
     if (!info.exists || info.isDirectory || typeof info.size !== 'number' || info.size <= 0) {
-        await NativeSherpaOnnx.copyAssetFile(vadModel, destPath);
+        await NativeSherpaOnnx.copyAssetFile(modelPath, destPath);
     }
 
     return {
         ...options,
-        vadModel: destPath,
+        [key]: destPath,
     };
+}
+
+async function ensureDownloadedRuntimeModelPaths(options: SherpaTranscribeOptions): Promise<SherpaTranscribeOptions> {
+    let resolved = await ensureDownloadedAuxModelPath(options, 'vadModel', 'vad');
+    resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerSegmentationModel', 'segmentation');
+    resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerEmbeddingModel', 'speaker-embedding');
+    return resolved;
 }
 
 const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
@@ -855,11 +874,13 @@ const SherpaOnnx = {
     listLocalModels,
     uninstallModel,
     getDownloadedModelDir,
-    transcribeWavByDownloadedModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
-        return NativeSherpaOnnx.transcribeWav(path, getSherpaDownloadedModelOptions(modelId, overrides));
+    async transcribeWavByDownloadedModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
+        const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
+        return NativeSherpaOnnx.transcribeWav(path, options);
     },
-    transcribeAssetWavByDownloadedModel(assetPath: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
-        return NativeSherpaOnnx.transcribeAssetWav(assetPath, getSherpaDownloadedModelOptions(modelId, overrides));
+    async transcribeAssetWavByDownloadedModel(assetPath: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
+        const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
+        return NativeSherpaOnnx.transcribeAssetWav(assetPath, options);
     },
     startRealtimeTranscriptionByModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
         const options = getSherpaModelOptions(modelId, overrides);
@@ -867,7 +888,7 @@ const SherpaOnnx = {
         return NativeSherpaOnnx.startRealtimeTranscription(options);
     },
     async startRealtimeTranscriptionByDownloadedModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
-        const options = await ensureDownloadedVadModelPath(getSherpaDownloadedModelOptions(modelId, overrides));
+        const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
         assertRealtimeCompatibleOptions(options, modelId);
         return NativeSherpaOnnx.startRealtimeTranscription(options);
     },

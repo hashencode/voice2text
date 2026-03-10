@@ -10,7 +10,7 @@ function syncModelPackages(srcDir, destDir) {
         return;
     }
 
-    const ALLOWED_EXTENSIONS = /\.(zip|json|onnx|txt)$/i;
+    const ALLOWED_EXTENSIONS = /\.(zip|json|onnx|txt|wav)$/i;
 
     function copyRecursively(currentSrc, currentDest) {
         fs.mkdirSync(currentDest, { recursive: true });
@@ -47,6 +47,18 @@ module.exports = function withSherpaOnnx(config) {
             const vadSrcDir = path.join(projectRoot, 'assets/sherpa/vad');
             const vadDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/vad');
             syncModelPackages(vadSrcDir, vadDestDir);
+
+            const segmentationSrcDir = path.join(projectRoot, 'assets/sherpa/segmentation');
+            const segmentationDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/segmentation');
+            syncModelPackages(segmentationSrcDir, segmentationDestDir);
+
+            const speakerEmbeddingSrcDir = path.join(projectRoot, 'assets/sherpa/speaker-embedding');
+            const speakerEmbeddingDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speaker-embedding');
+            syncModelPackages(speakerEmbeddingSrcDir, speakerEmbeddingDestDir);
+
+            const wavSrcDir = path.join(projectRoot, 'assets/wav');
+            const wavDestDir = path.join(projectRoot, 'android/app/src/main/assets/wav');
+            syncModelPackages(wavSrcDir, wavDestDir);
 
             return config;
         },

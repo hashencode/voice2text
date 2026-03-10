@@ -9,6 +9,11 @@ import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
+import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarization
+import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarizationConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarizationSegment
+import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig
@@ -19,6 +24,10 @@ import com.k2fsa.sherpa.onnx.OnlineRecognizerResult
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineZipformer2CtcModelConfig
+import com.k2fsa.sherpa.onnx.FastClusteringConfig
+import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor
+import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
+import com.k2fsa.sherpa.onnx.SpeakerEmbeddingManager
 import com.k2fsa.sherpa.onnx.TenVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
@@ -76,6 +85,13 @@ class SherpaOnnxModule : Module() {
 
   private val realtimeLock = Any()
   private val wavLock = Any()
+  private val offlineCacheLock = Any()
+
+  @Volatile
+  private var cachedOfflineRecognizer: OfflineRecognizer? = null
+
+  @Volatile
+  private var cachedOfflineRecognizerKey: String? = null
 
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
@@ -84,6 +100,7 @@ class SherpaOnnxModule : Module() {
     OnDestroy {
       stopRealtimeInternal()
       stopWavRecordingInternal()
+      clearOfflineRecognizerCache()
       executor.shutdownNow()
       realtimeExecutor.shutdownNow()
       wavRecordExecutor.shutdownNow()
@@ -219,8 +236,7 @@ class SherpaOnnxModule : Module() {
           }
 
           val waveData = WaveReader.Companion.readWave(cleanPath)
-          val result = transcribeWave(waveData, options)
-          promise.resolve(result)
+          promise.resolve(transcribeWave(waveData, options))
         } catch (e: Exception) {
           promise.reject("ERR_SHERPA_TRANSCRIBE", e.message, e)
         }
@@ -233,8 +249,7 @@ class SherpaOnnxModule : Module() {
           val assetManager =
             appContext.reactContext?.assets ?: throw IllegalStateException("React context is not available")
           val waveData = WaveReader.Companion.readWave(assetManager, wavAssetPath)
-          val result = transcribeWave(waveData, options)
-          promise.resolve(result)
+          promise.resolve(transcribeWave(waveData, options))
         } catch (e: Exception) {
           promise.reject("ERR_SHERPA_TRANSCRIBE_ASSET", e.message, e)
         }
@@ -399,10 +414,14 @@ class SherpaOnnxModule : Module() {
     var recognizer: OnlineRecognizer? = null
     var stream: OnlineStream? = null
     var vad: Vad? = null
+    var speakerDiarization: OfflineSpeakerDiarization? = null
+    var speakerExtractor: SpeakerEmbeddingExtractor? = null
+    var speakerManager: SpeakerEmbeddingManager? = null
     var audioRecord: AudioRecord? = null
     var lastText = ""
     var vadActive = false
     var vadInfo = "disabled"
+    var nextSpeakerIndex = 0
 
     try {
       sendRealtimeState("starting")
@@ -421,6 +440,8 @@ class SherpaOnnxModule : Module() {
       val enableEndpoint = options.getBoolean("enableEndpoint") ?: false
       val vadModel = options.getString("vadModel")
       val enableVad = options.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
+      val enableSpeakerDiarization = options.getBoolean("enableSpeakerDiarization") ?: false
+      val speakerSimilarityThreshold = options.getFloat("speakerSimilarityThreshold") ?: 0.85f
 
       val modelConfig = OnlineModelConfig().apply {
         val tokens = options.getString("tokens")
@@ -507,6 +528,34 @@ class SherpaOnnxModule : Module() {
         vadInfo = if (enableVad) "enabled but vadModel empty" else "disabled by option"
       }
 
+      if (enableSpeakerDiarization) {
+        if (vad == null) {
+          vadInfo = "$vadInfo | speaker=disabled:requires-vad"
+        } else {
+          try {
+            speakerDiarization = createOfflineSpeakerDiarization(modelContext, options, numThreads, provider, debug)
+            val embeddingModel =
+              options.getString("speakerEmbeddingModel")
+                ?: DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET
+            val extractorConfig =
+              SpeakerEmbeddingExtractorConfig(
+                modelContext.resolveModelPath(embeddingModel),
+                numThreads,
+                debug,
+                provider,
+              )
+            speakerExtractor = SpeakerEmbeddingExtractor(modelContext.assetManager, extractorConfig)
+            speakerManager = SpeakerEmbeddingManager(speakerExtractor.dim())
+            vadInfo = "$vadInfo | speaker=enabled"
+          } catch (e: Exception) {
+            speakerDiarization = null
+            speakerExtractor = null
+            speakerManager = null
+            vadInfo = "$vadInfo | speaker=init-failed:${e.message ?: "unknown"}"
+          }
+        }
+      }
+
       audioRecord = createAudioRecord(sampleRate)
 
       realtimeRecognizer = recognizer
@@ -541,8 +590,26 @@ class SherpaOnnxModule : Module() {
             }
             val segmentResult = recognizer.getResult(stream)
             if (segmentResult.text.isNotBlank()) {
+              val outputText =
+                if (speakerDiarization != null) {
+                  val speakerSegments = speakerDiarization.process(segment.samples)
+                  val speakerNameResult =
+                    resolveSpeakerNamesForRealtimeSegment(
+                      segment.samples,
+                      sampleRate,
+                      speakerSegments,
+                      speakerExtractor,
+                      speakerManager,
+                      speakerSimilarityThreshold,
+                      nextSpeakerIndex,
+                    )
+                  nextSpeakerIndex = speakerNameResult.nextSpeakerIndex
+                  formatOnlineResultBySpeaker(segmentResult, speakerSegments, speakerNameResult.localSpeakerNameMap)
+                } else {
+                  segmentResult.text
+                }
               lastText = ""
-              sendRealtimeResult(segmentResult, true, true, sampleRate)
+              sendRealtimeResult(segmentResult, true, true, sampleRate, outputText)
               recognizer.reset(stream)
             }
           }
@@ -612,6 +679,9 @@ class SherpaOnnxModule : Module() {
       }
       audioRecord?.release()
       vad?.release()
+      speakerDiarization?.release()
+      speakerExtractor?.release()
+      speakerManager?.release()
       stream?.release()
       recognizer?.release()
 
@@ -731,12 +801,13 @@ class SherpaOnnxModule : Module() {
     isFinal: Boolean,
     isEndpoint: Boolean,
     sampleRate: Int,
+    overrideText: String? = null,
   ) {
     sendEvent(
       REALTIME_EVENT_NAME,
       mapOf(
         "type" to if (isFinal) "final" else "partial",
-        "text" to result.text,
+        "text" to (overrideText ?: result.text),
         "tokens" to result.tokens.toList(),
         "timestamps" to result.timestamps.map { it.toDouble() },
         "isFinal" to isFinal,
@@ -837,6 +908,7 @@ class SherpaOnnxModule : Module() {
 
   private fun transcribeWave(waveData: WaveData, options: Map<String, Any?>?): Map<String, Any?> {
     val modelContext = resolveModelContext(options)
+
     val modelType = options?.getString("modelType") ?: "transducer"
     val encoder = options?.getString("encoder") ?: "encoder.onnx"
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
@@ -856,9 +928,20 @@ class SherpaOnnxModule : Module() {
     val decodingMethod = options?.getString("decodingMethod") ?: "greedy_search"
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
+    val enableSpeakerDiarization = options?.getBoolean("enableSpeakerDiarization") ?: false
+
+    var resolvedTokensPath = ""
+    var resolvedEncoderPath = ""
+    var resolvedDecoderPath = ""
+    var resolvedJoinerPath = ""
+    var resolvedCtcModelPath = ""
+    var resolvedEncoderAdaptorPath = ""
+    var resolvedLlmPath = ""
+    var resolvedEmbeddingPath = ""
+    var resolvedTokenizerDirPath = ""
 
     val modelConfig = OfflineModelConfig().apply {
-      this.tokens =
+      resolvedTokensPath =
         if (!tokens.isNullOrBlank()) {
           modelContext.resolveModelPath(tokens)
         } else if (modelType == "funasr_nano") {
@@ -866,6 +949,7 @@ class SherpaOnnxModule : Module() {
         } else {
           modelContext.resolveModelPath("tokens.txt")
         }
+      this.tokens = resolvedTokensPath
       this.numThreads = numThreads
       this.provider = provider
       this.debug = debug
@@ -874,16 +958,20 @@ class SherpaOnnxModule : Module() {
 
     when (modelType) {
       "transducer", "zipformer", "zipformer2" -> {
+        resolvedEncoderPath = modelContext.resolveModelPath(encoder)
+        resolvedDecoderPath = modelContext.resolveModelPath(decoder)
+        resolvedJoinerPath = modelContext.resolveModelPath(joiner)
         modelConfig.transducer =
           OfflineTransducerModelConfig(
-            modelContext.resolveModelPath(encoder),
-            modelContext.resolveModelPath(decoder),
-            modelContext.resolveModelPath(joiner),
+            resolvedEncoderPath,
+            resolvedDecoderPath,
+            resolvedJoinerPath,
           )
       }
       "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
+        resolvedCtcModelPath = modelContext.resolveModelPath(model)
         modelConfig.zipformerCtc = OfflineZipformerCtcModelConfig().apply {
-          this.model = modelContext.resolveModelPath(model)
+          this.model = resolvedCtcModelPath
         }
         modelConfig.modelType = "zipformer2_ctc"
       }
@@ -894,11 +982,15 @@ class SherpaOnnxModule : Module() {
           } else {
             tokenizer
           }
+        resolvedEncoderAdaptorPath = modelContext.resolveModelPath(encoderAdaptor)
+        resolvedLlmPath = modelContext.resolveModelPath(llm)
+        resolvedEmbeddingPath = modelContext.resolveModelPath(embedding)
+        resolvedTokenizerDirPath = modelContext.resolveModelPath(tokenizerDir)
         modelConfig.funasrNano = OfflineFunAsrNanoModelConfig().apply {
-          this.encoderAdaptor = modelContext.resolveModelPath(encoderAdaptor)
-          this.llm = modelContext.resolveModelPath(llm)
-          this.embedding = modelContext.resolveModelPath(embedding)
-          this.tokenizer = modelContext.resolveModelPath(tokenizerDir)
+          this.encoderAdaptor = resolvedEncoderAdaptorPath
+          this.llm = resolvedLlmPath
+          this.embedding = resolvedEmbeddingPath
+          this.tokenizer = resolvedTokenizerDirPath
         }
         modelConfig.modelType = "funasr_nano"
       }
@@ -906,7 +998,6 @@ class SherpaOnnxModule : Module() {
         throw IllegalArgumentException("Unsupported modelType: $modelType")
       }
     }
-
     val recognizerConfig = OfflineRecognizerConfig().apply {
       this.featConfig = FeatureConfig(sampleRate, featureDim, 0f)
       this.modelConfig = modelConfig
@@ -916,18 +1007,431 @@ class SherpaOnnxModule : Module() {
     }
 
     var recognizer: OfflineRecognizer? = null
+    var speakerDiarization: OfflineSpeakerDiarization? = null
     var stream: OfflineStream? = null
+    var resultMap = mutableMapOf<String, Any?>()
     try {
-      recognizer = OfflineRecognizer(modelContext.assetManager, recognizerConfig)
+      val recognizerKey =
+        buildOfflineRecognizerCacheKey(
+          modelContext = modelContext,
+          modelType = modelType,
+          sampleRate = sampleRate,
+          featureDim = featureDim,
+          numThreads = numThreads,
+          provider = provider,
+          debug = debug,
+          decodingMethod = decodingMethod,
+          maxActivePaths = maxActivePaths,
+          blankPenalty = blankPenalty,
+          tokensPath = resolvedTokensPath,
+          encoderPath = resolvedEncoderPath,
+          decoderPath = resolvedDecoderPath,
+          joinerPath = resolvedJoinerPath,
+          ctcModelPath = resolvedCtcModelPath,
+          encoderAdaptorPath = resolvedEncoderAdaptorPath,
+          llmPath = resolvedLlmPath,
+          embeddingPath = resolvedEmbeddingPath,
+          tokenizerDirPath = resolvedTokenizerDirPath,
+        )
+      recognizer = acquireOfflineRecognizer(recognizerKey, modelContext.assetManager, recognizerConfig)
+
+      if (enableSpeakerDiarization) {
+        speakerDiarization = createOfflineSpeakerDiarization(modelContext, options, numThreads, provider, debug)
+      }
+
       stream = recognizer.createStream()
+
       stream.acceptWaveform(waveData.samples, waveData.sampleRate)
+
       recognizer.decode(stream)
+
       val result = recognizer.getResult(stream)
-      return result.toMap(waveData)
+
+      resultMap = result.toMap(waveData).toMutableMap()
+      if (speakerDiarization != null && result.text.isNotBlank()) {
+        val speakerSegments = speakerDiarization.process(waveData.samples)
+
+        val speakerText = formatOfflineResultBySpeaker(recognizer, waveData, speakerSegments)
+        if (speakerText.isNotBlank()) {
+          resultMap["text"] = speakerText
+        }
+      }
     } finally {
       stream?.release()
-      recognizer?.release()
+      speakerDiarization?.release()
     }
+
+    return resultMap
+  }
+
+  private fun acquireOfflineRecognizer(
+    key: String,
+    assetManager: android.content.res.AssetManager?,
+    config: OfflineRecognizerConfig,
+  ): OfflineRecognizer {
+    synchronized(offlineCacheLock) {
+      val cached = cachedOfflineRecognizer
+      if (cached != null && cachedOfflineRecognizerKey == key) {
+        return cached
+      }
+
+      cachedOfflineRecognizer?.release()
+      cachedOfflineRecognizer = null
+      cachedOfflineRecognizerKey = null
+
+      val created = OfflineRecognizer(assetManager, config)
+      cachedOfflineRecognizer = created
+      cachedOfflineRecognizerKey = key
+      return created
+    }
+  }
+
+  private fun clearOfflineRecognizerCache() {
+    synchronized(offlineCacheLock) {
+      cachedOfflineRecognizer?.release()
+      cachedOfflineRecognizer = null
+      cachedOfflineRecognizerKey = null
+    }
+  }
+
+  private fun buildOfflineRecognizerCacheKey(
+    modelContext: ModelContext,
+    modelType: String,
+    sampleRate: Int,
+    featureDim: Int,
+    numThreads: Int,
+    provider: String,
+    debug: Boolean,
+    decodingMethod: String,
+    maxActivePaths: Int,
+    blankPenalty: Float,
+    tokensPath: String,
+    encoderPath: String,
+    decoderPath: String,
+    joinerPath: String,
+    ctcModelPath: String,
+    encoderAdaptorPath: String,
+    llmPath: String,
+    embeddingPath: String,
+    tokenizerDirPath: String,
+  ): String {
+    return listOf(
+      "ctxMode=${modelContext.useFileModelDir}",
+      "ctxBase=${modelContext.baseModelDir}",
+      "type=$modelType",
+      "sampleRate=$sampleRate",
+      "featureDim=$featureDim",
+      "numThreads=$numThreads",
+      "provider=$provider",
+      "debug=$debug",
+      "decodingMethod=$decodingMethod",
+      "maxActivePaths=$maxActivePaths",
+      "blankPenalty=$blankPenalty",
+      "tokens=$tokensPath",
+      "encoder=$encoderPath",
+      "decoder=$decoderPath",
+      "joiner=$joinerPath",
+      "ctcModel=$ctcModelPath",
+      "encoderAdaptor=$encoderAdaptorPath",
+      "llm=$llmPath",
+      "embedding=$embeddingPath",
+      "tokenizerDir=$tokenizerDirPath",
+    ).joinToString("|")
+  }
+
+  private fun createOfflineSpeakerDiarization(
+    modelContext: ModelContext,
+    options: Map<String, Any?>?,
+    numThreads: Int,
+    provider: String,
+    debug: Boolean,
+  ): OfflineSpeakerDiarization {
+    val segmentationModel =
+      options?.getString("speakerSegmentationModel")
+        ?: DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET
+    val embeddingModel =
+      options?.getString("speakerEmbeddingModel")
+        ?: DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET
+    val minDurationOn = options?.getFloat("speakerMinDurationOn") ?: 0.3f
+    val minDurationOff = options?.getFloat("speakerMinDurationOff") ?: 0.3f
+    val numClusters = options?.getInt("speakerNumClusters") ?: -1
+    val clusteringThreshold = options?.getFloat("speakerClusteringThreshold") ?: 0.5f
+
+    val config =
+      OfflineSpeakerDiarizationConfig(
+        OfflineSpeakerSegmentationModelConfig(
+          OfflineSpeakerSegmentationPyannoteModelConfig(modelContext.resolveModelPath(segmentationModel)),
+          numThreads,
+          debug,
+          provider,
+        ),
+        SpeakerEmbeddingExtractorConfig(
+          modelContext.resolveModelPath(embeddingModel),
+          numThreads,
+          debug,
+          provider,
+        ),
+        FastClusteringConfig(numClusters, clusteringThreshold),
+        minDurationOn,
+        minDurationOff,
+      )
+
+    return OfflineSpeakerDiarization(modelContext.assetManager, config)
+  }
+
+  private data class SpeakerChunk(
+    val speaker: String,
+    val text: String,
+  )
+
+  private fun formatOfflineResultBySpeaker(
+    recognizer: OfflineRecognizer,
+    waveData: WaveData,
+    segments: Array<OfflineSpeakerDiarizationSegment>,
+  ): String {
+    if (segments.isEmpty()) {
+      return ""
+    }
+
+    val sortedSegments = segments.sortedBy { it.start }
+    val chunks = mutableListOf<SpeakerChunk>()
+    val sampleRate = waveData.sampleRate
+    for (segment in sortedSegments) {
+      val startIndex = (segment.start * sampleRate).toInt().coerceAtLeast(0)
+      val endIndex = (segment.end * sampleRate).toInt().coerceAtMost(waveData.samples.size)
+      if (endIndex <= startIndex) {
+        continue
+      }
+      val subSamples = waveData.samples.copyOfRange(startIndex, endIndex)
+      if (subSamples.isEmpty()) {
+        continue
+      }
+
+      var subStream: OfflineStream? = null
+      try {
+        subStream = recognizer.createStream()
+        subStream.acceptWaveform(subSamples, sampleRate)
+        recognizer.decode(subStream)
+        val text = recognizer.getResult(subStream).text.trim()
+        if (text.isBlank()) {
+          continue
+        }
+        val speakerName = speakerLabel(segment.speaker)
+        if (chunks.isNotEmpty() && chunks.last().speaker == speakerName) {
+          val merged = mergePieceText(chunks.last().text, text)
+          chunks[chunks.lastIndex] = SpeakerChunk(speakerName, merged)
+        } else {
+          chunks.add(SpeakerChunk(speakerName, text))
+        }
+      } finally {
+        subStream?.release()
+      }
+    }
+
+    return formatSpeakerChunks(chunks)
+  }
+
+  private fun formatOnlineResultBySpeaker(
+    result: OnlineRecognizerResult,
+    segments: Array<OfflineSpeakerDiarizationSegment>,
+    localSpeakerNameMap: Map<Int, String> = emptyMap(),
+  ): String {
+    if (segments.isEmpty()) {
+      return result.text
+    }
+    val tokens = result.tokens
+    val timestamps = result.timestamps
+    if (tokens.isEmpty() || timestamps.isEmpty()) {
+      val speakerName = localSpeakerNameMap[segments[0].speaker] ?: speakerLabel(segments[0].speaker)
+      return "$speakerName: ${result.text}"
+    }
+
+    val chunks = mutableListOf<SpeakerChunk>()
+    val count = minOf(tokens.size, timestamps.size)
+    for (index in 0 until count) {
+      val normalized = normalizeToken(tokens[index])
+      if (normalized.isBlank()) {
+        continue
+      }
+      val localSpeaker = speakerForTime(timestamps[index], segments)
+      val speaker = localSpeakerNameMap[localSpeaker] ?: speakerLabel(localSpeaker)
+      if (chunks.isNotEmpty() && chunks.last().speaker == speaker) {
+        val merged = mergePieceText(chunks.last().text, normalized)
+        chunks[chunks.lastIndex] = SpeakerChunk(speaker, merged)
+      } else {
+        chunks.add(SpeakerChunk(speaker, normalized))
+      }
+    }
+
+    if (chunks.isEmpty()) {
+      val speakerName = localSpeakerNameMap[segments[0].speaker] ?: speakerLabel(segments[0].speaker)
+      return "$speakerName: ${result.text}"
+    }
+    return formatSpeakerChunks(chunks)
+  }
+
+  private fun formatSpeakerChunks(chunks: List<SpeakerChunk>): String {
+    if (chunks.isEmpty()) {
+      return ""
+    }
+    return chunks
+      .filter { it.text.isNotBlank() }
+      .joinToString("\n") { "${it.speaker}: ${it.text}" }
+  }
+
+  private fun speakerLabel(speaker: Int): String {
+    if (speaker in 0..25) {
+      val suffix = ('A'.code + speaker).toChar()
+      return "speaker$suffix"
+    }
+    return "speaker${speaker + 1}"
+  }
+
+  private fun speakerForTime(time: Float, segments: Array<OfflineSpeakerDiarizationSegment>): Int {
+    for (segment in segments) {
+      if (time >= segment.start && time <= segment.end) {
+        return segment.speaker
+      }
+    }
+
+    var nearestSpeaker = segments[0].speaker
+    var nearestDistance = Float.MAX_VALUE
+    for (segment in segments) {
+      val distance =
+        when {
+          time < segment.start -> segment.start - time
+          time > segment.end -> time - segment.end
+          else -> 0f
+        }
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearestSpeaker = segment.speaker
+      }
+    }
+    return nearestSpeaker
+  }
+
+  private fun normalizeToken(token: String): String {
+    return token
+      .replace("▁", " ")
+      .replace("Ġ", " ")
+      .replace("<blk>", "")
+      .trim()
+  }
+
+  private fun mergePieceText(left: String, right: String): String {
+    if (left.isBlank()) return right
+    if (right.isBlank()) return left
+    val leftLast = left.last()
+    val rightFirst = right.first()
+    val needsSpace = leftLast.isLetterOrDigit() && rightFirst.isLetterOrDigit()
+    return if (needsSpace) "$left $right" else "$left$right"
+  }
+
+  private data class RealtimeSpeakerNameResolveResult(
+    val localSpeakerNameMap: Map<Int, String>,
+    val nextSpeakerIndex: Int,
+  )
+
+  private fun resolveSpeakerNamesForRealtimeSegment(
+    segmentSamples: FloatArray,
+    sampleRate: Int,
+    segments: Array<OfflineSpeakerDiarizationSegment>,
+    extractor: SpeakerEmbeddingExtractor?,
+    manager: SpeakerEmbeddingManager?,
+    similarityThreshold: Float,
+    startSpeakerIndex: Int,
+  ): RealtimeSpeakerNameResolveResult {
+    if (segments.isEmpty() || extractor == null || manager == null) {
+      return RealtimeSpeakerNameResolveResult(emptyMap(), startSpeakerIndex)
+    }
+
+    var nextSpeaker = startSpeakerIndex
+    val speakerMap = mutableMapOf<Int, String>()
+    val localSpeakerIds = segments.map { it.speaker }.toSet()
+    for (localSpeakerId in localSpeakerIds) {
+      val speakerSamples = collectSamplesForSpeaker(segmentSamples, sampleRate, segments, localSpeakerId)
+      if (speakerSamples.isEmpty()) {
+        continue
+      }
+
+      var embedStream: OnlineStream? = null
+      try {
+        embedStream = extractor.createStream()
+        embedStream.acceptWaveform(speakerSamples, sampleRate)
+        if (!extractor.isReady(embedStream)) {
+          continue
+        }
+
+        val embedding = extractor.compute(embedStream)
+        val matchedName = manager.search(embedding, similarityThreshold)
+        if (matchedName.isNotBlank()) {
+          speakerMap[localSpeakerId] = matchedName
+          continue
+        }
+
+        val newName = speakerNameByIndex(nextSpeaker)
+        val added = manager.add(newName, embedding)
+        if (added) {
+          speakerMap[localSpeakerId] = newName
+          nextSpeaker += 1
+        } else {
+          speakerMap[localSpeakerId] = speakerLabel(localSpeakerId)
+        }
+      } catch (_: Exception) {
+        speakerMap[localSpeakerId] = speakerLabel(localSpeakerId)
+      } finally {
+        embedStream?.release()
+      }
+    }
+
+    return RealtimeSpeakerNameResolveResult(speakerMap, nextSpeaker)
+  }
+
+  private fun collectSamplesForSpeaker(
+    segmentSamples: FloatArray,
+    sampleRate: Int,
+    segments: Array<OfflineSpeakerDiarizationSegment>,
+    speakerId: Int,
+  ): FloatArray {
+    val speakerSegments = segments.filter { it.speaker == speakerId }
+    if (speakerSegments.isEmpty()) {
+      return FloatArray(0)
+    }
+
+    var total = 0
+    for (segment in speakerSegments) {
+      val startIndex = (segment.start * sampleRate).toInt().coerceAtLeast(0)
+      val endIndex = (segment.end * sampleRate).toInt().coerceAtMost(segmentSamples.size)
+      if (endIndex > startIndex) {
+        total += endIndex - startIndex
+      }
+    }
+    if (total <= 0) {
+      return FloatArray(0)
+    }
+
+    val out = FloatArray(total)
+    var offset = 0
+    for (segment in speakerSegments) {
+      val startIndex = (segment.start * sampleRate).toInt().coerceAtLeast(0)
+      val endIndex = (segment.end * sampleRate).toInt().coerceAtMost(segmentSamples.size)
+      if (endIndex <= startIndex) {
+        continue
+      }
+      val length = endIndex - startIndex
+      System.arraycopy(segmentSamples, startIndex, out, offset, length)
+      offset += length
+    }
+    return if (offset == out.size) out else out.copyOf(offset)
+  }
+
+  private fun speakerNameByIndex(index: Int): String {
+    if (index in 0..25) {
+      val suffix = ('A'.code + index).toChar()
+      return "speaker$suffix"
+    }
+    return "speaker${index + 1}"
   }
 
   private fun OfflineRecognizerResult.toMap(waveData: WaveData): Map<String, Any?> {
@@ -982,5 +1486,7 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 512
     private const val DEFAULT_EMIT_INTERVAL_MS = 150
     private const val WAV_HEADER_SIZE = 44
+    private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/segmentation/pyannote-segmentation.onnx"
+    private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/speaker-embedding/3dspeaker_campplus_sv_zh-cn.onnx"
   }
 }

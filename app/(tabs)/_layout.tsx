@@ -22,6 +22,13 @@ export default function TabLayout() {
                     tabBarIcon: ({ color }) => <Smile color={color} />,
                 }}
             />
+            <Tabs.Screen
+                name="setting"
+                options={{
+                    title: 'Setting',
+                    tabBarIcon: ({ color }) => <Smile color={color} />,
+                }}
+            />
         </Tabs>
     );
 }

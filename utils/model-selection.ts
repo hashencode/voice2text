@@ -17,9 +17,14 @@ type GetCurrentModelOptions = {
     withDefault?: boolean;
 };
 
+export function getCurrentModelByOutputMode(outputMode: SherpaOutputMode): SherpaModelId;
 export function getCurrentModelByOutputMode(outputMode: SherpaOutputMode, options: { withDefault: true }): SherpaModelId;
+export function getCurrentModelByOutputMode(outputMode: SherpaOutputMode, options: { withDefault: false }): SherpaModelId | null;
 export function getCurrentModelByOutputMode(outputMode: SherpaOutputMode, options?: GetCurrentModelOptions): SherpaModelId | null;
-export function getCurrentModelByOutputMode(outputMode: SherpaOutputMode, options: GetCurrentModelOptions = {}): SherpaModelId | null {
+export function getCurrentModelByOutputMode(
+    outputMode: SherpaOutputMode,
+    options: GetCurrentModelOptions = { withDefault: true },
+): SherpaModelId | null {
     const key = outputMode === 'streaming' ? SHERPA_MODEL_SELECTION_KEYS.streaming : SHERPA_MODEL_SELECTION_KEYS.nonStreaming;
     const modelId = (storage.getString(key) ?? null) as SherpaModelId | null;
     if (!options.withDefault) {
