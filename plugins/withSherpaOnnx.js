@@ -40,8 +40,8 @@ module.exports = function withSherpaOnnx(config) {
         async config => {
             const projectRoot = config.modRequest.projectRoot;
 
-            const modelSrcDir = path.join(projectRoot, 'assets/sherpa/models');
-            const modelDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/models');
+            const modelSrcDir = path.join(projectRoot, 'assets/sherpa/asr');
+            const modelDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/asr');
             syncModelPackages(modelSrcDir, modelDestDir);
 
             const vadSrcDir = path.join(projectRoot, 'assets/sherpa/vad');

@@ -67,7 +67,7 @@ export type SherpaRealtimeStateEvent = {
     vadInfo?: string | null;
 };
 
-export type SherpaOutputMode = 'streaming' | 'non-streaming';
+export type SherpaOutputMode = 'streaming' | 'nonStreaming';
 
 type SherpaRealtimeSubscription = {
     remove(): void;
@@ -97,7 +97,7 @@ type SherpaModelPreset = SherpaTranscribeOptions & {
 export const SHERPA_MODEL_PRESETS = {
     'zipformer-zh-streaming': {
         modelType: 'transducer',
-        modelDirAsset: 'sherpa/models/zipformer-zh-streaming',
+        modelDirAsset: 'sherpa/asr/zipformer-zh-streaming',
         outputMode: 'streaming',
         enableVad: true,
         vadModel: 'sherpa/vad/ten-vad.onnx',
@@ -109,16 +109,16 @@ export const SHERPA_MODEL_PRESETS = {
     },
     'zipformer-ctc-zh': {
         modelType: 'zipformer2_ctc',
-        modelDirAsset: 'sherpa/models/zipformer-ctc-zh',
-        outputMode: 'non-streaming',
+        modelDirAsset: 'sherpa/asr/zipformer-ctc-zh',
+        outputMode: 'nonStreaming',
         model: 'model.onnx',
         tokens: 'tokens.txt',
         requiredFiles: ['model.onnx', 'tokens.txt'],
     },
     'funasr-nano': {
         modelType: 'funasr_nano',
-        modelDirAsset: 'sherpa/models/funasr-nano',
-        outputMode: 'non-streaming',
+        modelDirAsset: 'sherpa/asr/funasr-nano',
+        outputMode: 'nonStreaming',
         encoderAdaptor: 'encoder_adaptor.onnx',
         llm: 'llm.onnx',
         embedding: 'embedding.onnx',
@@ -230,8 +230,8 @@ function getModelDownloadingMarkerPath(modelId: SherpaModelId): string {
     return `${getDownloadedModelsRootDir()}${modelId}.__downloading__`;
 }
 
-function getModelVersionFilePath(modelId: SherpaModelId): string {
-    return `${getDownloadedModelDir(modelId)}version.txt`;
+function getInstalledModelMetaPath(modelId: SherpaModelId): string {
+    return `${getDownloadedModelDir(modelId)}model.json`;
 }
 
 const modelOperationLocks = new Map<SherpaModelId, Promise<void>>();
@@ -300,11 +300,21 @@ async function validateExtractedModelFiles(modelId: SherpaModelId): Promise<Extr
     if (!requiredCheck.ok) {
         return requiredCheck;
     }
-    const versionInfo = await FileSystem.getInfoAsync(getModelVersionFilePath(modelId));
-    if (!versionInfo.exists || versionInfo.isDirectory || typeof versionInfo.size !== 'number' || versionInfo.size <= 0) {
-        return { ok: false, issues: ['version.txt is missing'] };
+
+    const modelMetaPath = getInstalledModelMetaPath(modelId);
+    const modelMetaInfo = await FileSystem.getInfoAsync(modelMetaPath);
+    if (!modelMetaInfo.exists || modelMetaInfo.isDirectory || typeof modelMetaInfo.size !== 'number' || modelMetaInfo.size <= 0) {
+        return { ok: false, issues: ['model.json is missing'] };
     }
-    console.info(`[sherpa] version.txt exists, skip file sha validation: ${modelId}`);
+
+    try {
+        const content = await FileSystem.readAsStringAsync(modelMetaPath);
+        parseAndValidateMeta(content);
+    } catch (error) {
+        return { ok: false, issues: [`model.json is invalid: ${(error as Error).message}`] };
+    }
+
+    console.info(`[sherpa] model.json exists, skip file sha validation: ${modelId}`);
     return { ok: true, issues: [] };
 }
 
@@ -327,8 +337,11 @@ async function verifyExtractedModelHashes(modelId: SherpaModelId, meta: ModelPac
     return { ok: issues.length === 0, issues };
 }
 
-async function writeModelVersionFile(modelId: SherpaModelId, version: string): Promise<void> {
-    await FileSystem.writeAsStringAsync(getModelVersionFilePath(modelId), `${version}\n`);
+async function copyModelMetaToInstalledDir(modelId: SherpaModelId): Promise<void> {
+    await FileSystem.copyAsync({
+        from: getModelJsonPath(modelId),
+        to: getInstalledModelMetaPath(modelId),
+    });
 }
 
 async function recoverInterruptedState(modelId: SherpaModelId): Promise<void> {
@@ -484,7 +497,7 @@ async function extractModelZip(modelId: SherpaModelId, meta: ModelPackageMeta): 
         if (!hashCheck.ok) {
             throw new Error(`Model files sha256 validation failed for ${modelId}: ${hashCheck.issues.join('; ')}`);
         }
-        await writeModelVersionFile(modelId, meta.version);
+        await copyModelMetaToInstalledDir(modelId);
     } finally {
         await safeDelete(tempDir);
         await safeDelete(stageDir);
@@ -568,14 +581,19 @@ export async function isModelDownloaded(modelId: SherpaModelId): Promise<boolean
 }
 
 export async function getInstalledModelVersion(modelId: SherpaModelId): Promise<string | null> {
-    const versionPath = getModelVersionFilePath(modelId);
-    const info = await FileSystem.getInfoAsync(versionPath);
+    const modelMetaPath = getInstalledModelMetaPath(modelId);
+    const info = await FileSystem.getInfoAsync(modelMetaPath);
     if (!info.exists || info.isDirectory) {
         return null;
     }
-    const content = await FileSystem.readAsStringAsync(versionPath);
-    const version = content.trim();
-    return version.length > 0 ? version : null;
+    try {
+        const content = await FileSystem.readAsStringAsync(modelMetaPath);
+        const meta = parseAndValidateMeta(content);
+        return meta.version;
+    } catch (error) {
+        console.warn(`[sherpa] installed model meta is invalid: ${modelId}`, error);
+        return null;
+    }
 }
 
 export async function uninstallModel(modelId: SherpaModelId): Promise<void> {
@@ -689,7 +707,7 @@ export async function ensureModelReady(modelId: SherpaModelId, options: Download
         }
 
         // Prefer bundled assets first. If bundled files are absent, fall back to remote download.
-        console.info(`[sherpa] [step 2] checking bundled assets in assets/sherpa/models: ${modelId}`);
+        console.info(`[sherpa] [step 2] checking bundled assets in assets/sherpa/asr: ${modelId}`);
         try {
             return await initializeBundledModel(modelId, {
                 onProgress: options.onProgress,
@@ -736,8 +754,8 @@ export async function initializeBundledModel(modelId: SherpaModelId, options: In
 
         const jsonPath = getModelJsonPath(modelId);
         const zipPath = getModelZipPath(modelId);
-        const bundledJsonAssetPath = `sherpa/models/${modelId}.json`;
-        const bundledZipAssetPath = `sherpa/models/${modelId}.zip`;
+        const bundledJsonAssetPath = `sherpa/asr/${modelId}.json`;
+        const bundledZipAssetPath = `sherpa/asr/${modelId}.zip`;
         const shouldOverwrite = options.overwritePackage === true;
 
         if (!(await FileSystem.getInfoAsync(jsonPath)).exists || shouldOverwrite) {

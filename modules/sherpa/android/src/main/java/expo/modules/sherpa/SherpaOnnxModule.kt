@@ -343,10 +343,10 @@ class SherpaOnnxModule : Module() {
           if (normalizedAssetPath.startsWith("sherpa/")) {
             candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/"))
           }
-          if (normalizedAssetPath.startsWith("sherpa/models/")) {
+          if (normalizedAssetPath.startsWith("sherpa/asr/")) {
             candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/"))
-            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/models/"))
-            candidateAssetPaths.add("models/${normalizedAssetPath.removePrefix("sherpa/models/")}")
+            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/asr/"))
+            candidateAssetPaths.add("asr/${normalizedAssetPath.removePrefix("sherpa/asr/")}")
           }
 
           var lastError: Exception? = null
@@ -975,7 +975,7 @@ class SherpaOnnxModule : Module() {
   companion object {
     private const val REALTIME_EVENT_NAME = "onRealtimeTranscription"
     private const val REALTIME_STATE_EVENT_NAME = "onRealtimeState"
-    private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/models/zipformer-ctc-zh"
+    private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/asr/zipformer-ctc-zh"
     private const val DEFAULT_SAMPLE_RATE = 16000
     private const val DEFAULT_FEATURE_DIM = 80
     private const val DEFAULT_NUM_THREADS = 2

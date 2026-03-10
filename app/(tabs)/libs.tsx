@@ -83,7 +83,7 @@ export default function Libs() {
         try {
             await Promise.all(modelIds.map(modelId => refreshOne(modelId)));
             setStreamingCurrentModel(getCurrentModelByOutputMode('streaming'));
-            setNonStreamingCurrentModel(getCurrentModelByOutputMode('non-streaming'));
+            setNonStreamingCurrentModel(getCurrentModelByOutputMode('nonStreaming'));
         } finally {
             setRefreshing(false);
         }
