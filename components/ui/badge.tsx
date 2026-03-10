@@ -4,7 +4,7 @@ import { useColor } from '@/hooks/useColor';
 import { CORNERS } from '@/theme/globals';
 import { TextStyle, ViewStyle } from 'react-native';
 
-type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline' | 'success';
+type BadgeVariant = 'default' | 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost' | 'success';
 
 interface BadgeProps {
     children: React.ReactNode;
@@ -14,8 +14,12 @@ interface BadgeProps {
 }
 
 export function Badge({ children, variant = 'default', style, textStyle }: BadgeProps) {
+    const defaultColor = useColor('background');
+    const defaultTextColor = useColor('text');
+    const textColor = useColor('text');
     const primaryColor = useColor('primary');
     const primaryForegroundColor = useColor('primaryForeground');
+    const outlineColor = useColor('text', { reverse: true });
     const secondaryColor = useColor('secondary');
     const secondaryForegroundColor = useColor('secondaryForeground');
     const destructiveColor = useColor('destructive');
@@ -27,18 +31,21 @@ export function Badge({ children, variant = 'default', style, textStyle }: Badge
         const baseStyle: ViewStyle = {
             alignItems: 'center',
             justifyContent: 'center',
-            paddingVertical: 6,
+            paddingVertical: 4,
             paddingHorizontal: 12,
             borderRadius: CORNERS,
+            borderWidth: 1,
         };
 
         switch (variant) {
+            case 'primary':
+                return { ...baseStyle, borderColor: primaryColor, backgroundColor: primaryColor };
             case 'secondary':
-                return { ...baseStyle, backgroundColor: secondaryColor };
+                return { ...baseStyle, borderColor: secondaryColor, backgroundColor: secondaryColor };
             case 'destructive':
-                return { ...baseStyle, backgroundColor: destructiveColor };
+                return { ...baseStyle, borderColor: destructiveColor, backgroundColor: destructiveColor };
             case 'success':
-                return { ...baseStyle, backgroundColor: successColor };
+                return { ...baseStyle, borderColor: successColor, backgroundColor: successColor };
             case 'outline':
                 return {
                     ...baseStyle,
@@ -46,33 +53,46 @@ export function Badge({ children, variant = 'default', style, textStyle }: Badge
                     borderWidth: 1,
                     borderColor,
                 };
+            case 'ghost':
+                return {
+                    ...baseStyle,
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    borderColor: outlineColor,
+                };
             default:
-                return { ...baseStyle, backgroundColor: primaryColor };
+                return { ...baseStyle, borderColor: borderColor, backgroundColor: defaultColor };
         }
     };
 
     const getTextStyle = (): TextStyle => {
         const baseTextStyle: TextStyle = {
-            fontSize: 15,
-            fontWeight: '500',
             textAlign: 'center',
         };
 
         switch (variant) {
+            case 'primary':
+                return { ...baseTextStyle, color: primaryForegroundColor };
             case 'secondary':
                 return { ...baseTextStyle, color: secondaryForegroundColor };
             case 'destructive':
                 return { ...baseTextStyle, color: destructiveForegroundColor };
+            case 'success':
+                return { ...baseTextStyle, color: destructiveForegroundColor };
             case 'outline':
-                return { ...baseTextStyle, color: primaryColor };
+                return { ...baseTextStyle, color: textColor };
+            case 'ghost':
+                return { ...baseTextStyle, color: outlineColor };
             default:
-                return { ...baseTextStyle, color: primaryForegroundColor };
+                return { ...baseTextStyle, color: defaultTextColor };
         }
     };
 
     return (
         <View style={[getBadgeStyle(), style]}>
-            <TextX style={[getTextStyle(), textStyle]}>{children}</TextX>
+            <TextX variant="description" style={[getTextStyle(), textStyle]}>
+                {children}
+            </TextX>
         </View>
     );
 }

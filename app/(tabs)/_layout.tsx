@@ -1,12 +1,15 @@
 import { Tabs } from 'expo-router';
 
 import { Home, Smile } from 'lucide-react-native';
+import { useColor } from '~/hooks/useColor';
 
 export default function TabLayout() {
+    const iconColor = useColor('text');
+
     return (
         <Tabs
             screenOptions={{
-                tabBarActiveTintColor: 'black',
+                tabBarActiveTintColor: iconColor,
             }}>
             <Tabs.Screen
                 name="index"

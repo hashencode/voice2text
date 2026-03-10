@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
+import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/text';
@@ -189,15 +190,13 @@ export default function Setting() {
                         borderWidth: 1,
                         borderColor: '#e5e7eb',
                         borderRadius: 8,
-                        backgroundColor: '#fff',
                         padding: 12,
                     }}>
                     <TextX variant="subtitle">{modelId}</TextX>
 
-                    <View className="flex flex-row items-baseline">
-                        <TextX variant="description">{outputMode === 'streaming' ? '流式' : '非流式'}</TextX>
-                        <TextX>/</TextX>
-                        <TextX variant="description">v{item.version || ''}</TextX>
+                    <View className="flex flex-row items-center gap-x-2">
+                        <Badge>{outputMode === 'streaming' ? '流式' : '非流式'}</Badge>
+                        <Badge>v{item.version || ''}</Badge>
                     </View>
 
                     <TextX>当前模型：{isCurrent ? '是' : '否'}</TextX>

@@ -23,7 +23,7 @@ import { forwardRef } from 'react';
 import { Pressable, TextStyle, TouchableOpacity, TouchableOpacityProps, View, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-export type ButtonVariant = 'default' | 'destructive' | 'success' | 'outline' | 'secondary' | 'ghost' | 'link';
+export type ButtonVariant = 'default' | 'primary' | 'destructive' | 'success' | 'outline' | 'secondary' | 'ghost' | 'link';
 
 export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
 
@@ -62,6 +62,8 @@ export const Button = forwardRef<View, ButtonProps>(
         },
         ref,
     ) => {
+        const defaultColor = useColor('background');
+        const defaultTextColor = useColor('text');
         const primaryColor = useColor('primary');
         const primaryForegroundColor = useColor('primaryForeground');
         const secondaryColor = useColor('secondary');
@@ -70,6 +72,8 @@ export const Button = forwardRef<View, ButtonProps>(
         const destructiveForegroundColor = useColor('destructiveForeground');
         const greenColor = useColor('green');
         const borderColor = useColor('border');
+        const textColor = useColor('text');
+        const outlineColor = useColor('text', { reverse: true });
 
         // Animation values for liquid glass effect
         const scale = useSharedValue(1);
@@ -104,6 +108,8 @@ export const Button = forwardRef<View, ButtonProps>(
 
             // Variant styles
             switch (variant) {
+                case 'primary':
+                    return { ...baseStyle, backgroundColor: primaryColor };
                 case 'destructive':
                     return { ...baseStyle, backgroundColor: destructiveColor };
                 case 'success':
@@ -118,7 +124,12 @@ export const Button = forwardRef<View, ButtonProps>(
                 case 'secondary':
                     return { ...baseStyle, backgroundColor: secondaryColor };
                 case 'ghost':
-                    return { ...baseStyle, backgroundColor: 'transparent' };
+                    return {
+                        ...baseStyle,
+                        backgroundColor: 'transparent',
+                        borderWidth: 1,
+                        borderColor: outlineColor,
+                    };
                 case 'link':
                     return {
                         ...baseStyle,
@@ -127,7 +138,7 @@ export const Button = forwardRef<View, ButtonProps>(
                         paddingHorizontal: 0,
                     };
                 default:
-                    return { ...baseStyle, backgroundColor: primaryColor };
+                    return { ...baseStyle, backgroundColor: defaultColor, borderWidth: 1, borderColor };
             }
         };
 
@@ -150,16 +161,18 @@ export const Button = forwardRef<View, ButtonProps>(
             };
 
             switch (variant) {
+                case 'primary':
+                    return { ...baseTextStyle, color: primaryForegroundColor };
                 case 'destructive':
                     return { ...baseTextStyle, color: destructiveForegroundColor };
                 case 'success':
                     return { ...baseTextStyle, color: destructiveForegroundColor };
                 case 'outline':
-                    return { ...baseTextStyle, color: primaryColor };
+                    return { ...baseTextStyle, color: textColor };
                 case 'secondary':
                     return { ...baseTextStyle, color: secondaryForegroundColor };
                 case 'ghost':
-                    return { ...baseTextStyle, color: primaryColor };
+                    return { ...baseTextStyle, color: outlineColor };
                 case 'link':
                     return {
                         ...baseTextStyle,
@@ -167,26 +180,28 @@ export const Button = forwardRef<View, ButtonProps>(
                         textDecorationLine: 'underline',
                     };
                 default:
-                    return { ...baseTextStyle, color: primaryForegroundColor };
+                    return { ...baseTextStyle, color: defaultTextColor };
             }
         };
 
         const getColor = (): string => {
             switch (variant) {
+                case 'primary':
+                    return primaryForegroundColor;
                 case 'destructive':
                     return destructiveForegroundColor;
                 case 'success':
                     return destructiveForegroundColor;
                 case 'outline':
-                    return primaryColor;
+                    return textColor;
                 case 'secondary':
                     return secondaryForegroundColor;
                 case 'ghost':
-                    return primaryColor;
+                    return outlineColor;
                 case 'link':
                     return primaryColor;
                 default:
-                    return primaryForegroundColor;
+                    return defaultTextColor;
             }
         };
 

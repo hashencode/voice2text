@@ -2,12 +2,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Appearance, View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
 import { Button } from '~/components/ui/button';
 import { SwitchX } from '~/components/ui/switch';
 import { TextX } from '~/components/ui/text';
+import { useColorScheme } from '~/hooks/useColorScheme';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, {
     getInstalledModelVersion,
@@ -56,6 +57,8 @@ function compareModelVersion(left: string, right: string): number {
 }
 
 export default function Home() {
+    const colorScheme = useColorScheme();
+    const isDarkMode = colorScheme === 'dark';
     const [conversionText, setConversionText] = useState('');
     const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
     const [realtimeState, setRealtimeState] = useState('stopped');
@@ -202,6 +205,10 @@ export default function Home() {
         await SherpaOnnx.stopRealtimeTranscription();
     };
 
+    const toggleThemeMode = useCallback((value: boolean) => {
+        Appearance.setColorScheme(value ? 'dark' : 'light');
+    }, []);
+
     useFocusEffect(
         useCallback(() => {
             checkCurrentModelVersions().catch(error => {
@@ -242,6 +249,10 @@ export default function Home() {
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="gap-4 p-4">
+                <View className="flex flex-row items-center">
+                    <TextX>深色模式：{isDarkMode ? '开启' : '关闭'}</TextX>
+                    <SwitchX value={isDarkMode} onValueChange={toggleThemeMode} />
+                </View>
                 <Button onPress={handlePickDocument}>选择文件</Button>
                 <Button loading={recordingActionLoading} onPress={toggleRecordAndTranscribe}>
                     {isRecordingByButton ? '停止录音并识别' : '开始录音'}

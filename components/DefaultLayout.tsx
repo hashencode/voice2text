@@ -4,6 +4,7 @@ import { PropsWithChildren, ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView, SafeAreaViewProps, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LayoutHead from '~/components/LayoutHead';
+import { useColor } from '~/hooks/useColor';
 
 interface IDefaultLayoutProps extends PropsWithChildren {
     safeAreaViewConfig?: SafeAreaViewProps;
@@ -20,13 +21,15 @@ interface IDefaultLayoutProps extends PropsWithChildren {
 export const DefaultLayout = (props: IDefaultLayoutProps) => {
     const { head, safeAreaViewConfig, scrollable = true, styles = {} } = props;
     const insets = useSafeAreaInsets();
+    const backgroundColor = useColor('background');
+    const topInsetColor = useColor('card');
 
     return (
-        <SafeAreaView className={classNames('bg-[#f7f7f7]', styles.safeAreaView)} {...safeAreaViewConfig}>
+        <SafeAreaView className={styles.safeAreaView} style={{ backgroundColor }} {...safeAreaViewConfig}>
             {/*顶部安全区域*/}
             <View
-                className={classNames('absolute left-0 top-0 w-full', { 'bg-white': head }, styles.safeTop)}
-                style={{ height: insets.top }}
+                className={classNames('absolute left-0 top-0 w-full', styles.safeTop)}
+                style={{ backgroundColor: head ? topInsetColor : 'transparent', height: insets.top }}
             />
             {isString(head) ? <LayoutHead title={head} /> : head}
             {/*主体内容*/}
