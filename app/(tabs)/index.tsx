@@ -22,10 +22,10 @@ import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import { getCurrentModelByOutputMode } from '~/utils/model-selection';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/tools';
 
-const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zipformer-ctc-zh';
-const DEFAULT_STREAMING_MODEL: SherpaModelId = 'zipformer-zh-streaming';
+const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zh';
+const DEFAULT_STREAMING_MODEL: SherpaModelId = 'zh-streaming';
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/segmentation/pyannote-segmentation.onnx';
-const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/speaker-embedding/3dspeaker_campplus_sv_zh-cn.onnx';
+const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/speaker-embedding/zh-cn.onnx';
 
 function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaModelId): SherpaModelId {
     const selected = getCurrentModelByOutputMode(outputMode);

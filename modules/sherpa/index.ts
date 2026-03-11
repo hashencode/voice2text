@@ -5,15 +5,19 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?: 'transducer' | 'zipformer' | 'zipformer2' | 'zipformer2_ctc' | 'zipformer_ctc' | 'ctc' | 'funasr_nano' | string;
+    modelType?:
+        | 'transducer'
+        | 'zipformer'
+        | 'zipformer2'
+        | 'zipformer2_ctc'
+        | 'zipformer_ctc'
+        | 'ctc'
+        | 'paraformer'
+        | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
     model?: string;
-    encoderAdaptor?: string;
-    llm?: string;
-    embedding?: string;
-    tokenizer?: string; // FunASR Nano expects tokenizer directory (e.g. Qwen3-0.6B), not tokenizer.json file path
     tokens?: string;
     sampleRate?: number;
     featureDim?: number;
@@ -103,9 +107,9 @@ type SherpaModelPreset = SherpaTranscribeOptions & {
 };
 
 export const SHERPA_MODEL_PRESETS = {
-    'zipformer-zh-streaming': {
+    'zh-streaming': {
         modelType: 'transducer',
-        modelDirAsset: 'sherpa/asr/zipformer-zh-streaming',
+        modelDirAsset: 'sherpa/asr/zh-streaming',
         outputMode: 'streaming',
         enableVad: true,
         vadModel: 'sherpa/vad/ten-vad.onnx',
@@ -115,30 +119,32 @@ export const SHERPA_MODEL_PRESETS = {
         tokens: 'tokens.txt',
         requiredFiles: ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
     },
-    'zipformer-ctc-zh': {
+    'zh-en-streaming': {
+        modelType: 'paraformer',
+        modelDirAsset: 'sherpa/asr/zh-en-streaming',
+        outputMode: 'streaming',
+        enableVad: true,
+        vadModel: 'sherpa/vad/ten-vad.onnx',
+        encoder: 'encoder.onnx',
+        decoder: 'decoder.onnx',
+        tokens: 'tokens.txt',
+        requiredFiles: ['encoder.onnx', 'decoder.onnx', 'tokens.txt'],
+    },
+    zh: {
         modelType: 'zipformer2_ctc',
-        modelDirAsset: 'sherpa/asr/zipformer-ctc-zh',
+        modelDirAsset: 'sherpa/asr/zh',
         outputMode: 'nonStreaming',
         model: 'model.onnx',
         tokens: 'tokens.txt',
         requiredFiles: ['model.onnx', 'tokens.txt'],
     },
-    'funasr-nano': {
-        modelType: 'funasr_nano',
-        modelDirAsset: 'sherpa/asr/funasr-nano',
+    'zh-en': {
+        modelType: 'paraformer',
+        modelDirAsset: 'sherpa/asr/zh-en',
         outputMode: 'nonStreaming',
-        encoderAdaptor: 'encoder_adaptor.onnx',
-        llm: 'llm.onnx',
-        embedding: 'embedding.onnx',
-        tokenizer: 'Qwen3-0.6B',
-        requiredFiles: [
-            'encoder_adaptor.onnx',
-            'llm.onnx',
-            'embedding.onnx',
-            'Qwen3-0.6B/tokenizer.json',
-            'Qwen3-0.6B/vocab.json',
-            'Qwen3-0.6B/merges.txt',
-        ],
+        model: 'model.onnx',
+        tokens: 'tokens.txt',
+        requiredFiles: ['model.onnx', 'tokens.txt'],
     },
 } as const satisfies Record<string, SherpaModelPreset>;
 
@@ -851,13 +857,6 @@ async function ensureDownloadedRuntimeModelPaths(options: SherpaTranscribeOption
 
 const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
 
-function assertRealtimeCompatibleOptions(options: SherpaTranscribeOptions, modelId: SherpaModelId): void {
-    const modelType = options.modelType ?? 'transducer';
-    if (modelType === 'funasr_nano') {
-        throw new Error(`Model ${modelId} is offline-only (funasr_nano). Use transcribeWav instead of realtime transcription.`);
-    }
-}
-
 const SherpaOnnx = {
     ...NativeSherpaOnnx,
     transcribeWavByModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
@@ -884,12 +883,10 @@ const SherpaOnnx = {
     },
     startRealtimeTranscriptionByModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
         const options = getSherpaModelOptions(modelId, overrides);
-        assertRealtimeCompatibleOptions(options, modelId);
         return NativeSherpaOnnx.startRealtimeTranscription(options);
     },
     async startRealtimeTranscriptionByDownloadedModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
         const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
-        assertRealtimeCompatibleOptions(options, modelId);
         return NativeSherpaOnnx.startRealtimeTranscription(options);
     },
     addRealtimeResultListener(listener: (event: SherpaRealtimeResultEvent) => void): SherpaRealtimeSubscription {

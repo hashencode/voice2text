@@ -9,8 +9,8 @@ export const SHERPA_MODEL_SELECTION_KEYS = {
 
 const storage = createMMKV({ id: 'sherpa-model-selection' });
 const DEFAULT_MODEL_BY_OUTPUT_MODE: Record<SherpaOutputMode, SherpaModelId> = {
-    nonStreaming: 'zipformer-ctc-zh',
-    streaming: 'zipformer-zh-streaming',
+    nonStreaming: 'zh',
+    streaming: 'zh-streaming',
 };
 
 type GetCurrentModelOptions = {

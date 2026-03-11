@@ -16,6 +16,7 @@ import {
     type DownloadModelProgress,
     type SherpaModelId,
 } from '~/modules/sherpa';
+import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import { getCurrentModelByOutputMode, setCurrentModelByOutputMode } from '~/utils/model-selection';
 
 type ModelItemState = {
@@ -72,7 +73,8 @@ export default function Setting() {
     const refreshOne = useCallback(
         async (modelId: SherpaModelId) => {
             const installed = await isModelDownloaded(modelId);
-            const version = installed ? await getInstalledModelVersion(modelId) : null;
+            const installedVersion = installed ? await getInstalledModelVersion(modelId) : null;
+            const version = installedVersion ?? MIN_MODEL_VERSION_BY_MODEL_ID[modelId] ?? null;
             setItem(modelId, {
                 installed,
                 version,
