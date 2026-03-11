@@ -6,9 +6,16 @@ import android.media.MediaRecorder
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
+import com.k2fsa.sherpa.onnx.OfflinePunctuation
+import com.k2fsa.sherpa.onnx.OfflinePunctuationConfig
+import com.k2fsa.sherpa.onnx.OfflinePunctuationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
+import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiser
+import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserGtcrnModelConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarization
 import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarizationConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarizationSegment
@@ -414,6 +421,8 @@ class SherpaOnnxModule : Module() {
   private fun runRealtimeTranscription(options: Map<String, Any?>) {
     var recognizer: OnlineRecognizer? = null
     var stream: OnlineStream? = null
+    var denoiser: OfflineSpeechDenoiser? = null
+    var punctuation: OfflinePunctuation? = null
     var vad: Vad? = null
     var speakerDiarization: OfflineSpeakerDiarization? = null
     var speakerExtractor: SpeakerEmbeddingExtractor? = null
@@ -422,6 +431,8 @@ class SherpaOnnxModule : Module() {
     var lastText = ""
     var vadActive = false
     var vadInfo = "disabled"
+    var denoiseInfo = "disabled"
+    var punctuationInfo = "disabled"
     var nextSpeakerIndex = 0
 
     try {
@@ -439,6 +450,10 @@ class SherpaOnnxModule : Module() {
       val blankPenalty = options.getFloat("blankPenalty") ?: 0f
       val emitIntervalMs = options.getInt("emitIntervalMs") ?: DEFAULT_EMIT_INTERVAL_MS
       val enableEndpoint = options.getBoolean("enableEndpoint") ?: false
+      val denoiseModel = options.getString("denoiseModel")
+      val enableDenoise = options.getBoolean("enableDenoise") ?: !denoiseModel.isNullOrBlank()
+      val punctuationModel = options.getString("punctuationModel")
+      val enablePunctuation = options.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
       val vadModel = options.getString("vadModel")
       val enableVad = options.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
       val enableSpeakerDiarization = options.getBoolean("enableSpeakerDiarization") ?: false
@@ -494,6 +509,28 @@ class SherpaOnnxModule : Module() {
 
       recognizer = OnlineRecognizer(modelContext.assetManager, recognizerConfig)
       stream = recognizer.createStream()
+      if (enableDenoise && !denoiseModel.isNullOrBlank()) {
+        try {
+          denoiser = createOfflineSpeechDenoiser(modelContext, denoiseModel, numThreads, provider, debug)
+          denoiseInfo = "enabled:${modelContext.resolveModelPath(denoiseModel)}"
+        } catch (e: Exception) {
+          denoiser = null
+          denoiseInfo = "init-failed:${e.message ?: "unknown"}"
+        }
+      } else {
+        denoiseInfo = if (enableDenoise) "enabled but denoiseModel empty" else "disabled by option"
+      }
+      if (enablePunctuation && !punctuationModel.isNullOrBlank()) {
+        try {
+          punctuation = createOfflinePunctuation(modelContext, punctuationModel, numThreads, provider, debug)
+          punctuationInfo = "enabled:${modelContext.resolveModelPath(punctuationModel)}"
+        } catch (e: Exception) {
+          punctuation = null
+          punctuationInfo = "init-failed:${e.message ?: "unknown"}"
+        }
+      } else {
+        punctuationInfo = if (enablePunctuation) "enabled but punctuationModel empty" else "disabled by option"
+      }
       if (enableVad && !vadModel.isNullOrBlank()) {
         try {
           val vadModelPath = modelContext.resolveModelPath(vadModel)
@@ -571,7 +608,7 @@ class SherpaOnnxModule : Module() {
       realtimeAudioRecord = audioRecord
 
       audioRecord.startRecording()
-      sendRealtimeState("running", null, vadActive, vadInfo)
+      sendRealtimeState("running", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo")
 
       val shortBuffer = ShortArray(DEFAULT_AUDIO_BUFFER_SAMPLES)
       var lastEmitTime = 0L
@@ -582,17 +619,20 @@ class SherpaOnnxModule : Module() {
           continue
         }
 
-        val samples = FloatArray(read)
+        val rawSamples = FloatArray(read)
         for (i in 0 until read) {
-          samples[i] = shortBuffer[i] / 32768.0f
+          rawSamples[i] = shortBuffer[i] / 32768.0f
         }
+        val denoised = denoiser?.run(rawSamples, sampleRate)
+        val samples = denoised?.samples ?: rawSamples
+        val processedSampleRate = denoised?.sampleRate ?: sampleRate
 
         if (vad != null) {
           vad.acceptWaveform(samples)
           while (!vad.empty()) {
             val segment = vad.front()
             vad.pop()
-            stream.acceptWaveform(segment.samples, sampleRate)
+            stream.acceptWaveform(segment.samples, processedSampleRate)
             while (recognizer.isReady(stream)) {
               recognizer.decode(stream)
             }
@@ -616,13 +656,14 @@ class SherpaOnnxModule : Module() {
                 } else {
                   segmentResult.text
                 }
+              val punctuatedText = applyPunctuation(punctuation, outputText)
               lastText = ""
-              sendRealtimeResult(segmentResult, true, true, sampleRate, outputText)
+              sendRealtimeResult(segmentResult, true, true, sampleRate, punctuatedText)
               recognizer.reset(stream)
             }
           }
         } else {
-          stream.acceptWaveform(samples, sampleRate)
+          stream.acceptWaveform(samples, processedSampleRate)
 
           while (recognizer.isReady(stream)) {
             recognizer.decode(stream)
@@ -633,7 +674,8 @@ class SherpaOnnxModule : Module() {
             val partial = recognizer.getResult(stream)
             if (partial.text != lastText) {
               lastText = partial.text
-              sendRealtimeResult(partial, false, false, sampleRate)
+              val punctuatedPartialText = applyPunctuation(punctuation, partial.text)
+              sendRealtimeResult(partial, false, false, sampleRate, punctuatedPartialText)
             }
             lastEmitTime = now
           }
@@ -641,8 +683,9 @@ class SherpaOnnxModule : Module() {
           if (enableEndpoint && recognizer.isEndpoint(stream)) {
             val endpointResult = recognizer.getResult(stream)
             if (endpointResult.text.isNotBlank()) {
+              val punctuatedText = applyPunctuation(punctuation, endpointResult.text)
               lastText = ""
-              sendRealtimeResult(endpointResult, true, true, sampleRate)
+              sendRealtimeResult(endpointResult, true, true, sampleRate, punctuatedText)
             }
             recognizer.reset(stream)
           }
@@ -668,11 +711,12 @@ class SherpaOnnxModule : Module() {
 
       val finalResult = recognizer.getResult(stream)
       if (finalResult.text.isNotBlank()) {
-        sendRealtimeResult(finalResult, true, false, sampleRate)
+        val punctuatedText = applyPunctuation(punctuation, finalResult.text)
+        sendRealtimeResult(finalResult, true, false, sampleRate, punctuatedText)
       }
-      sendRealtimeState("stopped", null, vadActive, vadInfo)
+      sendRealtimeState("stopped", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo")
     } catch (e: Exception) {
-      sendRealtimeState("error", e.message ?: "unknown", vadActive, vadInfo)
+      sendRealtimeState("error", e.message ?: "unknown", vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo")
       sendEvent(
         REALTIME_EVENT_NAME,
         mapOf(
@@ -686,6 +730,8 @@ class SherpaOnnxModule : Module() {
       } catch (_: Exception) {
       }
       audioRecord?.release()
+      denoiser?.release()
+      punctuation?.release()
       vad?.release()
       speakerDiarization?.release()
       speakerExtractor?.release()
@@ -929,6 +975,10 @@ class SherpaOnnxModule : Module() {
     val numThreads = options?.getInt("numThreads") ?: DEFAULT_NUM_THREADS
     val provider = options?.getString("provider") ?: "cpu"
     val debug = options?.getBoolean("debug") ?: false
+    val denoiseModel = options?.getString("denoiseModel")
+    val enableDenoise = options?.getBoolean("enableDenoise") ?: !denoiseModel.isNullOrBlank()
+    val punctuationModel = options?.getString("punctuationModel")
+    val enablePunctuation = options?.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
     val decodingMethod = options?.getString("decodingMethod") ?: "greedy_search"
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
@@ -994,6 +1044,8 @@ class SherpaOnnxModule : Module() {
     }
 
     var recognizer: OfflineRecognizer? = null
+    var denoiser: OfflineSpeechDenoiser? = null
+    var punctuation: OfflinePunctuation? = null
     var speakerDiarization: OfflineSpeakerDiarization? = null
     var stream: OfflineStream? = null
     var resultMap = mutableMapOf<String, Any?>()
@@ -1022,26 +1074,44 @@ class SherpaOnnxModule : Module() {
       if (enableSpeakerDiarization) {
         speakerDiarization = createOfflineSpeakerDiarization(modelContext, options, numThreads, provider, debug)
       }
+      if (enablePunctuation && !punctuationModel.isNullOrBlank()) {
+        punctuation = createOfflinePunctuation(modelContext, punctuationModel, numThreads, provider, debug)
+      }
+
+      val effectiveWaveData =
+        if (enableDenoise && !denoiseModel.isNullOrBlank()) {
+          denoiser = createOfflineSpeechDenoiser(modelContext, denoiseModel, numThreads, provider, debug)
+          val denoised = denoiser.run(waveData.samples, waveData.sampleRate)
+          WaveData(denoised.samples, denoised.sampleRate)
+        } else {
+          waveData
+        }
 
       stream = recognizer.createStream()
 
-      stream.acceptWaveform(waveData.samples, waveData.sampleRate)
+      stream.acceptWaveform(effectiveWaveData.samples, effectiveWaveData.sampleRate)
 
       recognizer.decode(stream)
 
       val result = recognizer.getResult(stream)
 
-      resultMap = result.toMap(waveData).toMutableMap()
+      resultMap = result.toMap(effectiveWaveData).toMutableMap()
       if (speakerDiarization != null && result.text.isNotBlank()) {
-        val speakerSegments = speakerDiarization.process(waveData.samples)
+        val speakerSegments = speakerDiarization.process(effectiveWaveData.samples)
 
-        val speakerText = formatOfflineResultBySpeaker(recognizer, waveData, speakerSegments)
+        val speakerText = formatOfflineResultBySpeaker(recognizer, effectiveWaveData, speakerSegments)
         if (speakerText.isNotBlank()) {
           resultMap["text"] = speakerText
         }
       }
+      val rawText = resultMap["text"] as? String
+      if (!rawText.isNullOrBlank()) {
+        resultMap["text"] = applyPunctuation(punctuation, rawText)
+      }
     } finally {
       stream?.release()
+      denoiser?.release()
+      punctuation?.release()
       speakerDiarization?.release()
     }
 
@@ -1115,6 +1185,55 @@ class SherpaOnnxModule : Module() {
       "paraformerModel=$paraformerModelPath",
       "ctcModel=$ctcModelPath",
     ).joinToString("|")
+  }
+
+  private fun createOfflineSpeechDenoiser(
+    modelContext: ModelContext,
+    denoiseModel: String,
+    numThreads: Int,
+    provider: String,
+    debug: Boolean,
+  ): OfflineSpeechDenoiser {
+    val config =
+      OfflineSpeechDenoiserConfig(
+        OfflineSpeechDenoiserModelConfig(
+          OfflineSpeechDenoiserGtcrnModelConfig(modelContext.resolveModelPath(denoiseModel)),
+          numThreads,
+          debug,
+          provider,
+        ),
+      )
+    return OfflineSpeechDenoiser(modelContext.assetManager, config)
+  }
+
+  private fun createOfflinePunctuation(
+    modelContext: ModelContext,
+    punctuationModel: String,
+    numThreads: Int,
+    provider: String,
+    debug: Boolean,
+  ): OfflinePunctuation {
+    val config =
+      OfflinePunctuationConfig(
+        OfflinePunctuationModelConfig(
+          modelContext.resolveModelPath(punctuationModel),
+          numThreads,
+          debug,
+          provider,
+        ),
+      )
+    return OfflinePunctuation(modelContext.assetManager, config)
+  }
+
+  private fun applyPunctuation(punctuation: OfflinePunctuation?, text: String): String {
+    if (punctuation == null || text.isBlank()) {
+      return text
+    }
+    return try {
+      punctuation.addPunctuation(text)
+    } catch (_: Exception) {
+      text
+    }
   }
 
   private fun createOfflineSpeakerDiarization(

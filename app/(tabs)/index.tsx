@@ -2,13 +2,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Appearance, View } from 'react-native';
+import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
 import { Button } from '~/components/ui/button';
-import { SwitchX } from '~/components/ui/switch';
 import { TextX } from '~/components/ui/text';
-import { useColorScheme } from '~/hooks/useColorScheme';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, {
     getInstalledModelVersion,
@@ -19,13 +17,19 @@ import SherpaOnnx, {
     type SherpaRealtimeStateEvent,
 } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
+import {
+    getDenoiseEnabled,
+    getPunctuationModelByProfile,
+    getSpeakerDiarizationEnabled,
+    getSpeakerEmbeddingModelByProfile,
+    getVadEnabled,
+} from '~/utils/app-config';
 import { getCurrentModelByOutputMode } from '~/utils/model-selection';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/tools';
 
 const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zh';
 const DEFAULT_STREAMING_MODEL: SherpaModelId = 'zh-streaming';
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/segmentation/pyannote-segmentation.onnx';
-const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/speaker-embedding/zh-cn.onnx';
 
 function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaModelId): SherpaModelId {
     const selected = getCurrentModelByOutputMode(outputMode);
@@ -57,16 +61,15 @@ function compareModelVersion(left: string, right: string): number {
 }
 
 export default function Home() {
-    const colorScheme = useColorScheme();
-    const isDarkMode = colorScheme === 'dark';
     const [conversionText, setConversionText] = useState('');
     const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
     const [realtimeState, setRealtimeState] = useState('stopped');
     const [realtimePartialText, setRealtimePartialText] = useState('');
     const [realtimeFinalText, setRealtimeFinalText] = useState('');
     const [realtimeVadInfo, setRealtimeVadInfo] = useState('unknown');
-    const [vadEnabled, setVadEnabled] = useState(true);
-    const [speakerDiarizationEnabled, setSpeakerDiarizationEnabled] = useState(false);
+    const [vadEnabled, setVadEnabled] = useState(getVadEnabled());
+    const [speakerDiarizationEnabled, setSpeakerDiarizationEnabled] = useState(getSpeakerDiarizationEnabled());
+    const [denoiseEnabled, setDenoiseEnabled] = useState(getDenoiseEnabled());
     const [isRecordingByButton, setIsRecordingByButton] = useState(false);
     const [recordingActionLoading, setRecordingActionLoading] = useState(false);
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
@@ -117,9 +120,12 @@ export default function Home() {
         try {
             const currentModelId = getCurrentModelByOutputMode('nonStreaming');
             const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, currentModelId, {
+                enableDenoise: denoiseEnabled,
+                enablePunctuation: true,
+                punctuationModel: getPunctuationModelByProfile(),
                 enableSpeakerDiarization: speakerDiarizationEnabled,
                 speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
-                speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
+                speakerEmbeddingModel: getSpeakerEmbeddingModelByProfile(),
             });
             setConversionText(r1.text);
             setFileRecognitionStatusText('文件识别完成');
@@ -194,10 +200,13 @@ export default function Home() {
             sampleRate: 16000,
             emitIntervalMs: 150,
             enableEndpoint: false,
+            enableDenoise: denoiseEnabled,
+            enablePunctuation: true,
+            punctuationModel: getPunctuationModelByProfile(),
             enableVad: vadEnabled || speakerDiarizationEnabled,
             enableSpeakerDiarization: speakerDiarizationEnabled,
             speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
-            speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
+            speakerEmbeddingModel: getSpeakerEmbeddingModelByProfile(),
         });
     };
 
@@ -205,15 +214,14 @@ export default function Home() {
         await SherpaOnnx.stopRealtimeTranscription();
     };
 
-    const toggleThemeMode = useCallback((value: boolean) => {
-        Appearance.setColorScheme(value ? 'dark' : 'light');
-    }, []);
-
     useFocusEffect(
         useCallback(() => {
             checkCurrentModelVersions().catch(error => {
                 console.error('[model-version-check] failed', error);
             });
+            setVadEnabled(getVadEnabled());
+            setSpeakerDiarizationEnabled(getSpeakerDiarizationEnabled());
+            setDenoiseEnabled(getDenoiseEnabled());
         }, [checkCurrentModelVersions]),
     );
 
@@ -249,10 +257,6 @@ export default function Home() {
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="gap-4 p-4">
-                <View className="flex flex-row items-center">
-                    <TextX>深色模式：{isDarkMode ? '开启' : '关闭'}</TextX>
-                    <SwitchX value={isDarkMode} onValueChange={toggleThemeMode} />
-                </View>
                 <Button onPress={handlePickDocument}>选择文件</Button>
                 <Button loading={recordingActionLoading} onPress={toggleRecordAndTranscribe}>
                     {isRecordingByButton ? '停止录音并识别' : '开始录音'}
@@ -260,14 +264,6 @@ export default function Home() {
                 <TextX>录音状态：{recordingStatusText}</TextX>
                 <TextX>文件识别状态：{fileRecognitionStatusText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
-                <View className="flex flex-row items-center">
-                    <TextX>VAD 开关：{vadEnabled ? '开启' : '关闭'}</TextX>
-                    <SwitchX value={vadEnabled} onValueChange={setVadEnabled} />
-                </View>
-                <View className="flex flex-row items-center">
-                    <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
-                    <SwitchX value={speakerDiarizationEnabled} onValueChange={setSpeakerDiarizationEnabled} />
-                </View>
                 <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
                     开始实时识别
                 </Button>

@@ -5,15 +5,7 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?:
-        | 'transducer'
-        | 'zipformer'
-        | 'zipformer2'
-        | 'zipformer2_ctc'
-        | 'zipformer_ctc'
-        | 'ctc'
-        | 'paraformer'
-        | string;
+    modelType?: 'transducer' | 'zipformer' | 'zipformer2' | 'zipformer2_ctc' | 'zipformer_ctc' | 'ctc' | 'paraformer' | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
@@ -27,6 +19,10 @@ export type SherpaTranscribeOptions = {
     decodingMethod?: 'greedy_search' | 'modified_beam_search' | string;
     maxActivePaths?: number;
     blankPenalty?: number;
+    enableDenoise?: boolean;
+    denoiseModel?: string;
+    enablePunctuation?: boolean;
+    punctuationModel?: string;
     enableVad?: boolean;
     vadModel?: string;
     vadThreshold?: number;
@@ -111,6 +107,10 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'transducer',
         modelDirAsset: 'sherpa/asr/zh-streaming',
         outputMode: 'streaming',
+        enableDenoise: true,
+        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        enablePunctuation: true,
+        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
         enableVad: true,
         vadModel: 'sherpa/vad/ten-vad.onnx',
         encoder: 'encoder.onnx',
@@ -123,6 +123,10 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'paraformer',
         modelDirAsset: 'sherpa/asr/zh-en-streaming',
         outputMode: 'streaming',
+        enableDenoise: true,
+        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        enablePunctuation: true,
+        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
         enableVad: true,
         vadModel: 'sherpa/vad/ten-vad.onnx',
         encoder: 'encoder.onnx',
@@ -134,6 +138,10 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'zipformer2_ctc',
         modelDirAsset: 'sherpa/asr/zh',
         outputMode: 'nonStreaming',
+        enableDenoise: true,
+        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        enablePunctuation: true,
+        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
         model: 'model.onnx',
         tokens: 'tokens.txt',
         requiredFiles: ['model.onnx', 'tokens.txt'],
@@ -142,6 +150,10 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'paraformer',
         modelDirAsset: 'sherpa/asr/zh-en',
         outputMode: 'nonStreaming',
+        enableDenoise: true,
+        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        enablePunctuation: true,
+        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
         model: 'model.onnx',
         tokens: 'tokens.txt',
         requiredFiles: ['model.onnx', 'tokens.txt'],
@@ -816,7 +828,7 @@ export function getSherpaDownloadedModelOptions(modelId: SherpaModelId, override
 
 async function ensureDownloadedAuxModelPath(
     options: SherpaTranscribeOptions,
-    key: 'vadModel' | 'speakerSegmentationModel' | 'speakerEmbeddingModel',
+    key: 'denoiseModel' | 'punctuationModel' | 'vadModel' | 'speakerSegmentationModel' | 'speakerEmbeddingModel',
     subDir: string,
 ): Promise<SherpaTranscribeOptions> {
     const modelPath = options[key]?.trim();
@@ -849,7 +861,9 @@ async function ensureDownloadedAuxModelPath(
 }
 
 async function ensureDownloadedRuntimeModelPaths(options: SherpaTranscribeOptions): Promise<SherpaTranscribeOptions> {
-    let resolved = await ensureDownloadedAuxModelPath(options, 'vadModel', 'vad');
+    let resolved = await ensureDownloadedAuxModelPath(options, 'denoiseModel', 'speech-enhancement');
+    resolved = await ensureDownloadedAuxModelPath(resolved, 'punctuationModel', 'punctuation');
+    resolved = await ensureDownloadedAuxModelPath(resolved, 'vadModel', 'vad');
     resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerSegmentationModel', 'segmentation');
     resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerEmbeddingModel', 'speaker-embedding');
     return resolved;

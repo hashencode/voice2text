@@ -56,6 +56,14 @@ module.exports = function withSherpaOnnx(config) {
             const speakerEmbeddingDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speaker-embedding');
             syncModelPackages(speakerEmbeddingSrcDir, speakerEmbeddingDestDir);
 
+            const speechEnhancementSrcDir = path.join(projectRoot, 'assets/sherpa/speech-enhancement');
+            const speechEnhancementDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speech-enhancement');
+            syncModelPackages(speechEnhancementSrcDir, speechEnhancementDestDir);
+
+            const punctuationSrcDir = path.join(projectRoot, 'assets/sherpa/punctuation');
+            const punctuationDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/punctuation');
+            syncModelPackages(punctuationSrcDir, punctuationDestDir);
+
             const wavSrcDir = path.join(projectRoot, 'assets/wav');
             const wavDestDir = path.join(projectRoot, 'android/app/src/main/assets/wav');
             syncModelPackages(wavSrcDir, wavDestDir);

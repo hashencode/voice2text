@@ -1,12 +1,13 @@
 import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView } from 'react-native';
+import { Appearance, RefreshControl, ScrollView } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
-import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { SwitchX } from '~/components/ui/switch';
+import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/text';
 import { View } from '~/components/ui/view';
+import { useColorScheme } from '~/hooks/useColorScheme';
 import {
     ensureModelReady,
     getInstalledModelVersion,
@@ -17,6 +18,19 @@ import {
     type SherpaModelId,
 } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
+import {
+    getDarkModeEnabled,
+    getDenoiseEnabled,
+    getRecognitionProfile,
+    getSpeakerDiarizationEnabled,
+    getVadEnabled,
+    setDarkModeEnabled,
+    setDenoiseEnabled,
+    setRecognitionProfile,
+    setSpeakerDiarizationEnabled,
+    setVadEnabled,
+    type RecognitionProfileId,
+} from '~/utils/app-config';
 import { getCurrentModelByOutputMode, setCurrentModelByOutputMode } from '~/utils/model-selection';
 
 type ModelItemState = {
@@ -28,6 +42,28 @@ type ModelItemState = {
 };
 
 const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
+
+const PROFILE_MODEL_MAPPING: Record<
+    RecognitionProfileId,
+    {
+        streamingModel: SherpaModelId;
+        nonStreamingModel: SherpaModelId;
+    }
+> = {
+    'zh-cn': {
+        streamingModel: 'zh-streaming',
+        nonStreamingModel: 'zh',
+    },
+    'zh-en': {
+        streamingModel: 'zh-en-streaming',
+        nonStreamingModel: 'zh-en',
+    },
+    en: {
+        // Current assets do not include en ASR yet; fallback to zh-en ASR models.
+        streamingModel: 'zh-en-streaming',
+        nonStreamingModel: 'zh-en',
+    },
+};
 
 function phaseToText(progress: DownloadModelProgress): string {
     if (progress.phase === 'downloading-zip') {
@@ -47,12 +83,19 @@ function phaseToText(progress: DownloadModelProgress): string {
 }
 
 export default function Setting() {
+    const colorScheme = useColorScheme();
+    const isDarkMode = colorScheme === 'dark';
     const modelIds = useMemo(() => Object.keys(SHERPA_MODEL_PRESETS) as SherpaModelId[], []);
     const [items, setItems] = useState<Record<string, ModelItemState>>({});
     const [refreshing, setRefreshing] = useState(false);
     const [streamingCurrentModel, setStreamingCurrentModel] = useState<SherpaModelId | null>(null);
     const [nonStreamingCurrentModel, setNonStreamingCurrentModel] = useState<SherpaModelId | null>(null);
     const [selectingModelId, setSelectingModelId] = useState<SherpaModelId | null>(null);
+    const [vadEnabled, setVadEnabledState] = useState(getVadEnabled());
+    const [speakerDiarizationEnabled, setSpeakerDiarizationEnabledState] = useState(getSpeakerDiarizationEnabled());
+    const [denoiseEnabled, setDenoiseEnabledState] = useState(getDenoiseEnabled());
+    const [darkModeEnabled, setDarkModeEnabledState] = useState(getDarkModeEnabled());
+    const [recognitionProfile, setRecognitionProfileState] = useState<RecognitionProfileId>(getRecognitionProfile());
 
     const setItem = useCallback((modelId: SherpaModelId, patch: Partial<ModelItemState>) => {
         setItems(prev => {
@@ -92,6 +135,7 @@ export default function Setting() {
             await Promise.all(modelIds.map(modelId => refreshOne(modelId)));
             setStreamingCurrentModel(getCurrentModelByOutputMode('streaming'));
             setNonStreamingCurrentModel(getCurrentModelByOutputMode('nonStreaming'));
+            setRecognitionProfileState(getRecognitionProfile());
         } finally {
             setRefreshing(false);
         }
@@ -102,6 +146,46 @@ export default function Setting() {
             console.error('[setting] refresh models failed', error);
         });
     }, [refreshAll]);
+
+    useEffect(() => {
+        setDarkModeEnabledState(isDarkMode);
+    }, [isDarkMode]);
+
+    const handleToggleDarkMode = useCallback((value: boolean) => {
+        setDarkModeEnabled(value);
+        setDarkModeEnabledState(value);
+        Appearance.setColorScheme(value ? 'dark' : 'light');
+    }, []);
+
+    const handleToggleVad = useCallback((value: boolean) => {
+        setVadEnabled(value);
+        setVadEnabledState(value);
+    }, []);
+
+    const handleToggleSpeakerDiarization = useCallback((value: boolean) => {
+        setSpeakerDiarizationEnabled(value);
+        setSpeakerDiarizationEnabledState(value);
+    }, []);
+
+    const handleToggleDenoise = useCallback((value: boolean) => {
+        setDenoiseEnabled(value);
+        setDenoiseEnabledState(value);
+    }, []);
+
+    const handleRecognitionProfileChange = useCallback((value: string) => {
+        if (value !== 'zh-cn' && value !== 'zh-en' && value !== 'en') {
+            return;
+        }
+        const profile = value as RecognitionProfileId;
+        const mapping = PROFILE_MODEL_MAPPING[profile];
+
+        setRecognitionProfile(profile);
+        setRecognitionProfileState(profile);
+        setCurrentModelByOutputMode('streaming', mapping.streamingModel);
+        setCurrentModelByOutputMode('nonStreaming', mapping.nonStreamingModel);
+        setStreamingCurrentModel(mapping.streamingModel);
+        setNonStreamingCurrentModel(mapping.nonStreamingModel);
+    }, []);
 
     const handleInstall = useCallback(
         async (modelId: SherpaModelId) => {
@@ -194,32 +278,22 @@ export default function Setting() {
                         borderRadius: 8,
                         padding: 12,
                     }}>
-                    <TextX variant="subtitle">{modelId}</TextX>
-
-                    <View className="flex flex-row items-center gap-x-2">
-                        <Badge>{outputMode === 'streaming' ? '流式' : '非流式'}</Badge>
-                        <Badge>v{item.version || ''}</Badge>
-                    </View>
-
-                    <TextX>当前模型：{isCurrent ? '是' : '否'}</TextX>
-
-                    <View className="flex flex-row gap-x-3">
-                        <Button
-                            variant="secondary"
-                            onPress={() => handleSetCurrentModel(modelId)}
-                            loading={selectingModelId === modelId}
-                            disabled={!item.installed || item.busy}>
-                            {outputMode === 'streaming' ? '设置为流式输出模型' : '设置为非流式输出模型'}
-                        </Button>
-                        {item.installed ? (
-                            <Button variant="destructive" onPress={() => handleUninstall(modelId)} loading={item.busy}>
-                                卸载
-                            </Button>
-                        ) : (
-                            <Button onPress={() => handleInstall(modelId)} loading={item.busy}>
-                                安装
-                            </Button>
-                        )}
+                    <View className="flex flex-row items-center justify-between gap-x-2">
+                        <TextX variant="title">{modelId}</TextX>
+                        <View className="flex flex-row items-center gap-x-2">
+                            {item.installed ? (
+                                <Button
+                                    variant={isCurrent ? 'primary' : 'secondary'}
+                                    onPress={() => handleSetCurrentModel(modelId)}
+                                    loading={selectingModelId === modelId}>
+                                    {isCurrent ? '已应用' : '应用'}
+                                </Button>
+                            ) : (
+                                <Button onPress={() => handleInstall(modelId)} loading={item.busy}>
+                                    安装
+                                </Button>
+                            )}
+                        </View>
                     </View>
 
                     <View>{item.errorText ? <TextX lightColor="#dc2626">{item.errorText}</TextX> : null}</View>
@@ -229,45 +303,58 @@ export default function Setting() {
         [handleInstall, handleSetCurrentModel, handleUninstall, items, nonStreamingCurrentModel, selectingModelId, streamingCurrentModel],
     );
 
-    const downloadedModelIds = modelIds.filter(modelId => items[modelId]?.installed);
-    const notDownloadedModelIds = modelIds.filter(modelId => !items[modelId]?.installed);
-
     return (
         <DefaultLayout>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="p-4">
-                <Tabs defaultValue="downloaded">
-                    <TabsList scrollable={false}>
-                        <TabsTrigger value="downloaded" style={{ width: '50%' }}>
-                            已下载
-                        </TabsTrigger>
-                        <TabsTrigger value="not-downloaded" style={{ width: '50%' }}>
-                            未下载
-                        </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="downloaded">
-                        <ScrollView
-                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
-                            contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
-                            {downloadedModelIds.length === 0 ? (
-                                <TextX>暂无已下载模型</TextX>
-                            ) : (
-                                downloadedModelIds.map(modelId => renderModelCard(modelId))
-                            )}
-                        </ScrollView>
-                    </TabsContent>
-                    <TabsContent value="not-downloaded">
-                        <ScrollView
-                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
-                            contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
-                            {notDownloadedModelIds.length === 0 ? (
-                                <TextX>暂无未下载模型</TextX>
-                            ) : (
-                                notDownloadedModelIds.map(modelId => renderModelCard(modelId))
-                            )}
-                        </ScrollView>
-                    </TabsContent>
-                </Tabs>
+                <View
+                    style={{
+                        gap: 10,
+                        borderWidth: 1,
+                        borderColor: '#e5e7eb',
+                        borderRadius: 8,
+                        padding: 12,
+                        marginBottom: 12,
+                    }}>
+                    <TextX variant="subtitle">识别配置</TextX>
+                    <View className="flex flex-row items-center justify-between">
+                        <TextX>深色模式：{darkModeEnabled ? '开启' : '关闭'}</TextX>
+                        <SwitchX value={darkModeEnabled} onValueChange={handleToggleDarkMode} />
+                    </View>
+                    <View className="flex flex-row items-center justify-between">
+                        <TextX>VAD 开关：{vadEnabled ? '开启' : '关闭'}</TextX>
+                        <SwitchX value={vadEnabled} onValueChange={handleToggleVad} />
+                    </View>
+                    <View className="flex flex-row items-center justify-between">
+                        <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
+                        <SwitchX value={speakerDiarizationEnabled} onValueChange={handleToggleSpeakerDiarization} />
+                    </View>
+                    <View className="flex flex-row items-center justify-between">
+                        <TextX>降噪开关：{denoiseEnabled ? '开启' : '关闭'}</TextX>
+                        <SwitchX value={denoiseEnabled} onValueChange={handleToggleDenoise} />
+                    </View>
+                    <View style={{ gap: 8 }}>
+                        <TextX>识别语言配置</TextX>
+                        <Tabs value={recognitionProfile} onValueChange={handleRecognitionProfileChange}>
+                            <TabsList>
+                                <TabsTrigger value="zh-cn" style={{ width: 'auto' }}>
+                                    zh-cn
+                                </TabsTrigger>
+                                <TabsTrigger value="zh-en" style={{ width: 'auto' }}>
+                                    zh-en
+                                </TabsTrigger>
+                                <TabsTrigger value="en" style={{ width: 'auto' }}>
+                                    en
+                                </TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </View>
+                </View>
+                <ScrollView
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
+                    contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+                    {modelIds.map(modelId => renderModelCard(modelId))}
+                </ScrollView>
             </View>
         </DefaultLayout>
     );
