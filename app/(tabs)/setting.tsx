@@ -59,9 +59,8 @@ const PROFILE_MODEL_MAPPING: Record<
         nonStreamingModel: 'zh-en',
     },
     en: {
-        // Current assets do not include en ASR yet; fallback to zh-en ASR models.
         streamingModel: 'zh-en-streaming',
-        nonStreamingModel: 'zh-en',
+        nonStreamingModel: 'en',
     },
 };
 

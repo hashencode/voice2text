@@ -1,0 +1,9 @@
+{
+    "version": "2024.10.02",
+    "sha256": "ea5c90299f34bb6ce9e3a003a5bb3081085de6d7cd3c1b29204e60a68661897f",
+    "files": {
+        "encoder.onnx": "b02dcdf54f348741e93fe732b67d933c8dcb6735655f710640143081db38878b",
+        "decoder.onnx": "20accd02388482eb3a46bd615631adfdc85e1eb2c7db9ea3f02a40ffe6b81547",
+        "tokens.txt": "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126"
+    }
+}

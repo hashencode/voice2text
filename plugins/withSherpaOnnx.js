@@ -48,12 +48,12 @@ module.exports = function withSherpaOnnx(config) {
             const vadDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/vad');
             syncModelPackages(vadSrcDir, vadDestDir);
 
-            const segmentationSrcDir = path.join(projectRoot, 'assets/sherpa/segmentation');
-            const segmentationDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/segmentation');
+            const segmentationSrcDir = path.join(projectRoot, 'assets/sherpa/speaker-diarization');
+            const segmentationDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speaker-diarization');
             syncModelPackages(segmentationSrcDir, segmentationDestDir);
 
-            const speakerEmbeddingSrcDir = path.join(projectRoot, 'assets/sherpa/speaker-embedding');
-            const speakerEmbeddingDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speaker-embedding');
+            const speakerEmbeddingSrcDir = path.join(projectRoot, 'assets/sherpa/speaker-recognition');
+            const speakerEmbeddingDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speaker-recognition');
             syncModelPackages(speakerEmbeddingSrcDir, speakerEmbeddingDestDir);
 
             const speechEnhancementSrcDir = path.join(projectRoot, 'assets/sherpa/speech-enhancement');

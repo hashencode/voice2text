@@ -23,6 +23,7 @@ import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
+import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
 import com.k2fsa.sherpa.onnx.OnlineParaformerModelConfig
@@ -1030,6 +1031,17 @@ class SherpaOnnxModule : Module() {
           this.model = resolvedCtcModelPath
         }
         modelConfig.modelType = "zipformer2_ctc"
+      }
+      "whisper" -> {
+        resolvedEncoderPath = modelContext.resolveModelPath(encoder)
+        resolvedDecoderPath = modelContext.resolveModelPath(decoder)
+        modelConfig.whisper = OfflineWhisperModelConfig().apply {
+          this.encoder = resolvedEncoderPath
+          this.decoder = resolvedDecoderPath
+          this.language = "en"
+          this.task = "transcribe"
+        }
+        modelConfig.modelType = "whisper"
       }
       else -> {
         throw IllegalArgumentException("Unsupported modelType: $modelType")

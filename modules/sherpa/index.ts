@@ -5,7 +5,7 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?: 'transducer' | 'zipformer' | 'zipformer2' | 'zipformer2_ctc' | 'zipformer_ctc' | 'ctc' | 'paraformer' | string;
+    modelType?: 'transducer' | 'zipformer' | 'zipformer2' | 'zipformer2_ctc' | 'zipformer_ctc' | 'ctc' | 'paraformer' | 'whisper' | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
@@ -157,6 +157,19 @@ export const SHERPA_MODEL_PRESETS = {
         model: 'model.onnx',
         tokens: 'tokens.txt',
         requiredFiles: ['model.onnx', 'tokens.txt'],
+    },
+    en: {
+        modelType: 'whisper',
+        modelDirAsset: 'sherpa/asr/en',
+        outputMode: 'nonStreaming',
+        enableDenoise: true,
+        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        enablePunctuation: true,
+        punctuationModel: 'sherpa/punctuation/en.onnx',
+        encoder: 'encoder.onnx',
+        decoder: 'decoder.onnx',
+        tokens: 'tokens.txt',
+        requiredFiles: ['encoder.onnx', 'decoder.onnx', 'tokens.txt'],
     },
 } as const satisfies Record<string, SherpaModelPreset>;
 
@@ -864,8 +877,8 @@ async function ensureDownloadedRuntimeModelPaths(options: SherpaTranscribeOption
     let resolved = await ensureDownloadedAuxModelPath(options, 'denoiseModel', 'speech-enhancement');
     resolved = await ensureDownloadedAuxModelPath(resolved, 'punctuationModel', 'punctuation');
     resolved = await ensureDownloadedAuxModelPath(resolved, 'vadModel', 'vad');
-    resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerSegmentationModel', 'segmentation');
-    resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerEmbeddingModel', 'speaker-embedding');
+    resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerSegmentationModel', 'speaker-diarization');
+    resolved = await ensureDownloadedAuxModelPath(resolved, 'speakerEmbeddingModel', 'speaker-recognition');
     return resolved;
 }
 

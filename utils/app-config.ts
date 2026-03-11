@@ -91,10 +91,10 @@ export function getPunctuationModelByProfile(profile: RecognitionProfileId = get
 
 export function getSpeakerEmbeddingModelByProfile(profile: RecognitionProfileId = getRecognitionProfile()): string {
     if (profile === 'zh-cn') {
-        return 'sherpa/speaker-embedding/zh-cn.onnx';
+        return 'sherpa/speaker-recognition/zh-cn.onnx';
     }
     if (profile === 'zh-en') {
-        return 'sherpa/speaker-embedding/zh-en.onnx';
+        return 'sherpa/speaker-recognition/zh-en.onnx';
     }
-    return 'sherpa/speaker-embedding/en.onnx';
+    return 'sherpa/speaker-recognition/en.onnx';
 }
