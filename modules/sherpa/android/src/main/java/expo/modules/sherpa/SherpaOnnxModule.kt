@@ -1595,7 +1595,7 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 512
     private const val DEFAULT_EMIT_INTERVAL_MS = 150
     private const val WAV_HEADER_SIZE = 44
-    private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/segmentation/pyannote-segmentation.onnx"
-    private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/speaker-embedding/zh-cn.onnx"
+    private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/speaker-diarization/pyannote-segmentation.onnx"
+    private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/speaker-recognition/zh-cn.onnx"
   }
 }

@@ -29,7 +29,7 @@ import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/
 
 const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zh';
 const DEFAULT_STREAMING_MODEL: SherpaModelId = 'zh-streaming';
-const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/speaker-diarization/pyannote-speaker-diarization.onnx';
+const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/speaker-diarization/pyannote-segmentation.onnx';
 
 function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaModelId): SherpaModelId {
     const selected = getCurrentModelByOutputMode(outputMode);
