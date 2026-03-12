@@ -4,8 +4,7 @@
 
 | Type | Name | Source |
 | --- | --- | --- |
-| `en` | `whisper-distil-medium.en` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-whisper-distil-medium.en/tree/main) |
-| `mix` | `whisper-turbo` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-whisper-turbo/tree/main) |
+| `en` | `funasr-nano-int8` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30) |
 | `zh-en-streaming` | `streaming-paraformer-bilingual-zh-en-chinese-english` | [Docs](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-paraformer/paraformer-models.html#csukuangfj-sherpa-onnx-streaming-paraformer-bilingual-zh-en-chinese-english) |
 | `zh-en` | `paraformer-zh-small-2024-03-09-chinese-english` | [Docs](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-paraformer/paraformer-models.html#csukuangfj-sherpa-onnx-paraformer-zh-small-2024-03-09-chinese-english) |
 | `zh-streaming` | `zipformer-zh-streaming` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30) |
