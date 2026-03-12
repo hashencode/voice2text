@@ -55,6 +55,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 import java.util.zip.ZipInputStream
 
 class SherpaOnnxModule : Module() {
@@ -434,7 +435,9 @@ class SherpaOnnxModule : Module() {
     var vadInfo = "disabled"
     var denoiseInfo = "disabled"
     var punctuationInfo = "disabled"
+    var saveInfo = "disabled"
     var nextSpeakerIndex = 0
+    var audioSaveSession: RealtimeAudioSession? = null
 
     try {
       sendRealtimeState("starting")
@@ -459,6 +462,12 @@ class SherpaOnnxModule : Module() {
       val enableVad = options.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
       val enableSpeakerDiarization = options.getBoolean("enableSpeakerDiarization") ?: false
       val speakerSimilarityThreshold = options.getFloat("speakerSimilarityThreshold") ?: 0.85f
+      val realtimeAudioSegmentSeconds = options.getInt("realtimeAudioSegmentSeconds") ?: DEFAULT_REALTIME_SAVE_SEGMENT_SECONDS
+      val realtimeAudioMaxSessionSeconds = options.getInt("realtimeAudioMaxSessionSeconds") ?: DEFAULT_REALTIME_SAVE_MAX_SESSION_SECONDS
+      val realtimeAudioMinFreeBytes =
+        options.getLong("realtimeAudioMinFreeBytes") ?: DEFAULT_REALTIME_SAVE_MIN_FREE_BYTES
+      val realtimeAudioSyncIntervalMs =
+        options.getLong("realtimeAudioSyncIntervalMs") ?: DEFAULT_REALTIME_SAVE_SYNC_INTERVAL_MS
 
       val modelConfig = OnlineModelConfig().apply {
         val tokens = options.getString("tokens")
@@ -604,12 +613,29 @@ class SherpaOnnxModule : Module() {
 
       audioRecord = createAudioRecord(sampleRate)
 
+      try {
+        val recordingRoot = resolveRealtimeRecordingRoot(options)
+        recoverRealtimeRecordingSessions(recordingRoot)
+        audioSaveSession =
+          createRealtimeAudioSession(
+            rootDir = recordingRoot,
+            sampleRate = sampleRate,
+            segmentSeconds = realtimeAudioSegmentSeconds,
+            maxSessionSeconds = realtimeAudioMaxSessionSeconds,
+            minFreeBytes = realtimeAudioMinFreeBytes,
+            syncIntervalMs = realtimeAudioSyncIntervalMs,
+          )
+        saveInfo = "enabled:${audioSaveSession.sessionId}"
+      } catch (e: Exception) {
+        throw IllegalStateException("Realtime audio save initialization failed: ${e.message ?: "unknown"}", e)
+      }
+
       realtimeRecognizer = recognizer
       realtimeStream = stream
       realtimeAudioRecord = audioRecord
 
       audioRecord.startRecording()
-      sendRealtimeState("running", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo")
+      sendRealtimeState("running", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo | save=$saveInfo")
 
       val shortBuffer = ShortArray(DEFAULT_AUDIO_BUFFER_SAMPLES)
       var lastEmitTime = 0L
@@ -618,6 +644,30 @@ class SherpaOnnxModule : Module() {
         val read = audioRecord.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
         if (read <= 0) {
           continue
+        }
+
+        val currentSession = audioSaveSession ?: throw IllegalStateException("Realtime audio save session missing")
+        try {
+          val keepSaving = appendRealtimeAudioSegment(currentSession, shortBuffer, read)
+          if (!keepSaving) {
+            try {
+              closeRealtimeAudioSession(currentSession, "limit_reached")
+            } catch (_: Exception) {
+            }
+            audioSaveSession = null
+            saveInfo = "runtime-error:limit_reached"
+            throw IllegalStateException("Realtime audio save stopped: limit_reached")
+          }
+        } catch (e: Exception) {
+          if (audioSaveSession != null) {
+            try {
+              closeRealtimeAudioSession(currentSession, "error")
+            } catch (_: Exception) {
+            }
+            audioSaveSession = null
+          }
+          saveInfo = "runtime-error:${e.message ?: "unknown"}"
+          throw e
         }
 
         val rawSamples = FloatArray(read)
@@ -715,9 +765,9 @@ class SherpaOnnxModule : Module() {
         val punctuatedText = applyPunctuation(punctuation, finalResult.text)
         sendRealtimeResult(finalResult, true, false, sampleRate, punctuatedText)
       }
-      sendRealtimeState("stopped", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo")
+      sendRealtimeState("stopped", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo | save=$saveInfo")
     } catch (e: Exception) {
-      sendRealtimeState("error", e.message ?: "unknown", vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo")
+      sendRealtimeState("error", e.message ?: "unknown", vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo | save=$saveInfo")
       sendEvent(
         REALTIME_EVENT_NAME,
         mapOf(
@@ -739,6 +789,12 @@ class SherpaOnnxModule : Module() {
       speakerManager?.release()
       stream?.release()
       recognizer?.release()
+      if (audioSaveSession != null) {
+        try {
+          closeRealtimeAudioSession(audioSaveSession, "realtime_exit")
+        } catch (_: Exception) {
+        }
+      }
 
       realtimeAudioRecord = null
       realtimeStream = null
@@ -849,6 +905,280 @@ class SherpaOnnxModule : Module() {
       (v and 0xFF).toByte(),
       ((v shr 8) and 0xFF).toByte(),
     )
+  }
+
+  private fun resolveRealtimeRecordingRoot(options: Map<String, Any?>): File {
+    val customDir = options.getString("realtimeAudioSaveDir")?.removePrefix("file://")
+    if (!customDir.isNullOrBlank()) {
+      return File(customDir)
+    }
+    val context = appContext.reactContext ?: throw IllegalStateException("React context is not available")
+    return File(context.filesDir, DEFAULT_REALTIME_SAVE_SUBDIR)
+  }
+
+  private fun recoverRealtimeRecordingSessions(rootDir: File) {
+    if (!rootDir.exists() || !rootDir.isDirectory) {
+      return
+    }
+
+    val sessionDirs =
+      rootDir
+        .listFiles()
+        ?.filter { it.isDirectory && it.name.startsWith("session-") }
+        ?: return
+
+    for (sessionDir in sessionDirs) {
+      try {
+        val manifestFile = File(sessionDir, "session.jsonl")
+        val sampleRate = readRealtimeSessionSampleRate(manifestFile) ?: DEFAULT_SAMPLE_RATE
+        val stopped =
+          if (manifestFile.exists() && manifestFile.isFile) {
+            manifestFile.readText().contains("\"type\":\"session_stop\"")
+          } else {
+            false
+          }
+        if (stopped) {
+          continue
+        }
+
+        val wavFiles =
+          sessionDir
+            .listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".wav") }
+            ?: emptyList()
+        for (wav in wavFiles) {
+          val totalBytes = wav.length()
+          if (totalBytes < WAV_HEADER_SIZE) {
+            continue
+          }
+          writeWavHeader(wav, totalBytes - WAV_HEADER_SIZE, sampleRate)
+        }
+
+        appendRealtimeSessionLog(
+          manifestFile,
+          """{"type":"session_recovered","recoveredAtMs":${System.currentTimeMillis()}}""",
+        )
+      } catch (_: Exception) {
+      }
+    }
+  }
+
+  private fun readRealtimeSessionSampleRate(manifestFile: File): Int? {
+    if (!manifestFile.exists() || !manifestFile.isFile) {
+      return null
+    }
+    return try {
+      val line =
+        manifestFile
+          .useLines { lines -> lines.firstOrNull { it.contains("\"type\":\"session_start\"") } }
+          ?: return null
+      val marker = "\"sampleRate\":"
+      val index = line.indexOf(marker)
+      if (index < 0) {
+        return null
+      }
+      val start = index + marker.length
+      var end = start
+      while (end < line.length && line[end].isDigit()) {
+        end += 1
+      }
+      line.substring(start, end).toIntOrNull()
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  private fun createRealtimeAudioSession(
+    rootDir: File,
+    sampleRate: Int,
+    segmentSeconds: Int,
+    maxSessionSeconds: Int,
+    minFreeBytes: Long,
+    syncIntervalMs: Long,
+  ): RealtimeAudioSession {
+    if (!rootDir.exists()) {
+      rootDir.mkdirs()
+    }
+    if (!rootDir.exists() || !rootDir.isDirectory) {
+      throw IllegalStateException("Unable to create realtime recording directory: ${rootDir.absolutePath}")
+    }
+
+    val safeSegmentSeconds = segmentSeconds.coerceAtLeast(5)
+    val safeMaxSessionSeconds = maxSessionSeconds.coerceAtLeast(60)
+    val safeSyncIntervalMs = syncIntervalMs.coerceAtLeast(200L)
+    val bytesPerSecond = sampleRate.toLong() * 2L
+    val now = System.currentTimeMillis()
+    val sessionId = "session-$now-${UUID.randomUUID().toString().substring(0, 8)}"
+    val sessionDir = File(rootDir, sessionId)
+    sessionDir.mkdirs()
+    if (!sessionDir.exists() || !sessionDir.isDirectory) {
+      throw IllegalStateException("Unable to create session directory: ${sessionDir.absolutePath}")
+    }
+
+    val session =
+      RealtimeAudioSession(
+        sessionId = sessionId,
+        sessionDir = sessionDir,
+        sampleRate = sampleRate,
+        segmentMaxBytes = bytesPerSecond * safeSegmentSeconds,
+        sessionMaxBytes = bytesPerSecond * safeMaxSessionSeconds,
+        minFreeBytes = minFreeBytes.coerceAtLeast(0L),
+        syncIntervalMs = safeSyncIntervalMs,
+        manifestFile = File(sessionDir, "session.jsonl"),
+        startedAtMs = now,
+      )
+
+    appendRealtimeSessionLog(
+      session.manifestFile,
+      """{"type":"session_start","sessionId":"${jsonEscape(session.sessionId)}","sampleRate":$sampleRate,"segmentMaxBytes":${session.segmentMaxBytes},"sessionMaxBytes":${session.sessionMaxBytes},"startedAtMs":$now}""",
+    )
+    openNextRealtimeAudioSegment(session)
+    return session
+  }
+
+  private fun appendRealtimeAudioSegment(
+    session: RealtimeAudioSession,
+    shortBuffer: ShortArray,
+    read: Int,
+  ): Boolean {
+    if (read <= 0) {
+      return true
+    }
+    if (session.sessionDir.usableSpace < session.minFreeBytes) {
+      return false
+    }
+    if (session.totalWrittenBytes >= session.sessionMaxBytes) {
+      return false
+    }
+
+    if (session.currentSegmentStream == null || session.currentSegmentFile == null) {
+      openNextRealtimeAudioSegment(session)
+    }
+
+    val bytesToWrite = read * 2L
+    if (session.currentSegmentWrittenBytes > 0 && session.currentSegmentWrittenBytes + bytesToWrite > session.segmentMaxBytes) {
+      closeCurrentRealtimeAudioSegment(session)
+      openNextRealtimeAudioSegment(session)
+    }
+
+    val outStream = session.currentSegmentStream ?: return false
+    val byteBuffer = ByteArray(read * 2)
+    var offset = 0
+    for (i in 0 until read) {
+      val sample = shortBuffer[i].toInt()
+      byteBuffer[offset] = (sample and 0xFF).toByte()
+      byteBuffer[offset + 1] = ((sample shr 8) and 0xFF).toByte()
+      offset += 2
+    }
+
+    outStream.write(byteBuffer, 0, offset)
+    session.currentSegmentWrittenBytes += offset.toLong()
+    session.totalWrittenBytes += offset.toLong()
+
+    val now = System.currentTimeMillis()
+    if (now - session.lastSyncAtMs >= session.syncIntervalMs) {
+      outStream.fd.sync()
+      session.lastSyncAtMs = now
+    }
+
+    if (session.currentSegmentWrittenBytes >= session.segmentMaxBytes) {
+      closeCurrentRealtimeAudioSegment(session)
+      openNextRealtimeAudioSegment(session)
+    }
+    return session.totalWrittenBytes < session.sessionMaxBytes
+  }
+
+  private fun openNextRealtimeAudioSegment(session: RealtimeAudioSession) {
+    session.segmentIndex += 1
+    val segmentName = "seg-${session.segmentIndex.toString().padStart(6, '0')}.wav"
+    val segmentFile = File(session.sessionDir, segmentName)
+    if (segmentFile.exists()) {
+      segmentFile.delete()
+    }
+    FileOutputStream(segmentFile).use { fos ->
+      fos.write(ByteArray(WAV_HEADER_SIZE))
+      fos.flush()
+      fos.fd.sync()
+    }
+    val stream = FileOutputStream(segmentFile, true)
+    session.currentSegmentFile = segmentFile
+    session.currentSegmentStream = stream
+    session.currentSegmentWrittenBytes = 0
+    appendRealtimeSessionLog(
+      session.manifestFile,
+      """{"type":"segment_open","index":${session.segmentIndex},"file":"${jsonEscape(segmentName)}","openedAtMs":${System.currentTimeMillis()}}""",
+    )
+  }
+
+  private fun closeCurrentRealtimeAudioSegment(session: RealtimeAudioSession) {
+    val file = session.currentSegmentFile
+    val stream = session.currentSegmentStream
+    val pcmBytes = session.currentSegmentWrittenBytes
+    if (file == null || stream == null) {
+      session.currentSegmentFile = null
+      session.currentSegmentStream = null
+      session.currentSegmentWrittenBytes = 0
+      return
+    }
+
+    try {
+      stream.flush()
+      stream.fd.sync()
+    } catch (_: Exception) {
+    } finally {
+      try {
+        stream.close()
+      } catch (_: Exception) {
+      }
+    }
+
+    try {
+      writeWavHeader(file, pcmBytes, session.sampleRate)
+    } catch (_: Exception) {
+    }
+
+    appendRealtimeSessionLog(
+      session.manifestFile,
+      """{"type":"segment_close","index":${session.segmentIndex},"file":"${jsonEscape(file.name)}","pcmBytes":$pcmBytes,"closedAtMs":${System.currentTimeMillis()}}""",
+    )
+    session.currentSegmentFile = null
+    session.currentSegmentStream = null
+    session.currentSegmentWrittenBytes = 0
+  }
+
+  private fun closeRealtimeAudioSession(session: RealtimeAudioSession, reason: String) {
+    try {
+      closeCurrentRealtimeAudioSegment(session)
+    } catch (_: Exception) {
+    }
+    appendRealtimeSessionLog(
+      session.manifestFile,
+      """{"type":"session_stop","reason":"${jsonEscape(reason)}","totalBytes":${session.totalWrittenBytes},"durationMs":${System.currentTimeMillis() - session.startedAtMs},"stoppedAtMs":${System.currentTimeMillis()}}""",
+    )
+  }
+
+  private fun appendRealtimeSessionLog(manifestFile: File, line: String) {
+    manifestFile.parentFile?.mkdirs()
+    FileOutputStream(manifestFile, true).use { fos ->
+      fos.write((line + "\n").toByteArray(Charsets.UTF_8))
+      fos.flush()
+      fos.fd.sync()
+    }
+  }
+
+  private fun jsonEscape(raw: String): String {
+    val builder = StringBuilder(raw.length + 8)
+    for (ch in raw) {
+      when (ch) {
+        '\\' -> builder.append("\\\\")
+        '"' -> builder.append("\\\"")
+        '\n' -> builder.append("\\n")
+        '\r' -> builder.append("\\r")
+        '\t' -> builder.append("\\t")
+        else -> builder.append(ch)
+      }
+    }
+    return builder.toString()
   }
 
   private fun sendRealtimeResult(
@@ -1294,6 +1624,24 @@ class SherpaOnnxModule : Module() {
     val text: String,
   )
 
+  private data class RealtimeAudioSession(
+    val sessionId: String,
+    val sessionDir: File,
+    val sampleRate: Int,
+    val segmentMaxBytes: Long,
+    val sessionMaxBytes: Long,
+    val minFreeBytes: Long,
+    val syncIntervalMs: Long,
+    val manifestFile: File,
+    val startedAtMs: Long,
+    var segmentIndex: Int = 0,
+    var currentSegmentFile: File? = null,
+    var currentSegmentStream: FileOutputStream? = null,
+    var currentSegmentWrittenBytes: Long = 0,
+    var totalWrittenBytes: Long = 0,
+    var lastSyncAtMs: Long = 0,
+  )
+
   private fun formatOfflineResultBySpeaker(
     recognizer: OfflineRecognizer,
     waveData: WaveData,
@@ -1586,6 +1934,17 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun Map<String, Any?>.getLong(key: String): Long? {
+    val value = this[key]
+    return when (value) {
+      is Long -> value
+      is Int -> value.toLong()
+      is Double -> value.toLong()
+      is Float -> value.toLong()
+      else -> null
+    }
+  }
+
   companion object {
     private const val REALTIME_EVENT_NAME = "onRealtimeTranscription"
     private const val REALTIME_STATE_EVENT_NAME = "onRealtimeState"
@@ -1596,6 +1955,11 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 512
     private const val DEFAULT_EMIT_INTERVAL_MS = 150
     private const val WAV_HEADER_SIZE = 44
+    private const val DEFAULT_REALTIME_SAVE_SUBDIR = "sherpa/realtime-recordings"
+    private const val DEFAULT_REALTIME_SAVE_SEGMENT_SECONDS = 60
+    private const val DEFAULT_REALTIME_SAVE_MAX_SESSION_SECONDS = 2 * 60 * 60
+    private const val DEFAULT_REALTIME_SAVE_MIN_FREE_BYTES = 300L * 1024L * 1024L
+    private const val DEFAULT_REALTIME_SAVE_SYNC_INTERVAL_MS = 1_000L
     private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/speaker-diarization/pyannote-segmentation.onnx"
     private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/speaker-recognition/zh-cn.onnx"
   }

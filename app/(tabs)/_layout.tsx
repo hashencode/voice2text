@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 
-import { Home, Smile } from 'lucide-react-native';
+import { Home, List, Smile } from 'lucide-react-native';
 import { useColor } from '~/hooks/useColor';
 
 export default function TabLayout() {
@@ -23,6 +23,13 @@ export default function TabLayout() {
                 options={{
                     title: 'Setting',
                     tabBarIcon: ({ color }) => <Smile color={color} />,
+                }}
+            />
+            <Tabs.Screen
+                name="wav"
+                options={{
+                    title: 'WAV',
+                    tabBarIcon: ({ color }) => <List color={color} />,
                 }}
             />
         </Tabs>

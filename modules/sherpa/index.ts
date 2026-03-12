@@ -55,6 +55,11 @@ export type SherpaTranscribeResult = {
 export type SherpaRealtimeOptions = SherpaTranscribeOptions & {
     emitIntervalMs?: number;
     enableEndpoint?: boolean;
+    realtimeAudioSaveDir?: string;
+    realtimeAudioSegmentSeconds?: number;
+    realtimeAudioMaxSessionSeconds?: number;
+    realtimeAudioMinFreeBytes?: number;
+    realtimeAudioSyncIntervalMs?: number;
 };
 
 export type SherpaRealtimeResultEvent = {
@@ -231,6 +236,10 @@ function ensureDocumentDirectory(): string {
 
 export function getDownloadedModelsRootDir(): string {
     return `${ensureDocumentDirectory()}sherpa/models/`;
+}
+
+export function getRealtimeRecordingRootDir(): string {
+    return `${ensureDocumentDirectory()}sherpa/realtime-recordings/`;
 }
 
 export function getDownloadedModelDir(modelId: SherpaModelId): string {

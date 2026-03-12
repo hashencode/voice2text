@@ -9,6 +9,7 @@ import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, {
+    getRealtimeRecordingRootDir,
     getInstalledModelVersion,
     SHERPA_MODEL_PRESETS,
     type SherpaModelId,
@@ -206,6 +207,11 @@ export default function Home() {
             sampleRate: 16000,
             emitIntervalMs: 150,
             enableEndpoint: false,
+            realtimeAudioSaveDir: getRealtimeRecordingRootDir(),
+            realtimeAudioSegmentSeconds: 60,
+            realtimeAudioMaxSessionSeconds: 2 * 60 * 60,
+            realtimeAudioMinFreeBytes: 300 * 1024 * 1024,
+            realtimeAudioSyncIntervalMs: 1000,
             enableDenoise: denoiseEnabled,
             enablePunctuation: punctuationEnabledByModel,
             punctuationModel: getPunctuationModelByProfile(),
