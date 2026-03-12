@@ -10,6 +10,10 @@ export type SherpaTranscribeOptions = {
     decoder?: string;
     joiner?: string;
     model?: string;
+    encoderAdaptor?: string;
+    llm?: string;
+    embedding?: string;
+    tokenizer?: string;
     tokens?: string;
     sampleRate?: number;
     featureDim?: number;
@@ -164,17 +168,25 @@ export const SHERPA_MODEL_PRESETS = {
         requiredFiles: ['model.onnx', 'tokens.txt'],
     },
     en: {
-        modelType: 'whisper',
+        modelType: 'funasr_nano',
         modelDirAsset: 'sherpa/asr/en',
         outputMode: 'nonStreaming',
         enableDenoise: true,
         denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
-        enablePunctuation: true,
-        punctuationModel: 'sherpa/punctuation/en.onnx',
-        encoder: 'encoder.onnx',
-        decoder: 'decoder.onnx',
-        tokens: 'tokens.txt',
-        requiredFiles: ['encoder.onnx', 'decoder.onnx', 'tokens.txt'],
+        enablePunctuation: false,
+        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
+        encoderAdaptor: 'encoder_adaptor.onnx',
+        llm: 'llm.onnx',
+        embedding: 'embedding.onnx',
+        tokenizer: 'Qwen3-0.6B',
+        requiredFiles: [
+            'embedding.onnx',
+            'encoder_adaptor.onnx',
+            'llm.onnx',
+            'Qwen3-0.6B/tokenizer.json',
+            'Qwen3-0.6B/merges.txt',
+            'Qwen3-0.6B/vocab.json',
+        ],
     },
 } as const satisfies Record<string, SherpaModelPreset>;
 

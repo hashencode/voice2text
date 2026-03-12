@@ -83,10 +83,10 @@ export function setRecognitionProfile(value: RecognitionProfileId): void {
 }
 
 export function getPunctuationModelByProfile(profile: RecognitionProfileId = getRecognitionProfile()): string {
-    if (profile === 'en') {
-        return 'sherpa/punctuation/en.onnx';
+    if (profile.includes('zh')) {
+        return 'sherpa/punctuation/zh-en.onnx';
     }
-    return 'sherpa/punctuation/zh-en.onnx';
+    return 'sherpa/punctuation/en.onnx';
 }
 
 export function getSpeakerEmbeddingModelByProfile(profile: RecognitionProfileId = getRecognitionProfile()): string {

@@ -1,9 +1,11 @@
 package expo.modules.sherpa
 
+import android.content.res.AssetManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import com.k2fsa.sherpa.onnx.FeatureConfig
+import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuation
@@ -23,7 +25,6 @@ import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
-import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
 import com.k2fsa.sherpa.onnx.OnlineParaformerModelConfig
@@ -469,42 +470,73 @@ class SherpaOnnxModule : Module() {
       val realtimeAudioSyncIntervalMs =
         options.getLong("realtimeAudioSyncIntervalMs") ?: DEFAULT_REALTIME_SAVE_SYNC_INTERVAL_MS
 
+      var resolvedRealtimeTokensPath = ""
+      var resolvedRealtimeEncoderPath = ""
+      var resolvedRealtimeDecoderPath = ""
+      var resolvedRealtimeJoinerPath = ""
+      var resolvedRealtimeCtcModelPath = ""
+
       val modelConfig = OnlineModelConfig().apply {
         val tokens = options.getString("tokens")
-        this.tokens =
+        resolvedRealtimeTokensPath =
           if (!tokens.isNullOrBlank()) {
             modelContext.resolveModelPath(tokens)
           } else {
             modelContext.resolveModelPath("tokens.txt")
           }
+        this.tokens = resolvedRealtimeTokensPath
         this.numThreads = numThreads
         this.provider = provider
         this.debug = debug
         when (modelType) {
           "transducer", "zipformer", "zipformer2" -> {
             this.modelType = "transducer"
+            resolvedRealtimeEncoderPath = modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx")
+            resolvedRealtimeDecoderPath = modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx")
+            resolvedRealtimeJoinerPath = modelContext.resolveModelPath(options.getString("joiner") ?: "joiner.onnx")
             this.transducer = OnlineTransducerModelConfig(
-              modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx"),
-              modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx"),
-              modelContext.resolveModelPath(options.getString("joiner") ?: "joiner.onnx"),
+              resolvedRealtimeEncoderPath,
+              resolvedRealtimeDecoderPath,
+              resolvedRealtimeJoinerPath,
             )
           }
           "paraformer" -> {
             this.modelType = "paraformer"
+            resolvedRealtimeEncoderPath = modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx")
+            resolvedRealtimeDecoderPath = modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx")
             this.paraformer = OnlineParaformerModelConfig(
-              modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx"),
-              modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx"),
+              resolvedRealtimeEncoderPath,
+              resolvedRealtimeDecoderPath,
             )
           }
           "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
             this.modelType = "zipformer2_ctc"
+            resolvedRealtimeCtcModelPath = modelContext.resolveModelPath(options.getString("model") ?: "model.onnx")
             this.zipformer2Ctc = OnlineZipformer2CtcModelConfig(
-              modelContext.resolveModelPath(options.getString("model") ?: "model.onnx"),
+              resolvedRealtimeCtcModelPath,
             )
           }
           else -> {
             throw IllegalArgumentException("Unsupported realtime modelType: $modelType")
           }
+        }
+      }
+
+      when (modelType) {
+        "transducer", "zipformer", "zipformer2" -> {
+          ensureModelPathReadable(modelContext, resolvedRealtimeTokensPath, "tokens")
+          ensureModelPathReadable(modelContext, resolvedRealtimeEncoderPath, "encoder")
+          ensureModelPathReadable(modelContext, resolvedRealtimeDecoderPath, "decoder")
+          ensureModelPathReadable(modelContext, resolvedRealtimeJoinerPath, "joiner")
+        }
+        "paraformer" -> {
+          ensureModelPathReadable(modelContext, resolvedRealtimeTokensPath, "tokens")
+          ensureModelPathReadable(modelContext, resolvedRealtimeEncoderPath, "encoder")
+          ensureModelPathReadable(modelContext, resolvedRealtimeDecoderPath, "decoder")
+        }
+        "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
+          ensureModelPathReadable(modelContext, resolvedRealtimeTokensPath, "tokens")
+          ensureModelPathReadable(modelContext, resolvedRealtimeCtcModelPath, "model")
         }
       }
 
@@ -1291,6 +1323,52 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun buildAssetCandidates(assetPath: String): List<String> {
+    val normalizedAssetPath = assetPath.trim().removePrefix("/")
+    val candidates = linkedSetOf<String>()
+    candidates.add(normalizedAssetPath)
+    candidates.add(normalizedAssetPath.removePrefix("assets/"))
+    if (normalizedAssetPath.startsWith("sherpa/")) {
+      candidates.add(normalizedAssetPath.removePrefix("sherpa/"))
+    }
+    if (normalizedAssetPath.startsWith("sherpa/asr/")) {
+      candidates.add(normalizedAssetPath.removePrefix("sherpa/"))
+      candidates.add(normalizedAssetPath.removePrefix("sherpa/asr/"))
+      candidates.add("asr/${normalizedAssetPath.removePrefix("sherpa/asr/")}")
+    }
+    return candidates.toList()
+  }
+
+  private fun assetExists(assetManager: AssetManager?, assetPath: String): Boolean {
+    if (assetManager == null) {
+      return false
+    }
+    for (candidate in buildAssetCandidates(assetPath)) {
+      try {
+        assetManager.open(candidate).use { _ -> }
+        return true
+      } catch (_: Exception) {
+      }
+    }
+    return false
+  }
+
+  private fun ensureModelPathReadable(modelContext: ModelContext, resolvedPath: String, label: String) {
+    if (resolvedPath.isBlank()) {
+      throw IllegalArgumentException("Model path is empty: $label")
+    }
+    if (modelContext.useFileModelDir) {
+      val file = File(resolvedPath)
+      if (!file.exists() || !file.isFile || file.length() <= 0L) {
+        throw IllegalArgumentException("Model file missing or invalid: $label -> $resolvedPath")
+      }
+      return
+    }
+    if (!assetExists(modelContext.assetManager, resolvedPath)) {
+      throw IllegalArgumentException("Model asset missing: $label -> $resolvedPath")
+    }
+  }
+
   private fun transcribeWave(waveData: WaveData, options: Map<String, Any?>?): Map<String, Any?> {
     val modelContext = resolveModelContext(options)
 
@@ -1299,6 +1377,10 @@ class SherpaOnnxModule : Module() {
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
     val joiner = options?.getString("joiner") ?: "joiner.onnx"
     val model = options?.getString("model") ?: "model.onnx"
+    val encoderAdaptor = options?.getString("encoderAdaptor") ?: "encoder_adaptor.onnx"
+    val llm = options?.getString("llm") ?: "llm.onnx"
+    val embedding = options?.getString("embedding") ?: "embedding.onnx"
+    val tokenizer = options?.getString("tokenizer") ?: "Qwen3-0.6B"
     val tokens = options?.getString("tokens")
 
     val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
@@ -1309,8 +1391,7 @@ class SherpaOnnxModule : Module() {
     val denoiseModel = options?.getString("denoiseModel")
     val enableDenoise = options?.getBoolean("enableDenoise") ?: !denoiseModel.isNullOrBlank()
     val punctuationModel = options?.getString("punctuationModel")
-    val requestedEnablePunctuation = options?.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
-    val enablePunctuation = requestedEnablePunctuation && modelType != "whisper"
+    val enablePunctuation = options?.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
     val decodingMethod = options?.getString("decodingMethod") ?: "greedy_search"
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
@@ -1322,11 +1403,17 @@ class SherpaOnnxModule : Module() {
     var resolvedJoinerPath = ""
     var resolvedParaformerModelPath = ""
     var resolvedCtcModelPath = ""
+    var resolvedEncoderAdaptorPath = ""
+    var resolvedLlmPath = ""
+    var resolvedEmbeddingPath = ""
+    var resolvedTokenizerDirPath = ""
 
     val modelConfig = OfflineModelConfig().apply {
       resolvedTokensPath =
         if (!tokens.isNullOrBlank()) {
           modelContext.resolveModelPath(tokens)
+        } else if (modelType == "funasr_nano") {
+          ""
         } else {
           modelContext.resolveModelPath("tokens.txt")
         }
@@ -1363,21 +1450,53 @@ class SherpaOnnxModule : Module() {
         }
         modelConfig.modelType = "zipformer2_ctc"
       }
-      "whisper" -> {
-        resolvedEncoderPath = modelContext.resolveModelPath(encoder)
-        resolvedDecoderPath = modelContext.resolveModelPath(decoder)
-        modelConfig.whisper = OfflineWhisperModelConfig().apply {
-          this.encoder = resolvedEncoderPath
-          this.decoder = resolvedDecoderPath
-          this.language = "en"
-          this.task = "transcribe"
+      "funasr_nano" -> {
+        val tokenizerDir =
+          if (tokenizer.endsWith(".json")) {
+            File(tokenizer).parent ?: tokenizer
+          } else {
+            tokenizer
+          }
+        resolvedEncoderAdaptorPath = modelContext.resolveModelPath(encoderAdaptor)
+        resolvedLlmPath = modelContext.resolveModelPath(llm)
+        resolvedEmbeddingPath = modelContext.resolveModelPath(embedding)
+        resolvedTokenizerDirPath = modelContext.resolveModelPath(tokenizerDir)
+        modelConfig.funasrNano = OfflineFunAsrNanoModelConfig().apply {
+          this.encoderAdaptor = resolvedEncoderAdaptorPath
+          this.llm = resolvedLlmPath
+          this.embedding = resolvedEmbeddingPath
+          this.tokenizer = resolvedTokenizerDirPath
         }
-        modelConfig.modelType = "whisper"
+        modelConfig.modelType = "funasr_nano"
       }
       else -> {
         throw IllegalArgumentException("Unsupported modelType: $modelType")
       }
     }
+
+    when (modelType) {
+      "transducer", "zipformer", "zipformer2" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedEncoderPath, "encoder")
+        ensureModelPathReadable(modelContext, resolvedDecoderPath, "decoder")
+        ensureModelPathReadable(modelContext, resolvedJoinerPath, "joiner")
+      }
+      "paraformer" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedParaformerModelPath, "model")
+      }
+      "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedCtcModelPath, "model")
+      }
+      "funasr_nano" -> {
+        ensureModelPathReadable(modelContext, resolvedEncoderAdaptorPath, "encoderAdaptor")
+        ensureModelPathReadable(modelContext, resolvedLlmPath, "llm")
+        ensureModelPathReadable(modelContext, resolvedEmbeddingPath, "embedding")
+        ensureModelPathReadable(modelContext, "$resolvedTokenizerDirPath/tokenizer.json", "tokenizer")
+      }
+    }
+
     val recognizerConfig = OfflineRecognizerConfig().apply {
       this.featConfig = FeatureConfig(sampleRate, featureDim, 0f)
       this.modelConfig = modelConfig
@@ -1411,6 +1530,10 @@ class SherpaOnnxModule : Module() {
           joinerPath = resolvedJoinerPath,
           paraformerModelPath = resolvedParaformerModelPath,
           ctcModelPath = resolvedCtcModelPath,
+          encoderAdaptorPath = resolvedEncoderAdaptorPath,
+          llmPath = resolvedLlmPath,
+          embeddingPath = resolvedEmbeddingPath,
+          tokenizerDirPath = resolvedTokenizerDirPath,
         )
       recognizer = acquireOfflineRecognizer(recognizerKey, modelContext.assetManager, recognizerConfig)
 
@@ -1508,6 +1631,10 @@ class SherpaOnnxModule : Module() {
     joinerPath: String,
     paraformerModelPath: String,
     ctcModelPath: String,
+    encoderAdaptorPath: String,
+    llmPath: String,
+    embeddingPath: String,
+    tokenizerDirPath: String,
   ): String {
     return listOf(
       "ctxMode=${modelContext.useFileModelDir}",
@@ -1527,6 +1654,10 @@ class SherpaOnnxModule : Module() {
       "joiner=$joinerPath",
       "paraformerModel=$paraformerModelPath",
       "ctcModel=$ctcModelPath",
+      "encoderAdaptor=$encoderAdaptorPath",
+      "llm=$llmPath",
+      "embedding=$embeddingPath",
+      "tokenizerDir=$tokenizerDirPath",
     ).joinToString("|")
   }
 

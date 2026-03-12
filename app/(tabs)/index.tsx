@@ -20,7 +20,6 @@ import SherpaOnnx, {
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import {
     getDenoiseEnabled,
-    getPunctuationModelByProfile,
     getSpeakerDiarizationEnabled,
     getSpeakerEmbeddingModelByProfile,
     getVadEnabled,
@@ -43,10 +42,6 @@ function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaMode
     return selected;
 }
 
-function shouldEnablePunctuation(modelId: SherpaModelId): boolean {
-    return SHERPA_MODEL_PRESETS[modelId].modelType !== 'whisper';
-}
-
 function compareModelVersion(left: string, right: string): number {
     const leftParts = left.split('.').map(part => Number.parseInt(part, 10));
     const rightParts = right.split('.').map(part => Number.parseInt(part, 10));
@@ -67,6 +62,7 @@ function compareModelVersion(left: string, right: string): number {
 
 export default function Home() {
     const [conversionText, setConversionText] = useState('');
+    const [conversionElapsedMs, setConversionElapsedMs] = useState<number | null>(null);
     const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
     const [realtimeState, setRealtimeState] = useState('stopped');
     const [realtimePartialText, setRealtimePartialText] = useState('');
@@ -122,22 +118,23 @@ export default function Home() {
         }
 
         setFileRecognitionStatusText('文件识别中...');
+        setConversionElapsedMs(null);
         try {
             const currentModelId = getCurrentModelByOutputMode('nonStreaming');
-            const punctuationEnabledByModel = shouldEnablePunctuation(currentModelId);
+            const startedAt = Date.now();
             const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, currentModelId, {
                 enableDenoise: denoiseEnabled,
-                enablePunctuation: punctuationEnabledByModel,
-                punctuationModel: getPunctuationModelByProfile(),
                 enableSpeakerDiarization: speakerDiarizationEnabled,
                 speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
                 speakerEmbeddingModel: getSpeakerEmbeddingModelByProfile(),
             });
+            setConversionElapsedMs(Date.now() - startedAt);
             setConversionText(r1.text);
             setFileRecognitionStatusText('文件识别完成');
             return true;
         } catch (error) {
             const message = (error as Error).message ?? 'unknown';
+            setConversionElapsedMs(null);
             setFileRecognitionStatusText(`文件识别失败: ${message}`);
             console.error('[file-recognition] failed', error);
             return false;
@@ -199,7 +196,6 @@ export default function Home() {
             return;
         }
         const currentModelId = getCurrentModelByOutputMode('streaming');
-        const punctuationEnabledByModel = shouldEnablePunctuation(currentModelId);
         setRealtimePartialText('');
         setRealtimeFinalText('');
         setRealtimeVadInfo('starting');
@@ -213,8 +209,6 @@ export default function Home() {
             realtimeAudioMinFreeBytes: 300 * 1024 * 1024,
             realtimeAudioSyncIntervalMs: 1000,
             enableDenoise: denoiseEnabled,
-            enablePunctuation: punctuationEnabledByModel,
-            punctuationModel: getPunctuationModelByProfile(),
             enableVad: vadEnabled || speakerDiarizationEnabled,
             enableSpeakerDiarization: speakerDiarizationEnabled,
             speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
@@ -276,6 +270,7 @@ export default function Home() {
                 <TextX>录音状态：{recordingStatusText}</TextX>
                 <TextX>文件识别状态：{fileRecognitionStatusText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
+                {conversionElapsedMs === null ? null : <TextX>耗时：{(conversionElapsedMs / 1000).toFixed(2)} s</TextX>}
                 <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
                     开始实时识别
                 </Button>
