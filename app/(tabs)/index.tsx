@@ -42,6 +42,10 @@ function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaMode
     return selected;
 }
 
+function shouldEnablePunctuation(modelId: SherpaModelId): boolean {
+    return SHERPA_MODEL_PRESETS[modelId].modelType !== 'whisper';
+}
+
 function compareModelVersion(left: string, right: string): number {
     const leftParts = left.split('.').map(part => Number.parseInt(part, 10));
     const rightParts = right.split('.').map(part => Number.parseInt(part, 10));
@@ -119,9 +123,10 @@ export default function Home() {
         setFileRecognitionStatusText('文件识别中...');
         try {
             const currentModelId = getCurrentModelByOutputMode('nonStreaming');
+            const punctuationEnabledByModel = shouldEnablePunctuation(currentModelId);
             const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, currentModelId, {
                 enableDenoise: denoiseEnabled,
-                enablePunctuation: true,
+                enablePunctuation: punctuationEnabledByModel,
                 punctuationModel: getPunctuationModelByProfile(),
                 enableSpeakerDiarization: speakerDiarizationEnabled,
                 speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
@@ -193,6 +198,7 @@ export default function Home() {
             return;
         }
         const currentModelId = getCurrentModelByOutputMode('streaming');
+        const punctuationEnabledByModel = shouldEnablePunctuation(currentModelId);
         setRealtimePartialText('');
         setRealtimeFinalText('');
         setRealtimeVadInfo('starting');
@@ -201,7 +207,7 @@ export default function Home() {
             emitIntervalMs: 150,
             enableEndpoint: false,
             enableDenoise: denoiseEnabled,
-            enablePunctuation: true,
+            enablePunctuation: punctuationEnabledByModel,
             punctuationModel: getPunctuationModelByProfile(),
             enableVad: vadEnabled || speakerDiarizationEnabled,
             enableSpeakerDiarization: speakerDiarizationEnabled,

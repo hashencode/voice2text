@@ -979,7 +979,8 @@ class SherpaOnnxModule : Module() {
     val denoiseModel = options?.getString("denoiseModel")
     val enableDenoise = options?.getBoolean("enableDenoise") ?: !denoiseModel.isNullOrBlank()
     val punctuationModel = options?.getString("punctuationModel")
-    val enablePunctuation = options?.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
+    val requestedEnablePunctuation = options?.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
+    val enablePunctuation = requestedEnablePunctuation && modelType != "whisper"
     val decodingMethod = options?.getString("decodingMethod") ?: "greedy_search"
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
