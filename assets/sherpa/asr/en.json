@@ -1,12 +1,9 @@
 {
-    "version": "2025.12.30",
-    "sha256": "9b99d23a98539319023967c3532bf2d53650e3785ff707280d6524b7fdfdcc4a",
+    "version": "2026.02.27",
+    "sha256": "442c6e1636593ccdf6cc566768388c1adb1d9d7cc2312870010f25d5cb08695f",
     "files": {
-        "embedding.onnx": "95e61cd0c9c3b9543339a4cf973c95c116815e745ccc1e0285cbd81f76d18644",
-        "encoder_adaptor.onnx": "f36dea2e30fbc33b5db1d7a7265cc976c5e5586c77b042d5adb1ad27c72db422",
-        "llm.onnx": "dfbf9aa3be41bccc257587f151e15c63fbe1b549f2b517f5ccd5bdce3bf4322a",
-        "Qwen3-0.6B/merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
-        "Qwen3-0.6B/tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
-        "Qwen3-0.6B/vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+        "encoder_model.ort": "7c66495948d0d08ec1af454cd4b5514862ae6511e94712a60e6d83eaec8dc8cf",
+        "decoder_model_merged.ort": "d9d7b333af34bc552580576ddcf248a1c6c839e0d3b43b09afb9376ed009899d",
+        "tokens.txt": "2870d843e14c1e187bf1913a521562a63b53933814bd7f2145120468f494a049"
     }
 }
