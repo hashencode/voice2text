@@ -54,12 +54,8 @@ const PROFILE_MODEL_MAPPING: Record<
         streamingModel: 'zh-streaming',
         nonStreamingModel: 'zh',
     },
-    'zh-en': {
-        streamingModel: 'zh-en-streaming',
-        nonStreamingModel: 'zh-en',
-    },
     en: {
-        streamingModel: 'zh-en-streaming',
+        streamingModel: 'zh-streaming',
         nonStreamingModel: 'en',
     },
 };
@@ -172,7 +168,7 @@ export default function Setting() {
     }, []);
 
     const handleRecognitionProfileChange = useCallback((value: string) => {
-        if (value !== 'zh-cn' && value !== 'zh-en' && value !== 'en') {
+        if (value !== 'zh-cn' && value !== 'en') {
             return;
         }
         const profile = value as RecognitionProfileId;
@@ -338,9 +334,6 @@ export default function Setting() {
                             <TabsList>
                                 <TabsTrigger value="zh-cn" style={{ width: 'auto' }}>
                                     zh-cn
-                                </TabsTrigger>
-                                <TabsTrigger value="zh-en" style={{ width: 'auto' }}>
-                                    zh-en
                                 </TabsTrigger>
                                 <TabsTrigger value="en" style={{ width: 'auto' }}>
                                     en

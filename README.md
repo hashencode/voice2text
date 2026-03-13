@@ -5,8 +5,6 @@
 | Type | Name | Source |
 | --- | --- | --- |
 | `en` | `funasr-nano-int8` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30) |
-| `zh-en-streaming` | `streaming-paraformer-bilingual-zh-en-chinese-english` | [Docs](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-paraformer/paraformer-models.html#csukuangfj-sherpa-onnx-streaming-paraformer-bilingual-zh-en-chinese-english) |
-| `zh-en` | `paraformer-zh-small-2024-03-09-chinese-english` | [Docs](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-paraformer/paraformer-models.html#csukuangfj-sherpa-onnx-paraformer-zh-small-2024-03-09-chinese-english) |
 | `zh-streaming` | `zipformer-zh-streaming` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30) |
 | `zh` | `zipformer-ctc-zh` | [Docs](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-ctc/icefall/zipformer.html) |
 
@@ -31,7 +29,6 @@
 | --- | --- | --- |
 | `en` | `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx` | [Release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) |
 | `zh-cn` | `3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx` | [Release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) |
-| `zh-en` | `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx` | [Release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) |
 
 
 
