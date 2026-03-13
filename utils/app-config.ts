@@ -71,12 +71,9 @@ export function setDenoiseEnabled(value: boolean): void {
 }
 
 export function getRecognitionProfile(): RecognitionProfileId {
-    const value = storage.getString(APP_CONFIG_KEYS.recognitionProfile) as RecognitionProfileId | 'zh-en' | undefined;
+    const value = storage.getString(APP_CONFIG_KEYS.recognitionProfile) as RecognitionProfileId | undefined;
     if (value === 'zh-cn' || value === 'en' || value === 'mix') {
         return value;
-    }
-    if (value === 'zh-en') {
-        return 'mix';
     }
     return DEFAULT_RECOGNITION_PROFILE;
 }
