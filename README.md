@@ -17,7 +17,6 @@
 
 | Type | Name | Source |
 | --- | --- | --- |
-| `en` | `sherpa-onnx-online-punct-en-2024-08-06` | [Docs](https://k2-fsa.github.io/sherpa/onnx/punctuation/pretrained_models.html#sherpa-onnx-online-punct-en-2024-08-06) |
 | `zh-en` | `sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8` | [Docs](https://k2-fsa.github.io/sherpa/onnx/punctuation/pretrained_models.html#sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8) |
 
 

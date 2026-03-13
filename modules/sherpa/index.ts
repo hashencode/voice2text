@@ -5,11 +5,7 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?:
-        | 'transducer'
-        | 'moonshine'
-        | 'funasr_nano'
-        | string;
+    modelType?: 'transducer' | 'moonshine' | 'funasr_nano' | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
@@ -156,7 +152,7 @@ export const SHERPA_MODEL_PRESETS = {
         enableDenoise: false,
         denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
         enablePunctuation: false,
-        punctuationModel: 'sherpa/punctuation/en.onnx',
+        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
         encoder: 'encoder_model.ort',
         mergedDecoder: 'decoder_model_merged.ort',
         tokens: 'tokens.txt',
