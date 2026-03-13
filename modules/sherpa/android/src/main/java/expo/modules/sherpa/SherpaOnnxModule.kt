@@ -8,7 +8,6 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig
-import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuation
 import com.k2fsa.sherpa.onnx.OfflinePunctuationConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuationModelConfig
@@ -26,15 +25,12 @@ import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
-import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
-import com.k2fsa.sherpa.onnx.OnlineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizerResult
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
-import com.k2fsa.sherpa.onnx.OnlineZipformer2CtcModelConfig
 import com.k2fsa.sherpa.onnx.FastClusteringConfig
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
@@ -475,7 +471,6 @@ class SherpaOnnxModule : Module() {
       var resolvedRealtimeEncoderPath = ""
       var resolvedRealtimeDecoderPath = ""
       var resolvedRealtimeJoinerPath = ""
-      var resolvedRealtimeCtcModelPath = ""
 
       val modelConfig = OnlineModelConfig().apply {
         val tokens = options.getString("tokens")
@@ -490,7 +485,7 @@ class SherpaOnnxModule : Module() {
         this.provider = provider
         this.debug = debug
         when (modelType) {
-          "transducer", "zipformer", "zipformer2" -> {
+          "transducer" -> {
             this.modelType = "transducer"
             resolvedRealtimeEncoderPath = modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx")
             resolvedRealtimeDecoderPath = modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx")
@@ -501,22 +496,6 @@ class SherpaOnnxModule : Module() {
               resolvedRealtimeJoinerPath,
             )
           }
-          "paraformer" -> {
-            this.modelType = "paraformer"
-            resolvedRealtimeEncoderPath = modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx")
-            resolvedRealtimeDecoderPath = modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx")
-            this.paraformer = OnlineParaformerModelConfig(
-              resolvedRealtimeEncoderPath,
-              resolvedRealtimeDecoderPath,
-            )
-          }
-          "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
-            this.modelType = "zipformer2_ctc"
-            resolvedRealtimeCtcModelPath = modelContext.resolveModelPath(options.getString("model") ?: "model.onnx")
-            this.zipformer2Ctc = OnlineZipformer2CtcModelConfig(
-              resolvedRealtimeCtcModelPath,
-            )
-          }
           else -> {
             throw IllegalArgumentException("Unsupported realtime modelType: $modelType")
           }
@@ -524,20 +503,11 @@ class SherpaOnnxModule : Module() {
       }
 
       when (modelType) {
-        "transducer", "zipformer", "zipformer2" -> {
+        "transducer" -> {
           ensureModelPathReadable(modelContext, resolvedRealtimeTokensPath, "tokens")
           ensureModelPathReadable(modelContext, resolvedRealtimeEncoderPath, "encoder")
           ensureModelPathReadable(modelContext, resolvedRealtimeDecoderPath, "decoder")
           ensureModelPathReadable(modelContext, resolvedRealtimeJoinerPath, "joiner")
-        }
-        "paraformer" -> {
-          ensureModelPathReadable(modelContext, resolvedRealtimeTokensPath, "tokens")
-          ensureModelPathReadable(modelContext, resolvedRealtimeEncoderPath, "encoder")
-          ensureModelPathReadable(modelContext, resolvedRealtimeDecoderPath, "decoder")
-        }
-        "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
-          ensureModelPathReadable(modelContext, resolvedRealtimeTokensPath, "tokens")
-          ensureModelPathReadable(modelContext, resolvedRealtimeCtcModelPath, "model")
         }
       }
 
@@ -1394,7 +1364,6 @@ class SherpaOnnxModule : Module() {
     val encoder = options?.getString("encoder") ?: "encoder.onnx"
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
     val joiner = options?.getString("joiner") ?: "joiner.onnx"
-    val model = options?.getString("model") ?: "model.onnx"
     val preprocessor = options?.getString("preprocessor") ?: ""
     val uncachedDecoder = options?.getString("uncachedDecoder") ?: ""
     val cachedDecoder = options?.getString("cachedDecoder") ?: ""
@@ -1423,8 +1392,6 @@ class SherpaOnnxModule : Module() {
     var resolvedEncoderPath = ""
     var resolvedDecoderPath = ""
     var resolvedJoinerPath = ""
-    var resolvedParaformerModelPath = ""
-    var resolvedCtcModelPath = ""
     var resolvedMoonshinePreprocessorPath = ""
     var resolvedMoonshineEncoderPath = ""
     var resolvedMoonshineUncachedDecoderPath = ""
@@ -1452,7 +1419,7 @@ class SherpaOnnxModule : Module() {
     }
 
     when (modelType) {
-      "transducer", "zipformer", "zipformer2" -> {
+      "transducer" -> {
         resolvedEncoderPath = modelContext.resolveModelPath(encoder)
         resolvedDecoderPath = modelContext.resolveModelPath(decoder)
         resolvedJoinerPath = modelContext.resolveModelPath(joiner)
@@ -1462,20 +1429,6 @@ class SherpaOnnxModule : Module() {
             resolvedDecoderPath,
             resolvedJoinerPath,
           )
-      }
-      "paraformer" -> {
-        resolvedParaformerModelPath = modelContext.resolveModelPath(model)
-        modelConfig.paraformer = OfflineParaformerModelConfig().apply {
-          this.model = resolvedParaformerModelPath
-        }
-        modelConfig.modelType = "paraformer"
-      }
-      "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
-        resolvedCtcModelPath = modelContext.resolveModelPath(model)
-        modelConfig.zipformerCtc = OfflineZipformerCtcModelConfig().apply {
-          this.model = resolvedCtcModelPath
-        }
-        modelConfig.modelType = "zipformer2_ctc"
       }
       "moonshine" -> {
         resolvedMoonshinePreprocessorPath = if (preprocessor.isNotBlank()) modelContext.resolveModelPath(preprocessor) else ""
@@ -1517,19 +1470,11 @@ class SherpaOnnxModule : Module() {
     }
 
     when (modelType) {
-      "transducer", "zipformer", "zipformer2" -> {
+      "transducer" -> {
         ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
         ensureModelPathReadable(modelContext, resolvedEncoderPath, "encoder")
         ensureModelPathReadable(modelContext, resolvedDecoderPath, "decoder")
         ensureModelPathReadable(modelContext, resolvedJoinerPath, "joiner")
-      }
-      "paraformer" -> {
-        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
-        ensureModelPathReadable(modelContext, resolvedParaformerModelPath, "model")
-      }
-      "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
-        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
-        ensureModelPathReadable(modelContext, resolvedCtcModelPath, "model")
       }
       "moonshine" -> {
         ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
@@ -1590,8 +1535,6 @@ class SherpaOnnxModule : Module() {
           encoderPath = resolvedEncoderPath,
           decoderPath = resolvedDecoderPath,
           joinerPath = resolvedJoinerPath,
-          paraformerModelPath = resolvedParaformerModelPath,
-          ctcModelPath = resolvedCtcModelPath,
           moonshinePreprocessorPath = resolvedMoonshinePreprocessorPath,
           moonshineEncoderPath = resolvedMoonshineEncoderPath,
           moonshineUncachedDecoderPath = resolvedMoonshineUncachedDecoderPath,
@@ -1696,8 +1639,6 @@ class SherpaOnnxModule : Module() {
     encoderPath: String,
     decoderPath: String,
     joinerPath: String,
-    paraformerModelPath: String,
-    ctcModelPath: String,
     moonshinePreprocessorPath: String,
     moonshineEncoderPath: String,
     moonshineUncachedDecoderPath: String,
@@ -1724,8 +1665,6 @@ class SherpaOnnxModule : Module() {
       "encoder=$encoderPath",
       "decoder=$decoderPath",
       "joiner=$joinerPath",
-      "paraformerModel=$paraformerModelPath",
-      "ctcModel=$ctcModelPath",
       "moonshinePreprocessor=$moonshinePreprocessorPath",
       "moonshineEncoder=$moonshineEncoderPath",
       "moonshineUncachedDecoder=$moonshineUncachedDecoderPath",

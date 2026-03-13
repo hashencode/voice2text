@@ -7,14 +7,8 @@ export type SherpaTranscribeOptions = {
     modelDir?: string;
     modelType?:
         | 'transducer'
-        | 'zipformer'
-        | 'zipformer2'
-        | 'zipformer2_ctc'
-        | 'zipformer_ctc'
-        | 'ctc'
-        | 'paraformer'
         | 'moonshine'
-        | 'whisper'
+        | 'funasr_nano'
         | string;
     encoder?: string;
     decoder?: string;
