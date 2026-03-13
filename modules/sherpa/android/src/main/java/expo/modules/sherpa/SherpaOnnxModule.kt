@@ -7,6 +7,7 @@ import android.media.MediaRecorder
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuation
 import com.k2fsa.sherpa.onnx.OfflinePunctuationConfig
@@ -1369,6 +1370,23 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun ensureAnyModelPathReadable(modelContext: ModelContext, resolvedPaths: List<String>, label: String) {
+    val normalized = resolvedPaths.filter { it.isNotBlank() }
+    if (normalized.isEmpty()) {
+      throw IllegalArgumentException("Model path is empty: $label")
+    }
+    val issues = mutableListOf<String>()
+    for (path in normalized) {
+      try {
+        ensureModelPathReadable(modelContext, path, label)
+        return
+      } catch (e: Exception) {
+        issues.add("${e.message ?: path}")
+      }
+    }
+    throw IllegalArgumentException("No readable model path for $label: ${issues.joinToString("; ")}")
+  }
+
   private fun transcribeWave(waveData: WaveData, options: Map<String, Any?>?): Map<String, Any?> {
     val modelContext = resolveModelContext(options)
 
@@ -1377,6 +1395,10 @@ class SherpaOnnxModule : Module() {
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
     val joiner = options?.getString("joiner") ?: "joiner.onnx"
     val model = options?.getString("model") ?: "model.onnx"
+    val preprocessor = options?.getString("preprocessor") ?: ""
+    val uncachedDecoder = options?.getString("uncachedDecoder") ?: ""
+    val cachedDecoder = options?.getString("cachedDecoder") ?: ""
+    val mergedDecoder = options?.getString("mergedDecoder") ?: "decoder_model_merged.ort"
     val encoderAdaptor = options?.getString("encoderAdaptor") ?: "encoder_adaptor.onnx"
     val llm = options?.getString("llm") ?: "llm.onnx"
     val embedding = options?.getString("embedding") ?: "embedding.onnx"
@@ -1403,6 +1425,11 @@ class SherpaOnnxModule : Module() {
     var resolvedJoinerPath = ""
     var resolvedParaformerModelPath = ""
     var resolvedCtcModelPath = ""
+    var resolvedMoonshinePreprocessorPath = ""
+    var resolvedMoonshineEncoderPath = ""
+    var resolvedMoonshineUncachedDecoderPath = ""
+    var resolvedMoonshineCachedDecoderPath = ""
+    var resolvedMoonshineMergedDecoderPath = ""
     var resolvedEncoderAdaptorPath = ""
     var resolvedLlmPath = ""
     var resolvedEmbeddingPath = ""
@@ -1450,6 +1477,21 @@ class SherpaOnnxModule : Module() {
         }
         modelConfig.modelType = "zipformer2_ctc"
       }
+      "moonshine" -> {
+        resolvedMoonshinePreprocessorPath = if (preprocessor.isNotBlank()) modelContext.resolveModelPath(preprocessor) else ""
+        resolvedMoonshineEncoderPath = modelContext.resolveModelPath(encoder)
+        resolvedMoonshineUncachedDecoderPath = if (uncachedDecoder.isNotBlank()) modelContext.resolveModelPath(uncachedDecoder) else ""
+        resolvedMoonshineCachedDecoderPath = if (cachedDecoder.isNotBlank()) modelContext.resolveModelPath(cachedDecoder) else ""
+        resolvedMoonshineMergedDecoderPath = modelContext.resolveModelPath(mergedDecoder)
+        modelConfig.moonshine = OfflineMoonshineModelConfig().apply {
+          this.preprocessor = resolvedMoonshinePreprocessorPath
+          this.encoder = resolvedMoonshineEncoderPath
+          this.uncachedDecoder = resolvedMoonshineUncachedDecoderPath
+          this.cachedDecoder = resolvedMoonshineCachedDecoderPath
+          this.mergedDecoder = resolvedMoonshineMergedDecoderPath
+        }
+        modelConfig.modelType = "moonshine"
+      }
       "funasr_nano" -> {
         val tokenizerDir =
           if (tokenizer.endsWith(".json")) {
@@ -1488,6 +1530,26 @@ class SherpaOnnxModule : Module() {
       "zipformer2_ctc", "zipformer_ctc", "ctc" -> {
         ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
         ensureModelPathReadable(modelContext, resolvedCtcModelPath, "model")
+      }
+      "moonshine" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedMoonshineEncoderPath, "encoder")
+        if (
+          resolvedMoonshineMergedDecoderPath.isBlank() &&
+          resolvedMoonshineUncachedDecoderPath.isBlank() &&
+          resolvedMoonshineCachedDecoderPath.isBlank()
+        ) {
+          throw IllegalArgumentException("Moonshine decoder path is empty")
+        }
+        ensureAnyModelPathReadable(
+          modelContext,
+          listOf(
+            resolvedMoonshineMergedDecoderPath,
+            resolvedMoonshineUncachedDecoderPath,
+            resolvedMoonshineCachedDecoderPath,
+          ),
+          "moonshineDecoder",
+        )
       }
       "funasr_nano" -> {
         ensureModelPathReadable(modelContext, resolvedEncoderAdaptorPath, "encoderAdaptor")
@@ -1530,6 +1592,11 @@ class SherpaOnnxModule : Module() {
           joinerPath = resolvedJoinerPath,
           paraformerModelPath = resolvedParaformerModelPath,
           ctcModelPath = resolvedCtcModelPath,
+          moonshinePreprocessorPath = resolvedMoonshinePreprocessorPath,
+          moonshineEncoderPath = resolvedMoonshineEncoderPath,
+          moonshineUncachedDecoderPath = resolvedMoonshineUncachedDecoderPath,
+          moonshineCachedDecoderPath = resolvedMoonshineCachedDecoderPath,
+          moonshineMergedDecoderPath = resolvedMoonshineMergedDecoderPath,
           encoderAdaptorPath = resolvedEncoderAdaptorPath,
           llmPath = resolvedLlmPath,
           embeddingPath = resolvedEmbeddingPath,
@@ -1631,6 +1698,11 @@ class SherpaOnnxModule : Module() {
     joinerPath: String,
     paraformerModelPath: String,
     ctcModelPath: String,
+    moonshinePreprocessorPath: String,
+    moonshineEncoderPath: String,
+    moonshineUncachedDecoderPath: String,
+    moonshineCachedDecoderPath: String,
+    moonshineMergedDecoderPath: String,
     encoderAdaptorPath: String,
     llmPath: String,
     embeddingPath: String,
@@ -1654,6 +1726,11 @@ class SherpaOnnxModule : Module() {
       "joiner=$joinerPath",
       "paraformerModel=$paraformerModelPath",
       "ctcModel=$ctcModelPath",
+      "moonshinePreprocessor=$moonshinePreprocessorPath",
+      "moonshineEncoder=$moonshineEncoderPath",
+      "moonshineUncachedDecoder=$moonshineUncachedDecoderPath",
+      "moonshineCachedDecoder=$moonshineCachedDecoderPath",
+      "moonshineMergedDecoder=$moonshineMergedDecoderPath",
       "encoderAdaptor=$encoderAdaptorPath",
       "llm=$llmPath",
       "embedding=$embeddingPath",

@@ -58,6 +58,10 @@ const PROFILE_MODEL_MAPPING: Record<
         streamingModel: 'zh-streaming',
         nonStreamingModel: 'en',
     },
+    mix: {
+        streamingModel: 'zh-streaming',
+        nonStreamingModel: 'mix',
+    },
 };
 
 function phaseToText(progress: DownloadModelProgress): string {
@@ -168,7 +172,7 @@ export default function Setting() {
     }, []);
 
     const handleRecognitionProfileChange = useCallback((value: string) => {
-        if (value !== 'zh-cn' && value !== 'en') {
+        if (value !== 'zh-cn' && value !== 'en' && value !== 'mix') {
             return;
         }
         const profile = value as RecognitionProfileId;
@@ -337,6 +341,9 @@ export default function Setting() {
                                 </TabsTrigger>
                                 <TabsTrigger value="en" style={{ width: 'auto' }}>
                                     en
+                                </TabsTrigger>
+                                <TabsTrigger value="mix" style={{ width: 'auto' }}>
+                                    mix
                                 </TabsTrigger>
                             </TabsList>
                         </Tabs>

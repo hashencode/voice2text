@@ -5,11 +5,25 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?: 'transducer' | 'zipformer' | 'zipformer2' | 'zipformer2_ctc' | 'zipformer_ctc' | 'ctc' | 'paraformer' | 'whisper' | string;
+    modelType?:
+        | 'transducer'
+        | 'zipformer'
+        | 'zipformer2'
+        | 'zipformer2_ctc'
+        | 'zipformer_ctc'
+        | 'ctc'
+        | 'paraformer'
+        | 'moonshine'
+        | 'whisper'
+        | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
     model?: string;
+    preprocessor?: string;
+    uncachedDecoder?: string;
+    cachedDecoder?: string;
+    mergedDecoder?: string;
     encoderAdaptor?: string;
     llm?: string;
     embedding?: string;
@@ -129,22 +143,36 @@ export const SHERPA_MODEL_PRESETS = {
         requiredFiles: ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
     },
     zh: {
-        modelType: 'zipformer2_ctc',
+        modelType: 'moonshine',
         modelDirAsset: 'sherpa/asr/zh',
         outputMode: 'nonStreaming',
-        enableDenoise: true,
+        enableDenoise: false,
         denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
-        enablePunctuation: true,
+        enablePunctuation: false,
         punctuationModel: 'sherpa/punctuation/zh-en.onnx',
-        model: 'model.onnx',
+        encoder: 'encoder_model.ort',
+        mergedDecoder: 'decoder_model_merged.ort',
         tokens: 'tokens.txt',
-        requiredFiles: ['model.onnx', 'tokens.txt'],
+        requiredFiles: ['encoder_model.ort', 'decoder_model_merged.ort', 'tokens.txt'],
     },
     en: {
-        modelType: 'funasr_nano',
+        modelType: 'moonshine',
         modelDirAsset: 'sherpa/asr/en',
         outputMode: 'nonStreaming',
-        enableDenoise: true,
+        enableDenoise: false,
+        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        enablePunctuation: false,
+        punctuationModel: 'sherpa/punctuation/en.onnx',
+        encoder: 'encoder_model.ort',
+        mergedDecoder: 'decoder_model_merged.ort',
+        tokens: 'tokens.txt',
+        requiredFiles: ['encoder_model.ort', 'decoder_model_merged.ort', 'tokens.txt'],
+    },
+    mix: {
+        modelType: 'funasr_nano',
+        modelDirAsset: 'sherpa/asr/mix',
+        outputMode: 'nonStreaming',
+        enableDenoise: false,
         denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/punctuation/zh-en.onnx',

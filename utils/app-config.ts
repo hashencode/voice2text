@@ -15,7 +15,7 @@ type BoolConfigKey =
     | typeof APP_CONFIG_KEYS.vadEnabled
     | typeof APP_CONFIG_KEYS.speakerDiarizationEnabled
     | typeof APP_CONFIG_KEYS.denoiseEnabled;
-export type RecognitionProfileId = 'zh-cn' | 'en';
+export type RecognitionProfileId = 'zh-cn' | 'en' | 'mix';
 
 const DEFAULT_RECOGNITION_PROFILE: RecognitionProfileId = 'zh-cn';
 
@@ -72,11 +72,11 @@ export function setDenoiseEnabled(value: boolean): void {
 
 export function getRecognitionProfile(): RecognitionProfileId {
     const value = storage.getString(APP_CONFIG_KEYS.recognitionProfile) as RecognitionProfileId | 'zh-en' | undefined;
-    if (value === 'zh-cn' || value === 'en') {
+    if (value === 'zh-cn' || value === 'en' || value === 'mix') {
         return value;
     }
     if (value === 'zh-en') {
-        return 'zh-cn';
+        return 'mix';
     }
     return DEFAULT_RECOGNITION_PROFILE;
 }
@@ -86,7 +86,7 @@ export function setRecognitionProfile(value: RecognitionProfileId): void {
 }
 
 export function getPunctuationModelByProfile(profile: RecognitionProfileId = getRecognitionProfile()): string {
-    if (profile.includes('zh')) {
+    if (profile === 'zh-cn' || profile === 'mix') {
         return 'sherpa/punctuation/zh-en.onnx';
     }
     return 'sherpa/punctuation/en.onnx';
