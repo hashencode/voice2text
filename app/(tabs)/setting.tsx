@@ -46,20 +46,16 @@ const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/mode
 const PROFILE_MODEL_MAPPING: Record<
     RecognitionProfileId,
     {
-        streamingModel: SherpaModelId;
         nonStreamingModel: SherpaModelId;
     }
 > = {
     'zh-cn': {
-        streamingModel: 'zh-streaming',
         nonStreamingModel: 'zh',
     },
     en: {
-        streamingModel: 'zh-streaming',
         nonStreamingModel: 'en',
     },
     mix: {
-        streamingModel: 'zh-streaming',
         nonStreamingModel: 'mix',
     },
 };
@@ -87,7 +83,6 @@ export default function Setting() {
     const modelIds = useMemo(() => Object.keys(SHERPA_MODEL_PRESETS) as SherpaModelId[], []);
     const [items, setItems] = useState<Record<string, ModelItemState>>({});
     const [refreshing, setRefreshing] = useState(false);
-    const [streamingCurrentModel, setStreamingCurrentModel] = useState<SherpaModelId | null>(null);
     const [nonStreamingCurrentModel, setNonStreamingCurrentModel] = useState<SherpaModelId | null>(null);
     const [selectingModelId, setSelectingModelId] = useState<SherpaModelId | null>(null);
     const [vadEnabled, setVadEnabledState] = useState(getVadEnabled());
@@ -132,7 +127,6 @@ export default function Setting() {
         setRefreshing(true);
         try {
             await Promise.all(modelIds.map(modelId => refreshOne(modelId)));
-            setStreamingCurrentModel(getCurrentModelByOutputMode('streaming'));
             setNonStreamingCurrentModel(getCurrentModelByOutputMode('nonStreaming'));
             setRecognitionProfileState(getRecognitionProfile());
         } finally {
@@ -180,9 +174,7 @@ export default function Setting() {
 
         setRecognitionProfile(profile);
         setRecognitionProfileState(profile);
-        setCurrentModelByOutputMode('streaming', mapping.streamingModel);
         setCurrentModelByOutputMode('nonStreaming', mapping.nonStreamingModel);
-        setStreamingCurrentModel(mapping.streamingModel);
         setNonStreamingCurrentModel(mapping.nonStreamingModel);
     }, []);
 
@@ -235,15 +227,10 @@ export default function Setting() {
 
     const handleSetCurrentModel = useCallback(
         (modelId: SherpaModelId) => {
-            const outputMode = SHERPA_MODEL_PRESETS[modelId].outputMode;
             setSelectingModelId(modelId);
             try {
-                setCurrentModelByOutputMode(outputMode, modelId);
-                if (outputMode === 'streaming') {
-                    setStreamingCurrentModel(modelId);
-                } else {
-                    setNonStreamingCurrentModel(modelId);
-                }
+                setCurrentModelByOutputMode('nonStreaming', modelId);
+                setNonStreamingCurrentModel(modelId);
             } catch (error) {
                 setItem(modelId, {
                     errorText: `设置当前模型失败: ${(error as Error).message}`,
@@ -257,8 +244,7 @@ export default function Setting() {
 
     const renderModelCard = useCallback(
         (modelId: SherpaModelId) => {
-            const outputMode = SHERPA_MODEL_PRESETS[modelId].outputMode;
-            const isCurrent = outputMode === 'streaming' ? streamingCurrentModel === modelId : nonStreamingCurrentModel === modelId;
+            const isCurrent = nonStreamingCurrentModel === modelId;
             const item = items[modelId] ?? {
                 installed: false,
                 version: null,
@@ -299,7 +285,7 @@ export default function Setting() {
                 </View>
             );
         },
-        [handleInstall, handleSetCurrentModel, handleUninstall, items, nonStreamingCurrentModel, selectingModelId, streamingCurrentModel],
+        [handleInstall, handleSetCurrentModel, handleUninstall, items, nonStreamingCurrentModel, selectingModelId],
     );
 
     return (

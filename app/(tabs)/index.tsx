@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 
@@ -9,38 +9,20 @@ import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, {
-    getRealtimeRecordingRootDir,
     getInstalledModelVersion,
-    SHERPA_MODEL_PRESETS,
     type SherpaModelId,
-    type SherpaOutputMode,
-    type SherpaRealtimeResultEvent,
-    type SherpaRealtimeStateEvent,
 } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import {
     getDenoiseEnabled,
     getSpeakerDiarizationEnabled,
     getSpeakerEmbeddingModelByProfile,
-    getVadEnabled,
 } from '~/utils/app-config';
 import { getCurrentModelByOutputMode } from '~/utils/model-selection';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/tools';
 
 const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zh';
-const DEFAULT_STREAMING_MODEL: SherpaModelId = 'zh-streaming';
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/speaker-diarization/pyannote-segmentation.onnx';
-
-function resolveSelectedModel(outputMode: SherpaOutputMode, fallback: SherpaModelId): SherpaModelId {
-    const selected = getCurrentModelByOutputMode(outputMode);
-    if (!selected || !(selected in SHERPA_MODEL_PRESETS)) {
-        return fallback;
-    }
-    if (SHERPA_MODEL_PRESETS[selected].outputMode !== outputMode) {
-        return fallback;
-    }
-    return selected;
-}
 
 function compareModelVersion(left: string, right: string): number {
     const leftParts = left.split('.').map(part => Number.parseInt(part, 10));
@@ -64,11 +46,6 @@ export default function Home() {
     const [conversionText, setConversionText] = useState('');
     const [conversionElapsedMs, setConversionElapsedMs] = useState<number | null>(null);
     const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
-    const [realtimeState, setRealtimeState] = useState('stopped');
-    const [realtimePartialText, setRealtimePartialText] = useState('');
-    const [realtimeFinalText, setRealtimeFinalText] = useState('');
-    const [realtimeVadInfo, setRealtimeVadInfo] = useState('unknown');
-    const [vadEnabled, setVadEnabled] = useState(getVadEnabled());
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabled] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabled] = useState(getDenoiseEnabled());
     const [isRecordingByButton, setIsRecordingByButton] = useState(false);
@@ -76,25 +53,19 @@ export default function Home() {
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
 
     const checkCurrentModelVersions = useCallback(async () => {
-        const currentModels: { outputMode: SherpaOutputMode; modelId: SherpaModelId }[] = [
-            { outputMode: 'nonStreaming', modelId: resolveSelectedModel('nonStreaming', DEFAULT_NON_STREAMING_MODEL) },
-            { outputMode: 'streaming', modelId: resolveSelectedModel('streaming', DEFAULT_STREAMING_MODEL) },
-        ];
-
-        for (const item of currentModels) {
-            const minimumVersion = MIN_MODEL_VERSION_BY_MODEL_ID[item.modelId];
-            if (!minimumVersion) {
-                continue;
-            }
-            const installedVersion = await getInstalledModelVersion(item.modelId);
-            if (!installedVersion) {
-                continue;
-            }
-            if (compareModelVersion(installedVersion, minimumVersion) < 0) {
-                console.warn(
-                    `[model-version-check] ${item.outputMode} current model(${item.modelId}) version(${installedVersion}) is lower than minimum required(${minimumVersion})`,
-                );
-            }
+        const currentModelId = getCurrentModelByOutputMode('nonStreaming') ?? DEFAULT_NON_STREAMING_MODEL;
+        const minimumVersion = MIN_MODEL_VERSION_BY_MODEL_ID[currentModelId];
+        if (!minimumVersion) {
+            return;
+        }
+        const installedVersion = await getInstalledModelVersion(currentModelId);
+        if (!installedVersion) {
+            return;
+        }
+        if (compareModelVersion(installedVersion, minimumVersion) < 0) {
+            console.warn(
+                `[model-version-check] current model(${currentModelId}) version(${installedVersion}) is lower than minimum required(${minimumVersion})`,
+            );
         }
     }, []);
 
@@ -103,8 +74,8 @@ export default function Home() {
         onError: error => console.error('Error:', error),
     });
 
-    const runRecognitionPreflight = useCallback(async (kind: 'file' | 'recording' | 'realtime'): Promise<boolean> => {
-        const modelId = kind === 'realtime' ? getCurrentModelByOutputMode('streaming') : getCurrentModelByOutputMode('nonStreaming');
+    const runRecognitionPreflight = useCallback(async (kind: 'file' | 'recording'): Promise<boolean> => {
+        const modelId = getCurrentModelByOutputMode('nonStreaming');
         return runRecognitionPreflightTool({
             kind,
             modelId,
@@ -189,75 +160,15 @@ export default function Home() {
         }
     };
 
-    const startRealtime = async () => {
-        const canContinue = await runRecognitionPreflight('realtime');
-        if (!canContinue) {
-            setRealtimePartialText('识别错误: 权限未授予或模型未安装');
-            return;
-        }
-        const currentModelId = getCurrentModelByOutputMode('streaming');
-        setRealtimePartialText('');
-        setRealtimeFinalText('');
-        setRealtimeVadInfo('starting');
-        await SherpaOnnx.startRealtimeTranscriptionByDownloadedModel(currentModelId, {
-            sampleRate: 16000,
-            emitIntervalMs: 150,
-            enableEndpoint: false,
-            realtimeAudioSaveDir: getRealtimeRecordingRootDir(),
-            realtimeAudioSegmentSeconds: 60,
-            realtimeAudioMaxSessionSeconds: 2 * 60 * 60,
-            realtimeAudioMinFreeBytes: 300 * 1024 * 1024,
-            realtimeAudioSyncIntervalMs: 1000,
-            enableDenoise: denoiseEnabled,
-            enableVad: vadEnabled || speakerDiarizationEnabled,
-            enableSpeakerDiarization: speakerDiarizationEnabled,
-            speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
-            speakerEmbeddingModel: getSpeakerEmbeddingModelByProfile(),
-        });
-    };
-
-    const stopRealtime = async () => {
-        await SherpaOnnx.stopRealtimeTranscription();
-    };
-
     useFocusEffect(
         useCallback(() => {
             checkCurrentModelVersions().catch(error => {
                 console.error('[model-version-check] failed', error);
             });
-            setVadEnabled(getVadEnabled());
             setSpeakerDiarizationEnabled(getSpeakerDiarizationEnabled());
             setDenoiseEnabled(getDenoiseEnabled());
         }, [checkCurrentModelVersions]),
     );
-
-    useEffect(() => {
-        const resultSub = SherpaOnnx.addRealtimeResultListener((event: SherpaRealtimeResultEvent) => {
-            if (event.type === 'partial') {
-                setRealtimePartialText(event.text ?? '');
-            } else if (event.type === 'final') {
-                const text = event.text ?? '';
-                if (text) {
-                    setRealtimeFinalText(prev => (prev ? `${prev}${text}` : text));
-                }
-                setRealtimePartialText('');
-            } else if (event.type === 'error') {
-                setRealtimePartialText(`识别错误: ${event.message ?? 'unknown'}`);
-            }
-        });
-
-        const stateSub = SherpaOnnx.addRealtimeStateListener((event: SherpaRealtimeStateEvent) => {
-            setRealtimeState(event.state);
-            const vadStatus = event.vadActive ? 'active' : 'inactive';
-            const vadInfo = event.vadInfo ?? 'none';
-            setRealtimeVadInfo(`${vadStatus} | ${vadInfo}`);
-        });
-
-        return () => {
-            resultSub.remove();
-            stateSub.remove();
-        };
-    }, []);
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
@@ -271,16 +182,6 @@ export default function Home() {
                 <TextX>文件识别状态：{fileRecognitionStatusText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
                 {conversionElapsedMs === null ? null : <TextX>耗时：{(conversionElapsedMs / 1000).toFixed(2)} s</TextX>}
-                <Button onPress={startRealtime} disabled={realtimeState === 'running' || realtimeState === 'starting'}>
-                    开始实时识别
-                </Button>
-                <Button onPress={stopRealtime} disabled={realtimeState !== 'running'}>
-                    停止实时识别
-                </Button>
-                <TextX>实时状态: {realtimeState}</TextX>
-                <TextX>VAD运行状态: {realtimeVadInfo}</TextX>
-                <TextX>实时中间结果: {realtimePartialText}</TextX>
-                <TextX>实时最终结果: {realtimeFinalText}</TextX>
             </View>
         </DefaultLayout>
     );

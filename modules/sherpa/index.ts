@@ -88,7 +88,7 @@ export type SherpaRealtimeStateEvent = {
     vadInfo?: string | null;
 };
 
-export type SherpaOutputMode = 'streaming' | 'nonStreaming';
+export type SherpaOutputMode = 'nonStreaming';
 
 type SherpaRealtimeSubscription = {
     remove(): void;
@@ -116,22 +116,6 @@ type SherpaModelPreset = SherpaTranscribeOptions & {
 };
 
 export const SHERPA_MODEL_PRESETS = {
-    'zh-streaming': {
-        modelType: 'transducer',
-        modelDirAsset: 'sherpa/asr/zh-streaming',
-        outputMode: 'streaming',
-        enableDenoise: true,
-        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
-        enablePunctuation: true,
-        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
-        enableVad: true,
-        vadModel: 'sherpa/vad/ten-vad.onnx',
-        encoder: 'encoder.onnx',
-        decoder: 'decoder.onnx',
-        joiner: 'joiner.onnx',
-        tokens: 'tokens.txt',
-        requiredFiles: ['encoder.onnx', 'decoder.onnx', 'joiner.onnx', 'tokens.txt'],
-    },
     zh: {
         modelType: 'moonshine',
         modelDirAsset: 'sherpa/asr/zh',

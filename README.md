@@ -6,7 +6,6 @@
 | --- | --- | --- |
 | `en` | `moonshine-v2-en` | [Link](https://k2-fsa.github.io/sherpa/onnx/moonshine/models-v2.html#sherpa-onnx-moonshine-base-en-quantized-2026-02-27-english) |
 | `mix` | `funasr-nano-int8` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30) |
-| `zh-streaming` | `zipformer-zh-streaming` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30) |
 | `zh` | `moonshine-v2-zh` | [Link](https://k2-fsa.github.io/sherpa/onnx/moonshine/models-v2.html#sherpa-onnx-moonshine-base-zh-quantized-2026-02-27-chinese) |
 
 

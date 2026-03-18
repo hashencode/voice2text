@@ -3,14 +3,12 @@ import type { SherpaModelId, SherpaOutputMode } from '~/modules/sherpa';
 import { SHERPA_MODEL_PRESETS } from '~/modules/sherpa';
 
 export const SHERPA_MODEL_SELECTION_KEYS = {
-    streaming: 'sherpa.current.streamingModel',
     nonStreaming: 'sherpa.current.nonStreamingModel',
 } as const;
 
 const storage = createMMKV({ id: 'sherpa-model-selection' });
 const DEFAULT_MODEL_BY_OUTPUT_MODE: Record<SherpaOutputMode, SherpaModelId> = {
     nonStreaming: 'zh',
-    streaming: 'zh-streaming',
 };
 
 type GetCurrentModelOptions = {
@@ -25,7 +23,7 @@ export function getCurrentModelByOutputMode(
     outputMode: SherpaOutputMode,
     options: GetCurrentModelOptions = { withDefault: true },
 ): SherpaModelId | null {
-    const key = outputMode === 'streaming' ? SHERPA_MODEL_SELECTION_KEYS.streaming : SHERPA_MODEL_SELECTION_KEYS.nonStreaming;
+    const key = SHERPA_MODEL_SELECTION_KEYS.nonStreaming;
     const modelId = (storage.getString(key) ?? null) as SherpaModelId | null;
     if (!options.withDefault) {
         return modelId;
@@ -41,6 +39,8 @@ export function getCurrentModelByOutputMode(
 }
 
 export function setCurrentModelByOutputMode(outputMode: SherpaOutputMode, modelId: SherpaModelId): void {
-    const key = outputMode === 'streaming' ? SHERPA_MODEL_SELECTION_KEYS.streaming : SHERPA_MODEL_SELECTION_KEYS.nonStreaming;
-    storage.set(key, modelId);
+    if (outputMode !== 'nonStreaming') {
+        throw new Error(`Unsupported outputMode: ${outputMode}`);
+    }
+    storage.set(SHERPA_MODEL_SELECTION_KEYS.nonStreaming, modelId);
 }
