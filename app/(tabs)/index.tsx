@@ -10,15 +10,12 @@ import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
-import {
-    getDenoiseEnabled,
-    getSpeakerDiarizationEnabled,
-    getSpeakerEmbeddingModelByProfile,
-} from '~/utils/app-config';
+import { getDenoiseEnabled, getSpeakerDiarizationEnabled } from '~/utils/app-config';
 import { getCurrentModel } from '~/utils/model-selection';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/tools';
 
-const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/speaker-diarization/pyannote-segmentation.onnx';
+const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/speaker-diarization/speaker-diarization.onnx';
+const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
 
 function compareModelVersion(left: string, right: string): number {
     const leftParts = left.split('.').map(part => Number.parseInt(part, 10));
@@ -93,7 +90,7 @@ export default function Home() {
                 enableDenoise: denoiseEnabled,
                 enableSpeakerDiarization: speakerDiarizationEnabled,
                 speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
-                speakerEmbeddingModel: getSpeakerEmbeddingModelByProfile(),
+                speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
             });
             setConversionElapsedMs(Date.now() - startedAt);
             setConversionText(r1.text);

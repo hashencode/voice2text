@@ -81,10 +81,3 @@ export function getRecognitionProfile(): RecognitionProfileId {
 export function setRecognitionProfile(value: RecognitionProfileId): void {
     storage.set(APP_CONFIG_KEYS.recognitionProfile, value);
 }
-
-export function getSpeakerEmbeddingModelByProfile(profile: RecognitionProfileId = getRecognitionProfile()): string {
-    if (profile === 'zh-cn') {
-        return 'sherpa/speaker-recognition/zh-cn.onnx';
-    }
-    return 'sherpa/speaker-recognition/en.onnx';
-}

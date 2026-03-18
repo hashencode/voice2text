@@ -60,52 +60,16 @@ export type SherpaTranscribeResult = {
     numSamples: number;
 };
 
-export type SherpaRealtimeOptions = SherpaTranscribeOptions & {
-    emitIntervalMs?: number;
-    enableEndpoint?: boolean;
-    realtimeAudioSaveDir?: string;
-    realtimeAudioSegmentSeconds?: number;
-    realtimeAudioMaxSessionSeconds?: number;
-    realtimeAudioMinFreeBytes?: number;
-    realtimeAudioSyncIntervalMs?: number;
-};
-
-export type SherpaRealtimeResultEvent = {
-    type: 'partial' | 'final' | 'error';
-    text?: string;
-    tokens?: string[];
-    timestamps?: number[];
-    isFinal?: boolean;
-    isEndpoint?: boolean;
-    sampleRate?: number;
-    message?: string;
-};
-
-export type SherpaRealtimeStateEvent = {
-    state: 'starting' | 'running' | 'stopped' | 'error';
-    error?: string | null;
-    vadActive?: boolean;
-    vadInfo?: string | null;
-};
-
-type SherpaRealtimeSubscription = {
-    remove(): void;
-};
-
 type SherpaOnnxNative = {
     hello(): string;
-    isRealtimeTranscribing(): boolean;
     isWavRecording(): boolean;
     startWavRecording(options?: { path?: string; sampleRate?: number }): Promise<{ path: string; sampleRate: number }>;
     stopWavRecording(): Promise<{ path: string; sampleRate: number; numSamples: number }>;
-    startRealtimeTranscription(options?: SherpaRealtimeOptions): Promise<{ started: boolean }>;
-    stopRealtimeTranscription(): Promise<{ stopped: boolean }>;
     transcribeWav(path: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     transcribeAssetWav(assetPath: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     getFileSha256(filePath: string): Promise<{ size: number; sha256: string }>;
     unzipFile(zipPath: string, destDir: string): Promise<{ ok: boolean; destDir: string }>;
     copyAssetFile(assetPath: string, destPath: string): Promise<{ ok: boolean; destPath: string }>;
-    addListener(eventName: string, listener: (event: any) => void): SherpaRealtimeSubscription;
 };
 
 type SherpaModelPreset = SherpaTranscribeOptions & {
@@ -117,9 +81,9 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'moonshine',
         modelDirAsset: 'sherpa/asr/zh',
         enableDenoise: false,
-        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        denoiseModel: 'sherpa/speech-enhancement/speech-enhancement.onnx',
         enablePunctuation: false,
-        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
+        punctuationModel: 'sherpa/punctuation/punctuation.onnx',
         encoder: 'encoder_model.ort',
         mergedDecoder: 'decoder_model_merged.ort',
         tokens: 'tokens.txt',
@@ -129,9 +93,9 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'moonshine',
         modelDirAsset: 'sherpa/asr/en',
         enableDenoise: false,
-        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        denoiseModel: 'sherpa/speech-enhancement/speech-enhancement.onnx',
         enablePunctuation: false,
-        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
+        punctuationModel: 'sherpa/punctuation/punctuation.onnx',
         encoder: 'encoder_model.ort',
         mergedDecoder: 'decoder_model_merged.ort',
         tokens: 'tokens.txt',
@@ -141,9 +105,9 @@ export const SHERPA_MODEL_PRESETS = {
         modelType: 'funasr_nano',
         modelDirAsset: 'sherpa/asr/mix',
         enableDenoise: false,
-        denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
+        denoiseModel: 'sherpa/speech-enhancement/speech-enhancement.onnx',
         enablePunctuation: false,
-        punctuationModel: 'sherpa/punctuation/zh-en.onnx',
+        punctuationModel: 'sherpa/punctuation/punctuation.onnx',
         encoderAdaptor: 'encoder_adaptor.onnx',
         llm: 'llm.onnx',
         embedding: 'embedding.onnx',
@@ -160,14 +124,6 @@ export const SHERPA_MODEL_PRESETS = {
 } as const satisfies Record<string, SherpaModelPreset>;
 
 export type SherpaModelId = keyof typeof SHERPA_MODEL_PRESETS;
-
-export function getSherpaModelOptions(modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}): SherpaTranscribeOptions {
-    const { requiredFiles: _ignoredRequiredFiles, ...presetWithoutRequiredFields } = SHERPA_MODEL_PRESETS[modelId];
-    return {
-        ...presetWithoutRequiredFields,
-        ...overrides,
-    };
-}
 
 const SHERPA_CDN_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models';
 
@@ -812,8 +768,11 @@ export async function initializeBundledModel(modelId: SherpaModelId, options: In
 }
 
 export function getSherpaDownloadedModelOptions(modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}): SherpaTranscribeOptions {
-    const { modelDirAsset: _ignoredModelDirAsset, requiredFiles: _ignoredRequiredFiles, ...presetWithoutAssetPath } =
-        SHERPA_MODEL_PRESETS[modelId];
+    const {
+        modelDirAsset: _ignoredModelDirAsset,
+        requiredFiles: _ignoredRequiredFiles,
+        ...presetWithoutAssetPath
+    } = SHERPA_MODEL_PRESETS[modelId];
     return {
         ...presetWithoutAssetPath,
         modelDir: getDownloadedModelDir(modelId),
@@ -867,13 +826,15 @@ async function ensureDownloadedRuntimeModelPaths(options: SherpaTranscribeOption
 const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
 
 const SherpaOnnx = {
-    ...NativeSherpaOnnx,
-    transcribeWavByModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
-        return NativeSherpaOnnx.transcribeWav(path, getSherpaModelOptions(modelId, overrides));
-    },
-    transcribeAssetWavByModel(assetPath: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
-        return NativeSherpaOnnx.transcribeAssetWav(assetPath, getSherpaModelOptions(modelId, overrides));
-    },
+    hello: NativeSherpaOnnx.hello,
+    isWavRecording: NativeSherpaOnnx.isWavRecording,
+    startWavRecording: NativeSherpaOnnx.startWavRecording,
+    stopWavRecording: NativeSherpaOnnx.stopWavRecording,
+    transcribeWav: NativeSherpaOnnx.transcribeWav,
+    transcribeAssetWav: NativeSherpaOnnx.transcribeAssetWav,
+    getFileSha256: NativeSherpaOnnx.getFileSha256,
+    unzipFile: NativeSherpaOnnx.unzipFile,
+    copyAssetFile: NativeSherpaOnnx.copyAssetFile,
     downloadModel,
     ensureModelReady,
     initializeBundledModel,
@@ -885,24 +846,6 @@ const SherpaOnnx = {
     async transcribeWavByDownloadedModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
         const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
         return NativeSherpaOnnx.transcribeWav(path, options);
-    },
-    async transcribeAssetWavByDownloadedModel(assetPath: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
-        const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
-        return NativeSherpaOnnx.transcribeAssetWav(assetPath, options);
-    },
-    startRealtimeTranscriptionByModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
-        const options = getSherpaModelOptions(modelId, overrides);
-        return NativeSherpaOnnx.startRealtimeTranscription(options);
-    },
-    async startRealtimeTranscriptionByDownloadedModel(modelId: SherpaModelId, overrides: SherpaRealtimeOptions = {}) {
-        const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
-        return NativeSherpaOnnx.startRealtimeTranscription(options);
-    },
-    addRealtimeResultListener(listener: (event: SherpaRealtimeResultEvent) => void): SherpaRealtimeSubscription {
-        return NativeSherpaOnnx.addListener('onRealtimeTranscription', listener);
-    },
-    addRealtimeStateListener(listener: (event: SherpaRealtimeStateEvent) => void): SherpaRealtimeSubscription {
-        return NativeSherpaOnnx.addListener('onRealtimeState', listener);
     },
 };
 

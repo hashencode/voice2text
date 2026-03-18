@@ -2,7 +2,7 @@ import { AudioModule } from 'expo-audio';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { isModelDownloaded, type SherpaModelId } from '~/modules/sherpa';
 
-export type RecognitionPreflightKind = 'file' | 'recording' | 'realtime';
+export type RecognitionPreflightKind = 'file' | 'recording';
 
 async function ensureFileAccessPermission(): Promise<boolean> {
     if (Platform.OS !== 'android') {

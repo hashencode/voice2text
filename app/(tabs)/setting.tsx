@@ -13,7 +13,6 @@ import {
     getInstalledModelVersion,
     isModelDownloaded,
     SHERPA_MODEL_PRESETS,
-    uninstallModel,
     type DownloadModelProgress,
     type SherpaModelId,
 } from '~/modules/sherpa';
@@ -204,27 +203,6 @@ export default function Setting() {
         [refreshOne, setItem],
     );
 
-    const handleUninstall = useCallback(
-        async (modelId: SherpaModelId) => {
-            setItem(modelId, {
-                busy: true,
-                errorText: '',
-                statusText: '卸载中',
-            });
-            try {
-                await uninstallModel(modelId);
-                await refreshOne(modelId);
-            } catch (error) {
-                setItem(modelId, {
-                    busy: false,
-                    errorText: `卸载失败: ${(error as Error).message}`,
-                    statusText: '卸载失败',
-                });
-            }
-        },
-        [refreshOne, setItem],
-    );
-
     const handleSetCurrentModel = useCallback(
         (modelId: SherpaModelId) => {
             setSelectingModelId(modelId);
@@ -285,7 +263,7 @@ export default function Setting() {
                 </View>
             );
         },
-        [currentModel, handleInstall, handleSetCurrentModel, handleUninstall, items, selectingModelId],
+        [currentModel, handleInstall, handleSetCurrentModel, items, selectingModelId],
     );
 
     return (

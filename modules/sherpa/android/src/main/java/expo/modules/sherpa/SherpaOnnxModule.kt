@@ -360,17 +360,7 @@ class SherpaOnnxModule : Module() {
           outFile.parentFile?.mkdirs()
 
           val normalizedAssetPath = assetPath.trim().removePrefix("/")
-          val candidateAssetPaths = linkedSetOf<String>()
-          candidateAssetPaths.add(normalizedAssetPath)
-          candidateAssetPaths.add(normalizedAssetPath.removePrefix("assets/"))
-          if (normalizedAssetPath.startsWith("sherpa/")) {
-            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/"))
-          }
-          if (normalizedAssetPath.startsWith("sherpa/asr/")) {
-            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/"))
-            candidateAssetPaths.add(normalizedAssetPath.removePrefix("sherpa/asr/"))
-            candidateAssetPaths.add("asr/${normalizedAssetPath.removePrefix("sherpa/asr/")}")
-          }
+          val candidateAssetPaths = buildAssetCandidates(normalizedAssetPath)
 
           var lastError: Exception? = null
           var copied = false
@@ -2108,6 +2098,6 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_REALTIME_SAVE_MIN_FREE_BYTES = 300L * 1024L * 1024L
     private const val DEFAULT_REALTIME_SAVE_SYNC_INTERVAL_MS = 1_000L
     private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/speaker-diarization/pyannote-segmentation.onnx"
-    private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/speaker-recognition/zh-cn.onnx"
+    private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/onnx/speaker-recognition.onnx"
   }
 }
