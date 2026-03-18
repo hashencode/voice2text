@@ -54,9 +54,6 @@ export default function Home() {
     const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabled] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabled] = useState(getDenoiseEnabled());
-    const [isRecordingByButton, setIsRecordingByButton] = useState(false);
-    const [recordingActionLoading, setRecordingActionLoading] = useState(false);
-    const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
     const [vadSegments, setVadSegments] = useState<VadSegmentItem[]>([]);
     const [segmentRecognitionMap, setSegmentRecognitionMap] = useState<Record<string, SegmentRecognitionState>>({});
     const [playingVadPath, setPlayingVadPath] = useState<string | null>(null);
@@ -233,45 +230,6 @@ export default function Home() {
         [denoiseEnabled, runRecognitionPreflight],
     );
 
-    const toggleRecordAndTranscribe = async () => {
-        if (recordingActionLoading) {
-            return;
-        }
-
-        setRecordingActionLoading(true);
-        try {
-            if (!isRecordingByButton) {
-                const canContinue = await runRecognitionPreflight('recording');
-                if (!canContinue) {
-                    setRecordingStatusText('录音前置检查未通过');
-                    return;
-                }
-
-                await SherpaOnnx.startWavRecording({ sampleRate: 16000 });
-                setIsRecordingByButton(true);
-                setRecordingStatusText('录音中，再次点击停止并识别');
-                return;
-            }
-
-            const wavResult = await SherpaOnnx.stopWavRecording();
-            setIsRecordingByButton(false);
-
-            if (!wavResult.path) {
-                setRecordingStatusText('停止录音失败，未拿到音频文件');
-                return;
-            }
-
-            setRecordingStatusText('录音完成，识别中...');
-            await handleConversion(wavResult.path);
-            setRecordingStatusText('识别完成');
-        } catch (error) {
-            setIsRecordingByButton(false);
-            setRecordingStatusText(`录音/识别失败: ${(error as Error).message}`);
-        } finally {
-            setRecordingActionLoading(false);
-        }
-    };
-
     useFocusEffect(
         useCallback(() => {
             checkCurrentModelVersions().catch(error => {
@@ -299,10 +257,6 @@ export default function Home() {
             <Stack.Screen options={{ headerShown: false }} />
             <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-6">
                 <Button onPress={handlePickDocument}>选择文件</Button>
-                <Button loading={recordingActionLoading} onPress={toggleRecordAndTranscribe}>
-                    {isRecordingByButton ? '停止录音并识别' : '开始录音'}
-                </Button>
-                <TextX>录音状态：{recordingStatusText}</TextX>
                 <TextX>文件识别状态：{fileRecognitionStatusText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
                 {conversionElapsedMs === null ? null : <TextX>耗时：{(conversionElapsedMs / 1000).toFixed(2)} s</TextX>}

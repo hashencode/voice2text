@@ -1,3 +1,5 @@
+todo: 我观察到 录音的时候，使用的是 SherpaOnnx.startWavRecording()，我想知道我如果app崩溃闪退、停电关机、app直接被用户退出、被系统级的电话占用麦克风等情况下，录制的音频数据能够完整的保存下来吗？
+
 ### ASR Models
 
 语音识别模型
