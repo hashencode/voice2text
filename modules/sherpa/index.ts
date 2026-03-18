@@ -88,8 +88,6 @@ export type SherpaRealtimeStateEvent = {
     vadInfo?: string | null;
 };
 
-export type SherpaOutputMode = 'nonStreaming';
-
 type SherpaRealtimeSubscription = {
     remove(): void;
 };
@@ -111,7 +109,6 @@ type SherpaOnnxNative = {
 };
 
 type SherpaModelPreset = SherpaTranscribeOptions & {
-    outputMode: SherpaOutputMode;
     requiredFiles: readonly string[];
 };
 
@@ -119,7 +116,6 @@ export const SHERPA_MODEL_PRESETS = {
     zh: {
         modelType: 'moonshine',
         modelDirAsset: 'sherpa/asr/zh',
-        outputMode: 'nonStreaming',
         enableDenoise: false,
         denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
         enablePunctuation: false,
@@ -132,7 +128,6 @@ export const SHERPA_MODEL_PRESETS = {
     en: {
         modelType: 'moonshine',
         modelDirAsset: 'sherpa/asr/en',
-        outputMode: 'nonStreaming',
         enableDenoise: false,
         denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
         enablePunctuation: false,
@@ -145,7 +140,6 @@ export const SHERPA_MODEL_PRESETS = {
     mix: {
         modelType: 'funasr_nano',
         modelDirAsset: 'sherpa/asr/mix',
-        outputMode: 'nonStreaming',
         enableDenoise: false,
         denoiseModel: 'sherpa/speech-enhancement/gtcrn-simple.onnx',
         enablePunctuation: false,
@@ -168,11 +162,7 @@ export const SHERPA_MODEL_PRESETS = {
 export type SherpaModelId = keyof typeof SHERPA_MODEL_PRESETS;
 
 export function getSherpaModelOptions(modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}): SherpaTranscribeOptions {
-    const {
-        outputMode: _ignoredOutputMode,
-        requiredFiles: _ignoredRequiredFiles,
-        ...presetWithoutRequiredFields
-    } = SHERPA_MODEL_PRESETS[modelId];
+    const { requiredFiles: _ignoredRequiredFiles, ...presetWithoutRequiredFields } = SHERPA_MODEL_PRESETS[modelId];
     return {
         ...presetWithoutRequiredFields,
         ...overrides,
@@ -822,12 +812,8 @@ export async function initializeBundledModel(modelId: SherpaModelId, options: In
 }
 
 export function getSherpaDownloadedModelOptions(modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}): SherpaTranscribeOptions {
-    const {
-        modelDirAsset: _ignoredModelDirAsset,
-        outputMode: _ignoredOutputMode,
-        requiredFiles: _ignoredRequiredFiles,
-        ...presetWithoutAssetPath
-    } = SHERPA_MODEL_PRESETS[modelId];
+    const { modelDirAsset: _ignoredModelDirAsset, requiredFiles: _ignoredRequiredFiles, ...presetWithoutAssetPath } =
+        SHERPA_MODEL_PRESETS[modelId];
     return {
         ...presetWithoutAssetPath,
         modelDir: getDownloadedModelDir(modelId),

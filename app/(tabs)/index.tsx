@@ -8,20 +8,16 @@ import { DefaultLayout } from '~/components/DefaultLayout';
 import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
 import { useFilePicker } from '~/hooks/useFilePicker';
-import SherpaOnnx, {
-    getInstalledModelVersion,
-    type SherpaModelId,
-} from '~/modules/sherpa';
+import SherpaOnnx, { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import {
     getDenoiseEnabled,
     getSpeakerDiarizationEnabled,
     getSpeakerEmbeddingModelByProfile,
 } from '~/utils/app-config';
-import { getCurrentModelByOutputMode } from '~/utils/model-selection';
+import { getCurrentModel } from '~/utils/model-selection';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/tools';
 
-const DEFAULT_NON_STREAMING_MODEL: SherpaModelId = 'zh';
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/speaker-diarization/pyannote-segmentation.onnx';
 
 function compareModelVersion(left: string, right: string): number {
@@ -53,7 +49,7 @@ export default function Home() {
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
 
     const checkCurrentModelVersions = useCallback(async () => {
-        const currentModelId = getCurrentModelByOutputMode('nonStreaming') ?? DEFAULT_NON_STREAMING_MODEL;
+        const currentModelId = getCurrentModel();
         const minimumVersion = MIN_MODEL_VERSION_BY_MODEL_ID[currentModelId];
         if (!minimumVersion) {
             return;
@@ -75,7 +71,7 @@ export default function Home() {
     });
 
     const runRecognitionPreflight = useCallback(async (kind: 'file' | 'recording'): Promise<boolean> => {
-        const modelId = getCurrentModelByOutputMode('nonStreaming');
+        const modelId = getCurrentModel();
         return runRecognitionPreflightTool({
             kind,
             modelId,
@@ -91,7 +87,7 @@ export default function Home() {
         setFileRecognitionStatusText('文件识别中...');
         setConversionElapsedMs(null);
         try {
-            const currentModelId = getCurrentModelByOutputMode('nonStreaming');
+            const currentModelId = getCurrentModel();
             const startedAt = Date.now();
             const r1 = await SherpaOnnx.transcribeWavByDownloadedModel(uri, currentModelId, {
                 enableDenoise: denoiseEnabled,
