@@ -54,8 +54,8 @@ const PROFILE_MODEL_MAPPING: Record<
     en: {
         model: 'en',
     },
-    mix: {
-        model: 'mix',
+    universal: {
+        model: 'universal',
     },
 };
 
@@ -165,7 +165,7 @@ export default function Setting() {
     }, []);
 
     const handleRecognitionProfileChange = useCallback((value: string) => {
-        if (value !== 'zh-cn' && value !== 'en' && value !== 'mix') {
+        if (value !== 'zh-cn' && value !== 'en' && value !== 'universal') {
             return;
         }
         const profile = value as RecognitionProfileId;
@@ -306,8 +306,8 @@ export default function Setting() {
                                 <TabsTrigger value="en" style={{ width: 'auto' }}>
                                     en
                                 </TabsTrigger>
-                                <TabsTrigger value="mix" style={{ width: 'auto' }}>
-                                    mix
+                                <TabsTrigger value="universal" style={{ width: 'auto' }}>
+                                    universal
                                 </TabsTrigger>
                             </TabsList>
                         </Tabs>

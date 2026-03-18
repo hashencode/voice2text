@@ -15,7 +15,7 @@ type BoolConfigKey =
     | typeof APP_CONFIG_KEYS.vadEnabled
     | typeof APP_CONFIG_KEYS.speakerDiarizationEnabled
     | typeof APP_CONFIG_KEYS.denoiseEnabled;
-export type RecognitionProfileId = 'zh-cn' | 'en' | 'mix';
+export type RecognitionProfileId = 'zh-cn' | 'en' | 'universal';
 
 const DEFAULT_RECOGNITION_PROFILE: RecognitionProfileId = 'zh-cn';
 
@@ -72,7 +72,7 @@ export function setDenoiseEnabled(value: boolean): void {
 
 export function getRecognitionProfile(): RecognitionProfileId {
     const value = storage.getString(APP_CONFIG_KEYS.recognitionProfile) as RecognitionProfileId | undefined;
-    if (value === 'zh-cn' || value === 'en' || value === 'mix') {
+    if (value === 'zh-cn' || value === 'en' || value === 'universal') {
         return value;
     }
     return DEFAULT_RECOGNITION_PROFILE;

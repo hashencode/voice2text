@@ -101,9 +101,9 @@ export const SHERPA_MODEL_PRESETS = {
         tokens: 'tokens.txt',
         requiredFiles: ['encoder_model.ort', 'decoder_model_merged.ort', 'tokens.txt'],
     },
-    mix: {
+    universal: {
         modelType: 'funasr_nano',
-        modelDirAsset: 'sherpa/asr/mix',
+        modelDirAsset: 'sherpa/asr/universal',
         enableDenoise: false,
         denoiseModel: 'sherpa/speech-enhancement/speech-enhancement.onnx',
         enablePunctuation: false,
