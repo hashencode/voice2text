@@ -25,12 +25,6 @@ import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
-import com.k2fsa.sherpa.onnx.OnlineModelConfig
-import com.k2fsa.sherpa.onnx.OnlineRecognizer
-import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
-import com.k2fsa.sherpa.onnx.OnlineRecognizerResult
-import com.k2fsa.sherpa.onnx.OnlineStream
-import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.FastClusteringConfig
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
@@ -58,20 +52,7 @@ import java.util.zip.ZipInputStream
 
 class SherpaOnnxModule : Module() {
   private val executor: ExecutorService = Executors.newSingleThreadExecutor()
-  private val realtimeExecutor: ExecutorService = Executors.newSingleThreadExecutor()
   private val wavRecordExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-
-  @Volatile
-  private var realtimeRunning = false
-
-  @Volatile
-  private var realtimeAudioRecord: AudioRecord? = null
-
-  @Volatile
-  private var realtimeRecognizer: OnlineRecognizer? = null
-
-  @Volatile
-  private var realtimeStream: OnlineStream? = null
 
   @Volatile
   private var wavRecordingRunning = false
@@ -91,7 +72,6 @@ class SherpaOnnxModule : Module() {
   @Volatile
   private var wavStopLatch: CountDownLatch? = null
 
-  private val realtimeLock = Any()
   private val wavLock = Any()
   private val offlineCacheLock = Any()
 
@@ -103,23 +83,16 @@ class SherpaOnnxModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
-    Events(REALTIME_EVENT_NAME, REALTIME_STATE_EVENT_NAME)
 
     OnDestroy {
-      stopRealtimeInternal()
       stopWavRecordingInternal()
       clearOfflineRecognizerCache()
       executor.shutdownNow()
-      realtimeExecutor.shutdownNow()
       wavRecordExecutor.shutdownNow()
     }
 
     Function("hello") {
       "Sherpa ready"
-    }
-
-    Function("isRealtimeTranscribing") {
-      realtimeRunning
     }
 
     Function("isWavRecording") {
@@ -206,32 +179,6 @@ class SherpaOnnxModule : Module() {
           ),
         )
       }
-    }
-
-    AsyncFunction("startRealtimeTranscription") { options: Map<String, Any?>?, promise: Promise ->
-      synchronized(realtimeLock) {
-        if (realtimeRunning) {
-          promise.reject("ERR_SHERPA_REALTIME_ALREADY_RUNNING", "Realtime transcription is already running", null)
-          return@AsyncFunction
-        }
-        realtimeRunning = true
-      }
-
-      val effectiveOptions = options ?: emptyMap()
-      realtimeExecutor.execute {
-        runRealtimeTranscription(effectiveOptions)
-      }
-      promise.resolve(mapOf("started" to true))
-    }
-
-    AsyncFunction("stopRealtimeTranscription") { promise: Promise ->
-      val wasRunning = realtimeRunning
-      stopRealtimeInternal()
-      promise.resolve(
-        mapOf(
-          "stopped" to wasRunning,
-        ),
-      )
     }
 
     AsyncFunction("transcribeWav") { wavPath: String, options: Map<String, Any?>?, promise: Promise ->
@@ -408,402 +355,6 @@ class SherpaOnnxModule : Module() {
     }
   }
 
-  private fun runRealtimeTranscription(options: Map<String, Any?>) {
-    var recognizer: OnlineRecognizer? = null
-    var stream: OnlineStream? = null
-    var denoiser: OfflineSpeechDenoiser? = null
-    var punctuation: OfflinePunctuation? = null
-    var vad: Vad? = null
-    var speakerDiarization: OfflineSpeakerDiarization? = null
-    var speakerExtractor: SpeakerEmbeddingExtractor? = null
-    var speakerManager: SpeakerEmbeddingManager? = null
-    var audioRecord: AudioRecord? = null
-    var lastText = ""
-    var vadActive = false
-    var vadInfo = "disabled"
-    var denoiseInfo = "disabled"
-    var punctuationInfo = "disabled"
-    var saveInfo = "disabled"
-    var nextSpeakerIndex = 0
-    var audioSaveSession: RealtimeAudioSession? = null
-
-    try {
-      sendRealtimeState("starting")
-
-      val modelContext = resolveModelContext(options)
-      val modelType = options.getString("modelType") ?: "transducer"
-      val sampleRate = options.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
-      val featureDim = options.getInt("featureDim") ?: DEFAULT_FEATURE_DIM
-      val numThreads = options.getInt("numThreads") ?: DEFAULT_NUM_THREADS
-      val provider = options.getString("provider") ?: "cpu"
-      val debug = options.getBoolean("debug") ?: false
-      val decodingMethod = options.getString("decodingMethod") ?: "greedy_search"
-      val maxActivePaths = options.getInt("maxActivePaths") ?: 4
-      val blankPenalty = options.getFloat("blankPenalty") ?: 0f
-      val emitIntervalMs = options.getInt("emitIntervalMs") ?: DEFAULT_EMIT_INTERVAL_MS
-      val enableEndpoint = options.getBoolean("enableEndpoint") ?: false
-      val denoiseModel = options.getString("denoiseModel")
-      val enableDenoise = options.getBoolean("enableDenoise") ?: !denoiseModel.isNullOrBlank()
-      val punctuationModel = options.getString("punctuationModel")
-      val enablePunctuation = options.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
-      val vadModel = options.getString("vadModel")
-      val enableVad = options.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
-      val enableSpeakerDiarization = options.getBoolean("enableSpeakerDiarization") ?: false
-      val speakerSimilarityThreshold = options.getFloat("speakerSimilarityThreshold") ?: 0.85f
-      val realtimeAudioSegmentSeconds = options.getInt("realtimeAudioSegmentSeconds") ?: DEFAULT_REALTIME_SAVE_SEGMENT_SECONDS
-      val realtimeAudioMaxSessionSeconds = options.getInt("realtimeAudioMaxSessionSeconds") ?: DEFAULT_REALTIME_SAVE_MAX_SESSION_SECONDS
-      val realtimeAudioMinFreeBytes =
-        options.getLong("realtimeAudioMinFreeBytes") ?: DEFAULT_REALTIME_SAVE_MIN_FREE_BYTES
-      val realtimeAudioSyncIntervalMs =
-        options.getLong("realtimeAudioSyncIntervalMs") ?: DEFAULT_REALTIME_SAVE_SYNC_INTERVAL_MS
-
-      var resolvedRealtimeTokensPath = ""
-      var resolvedRealtimeEncoderPath = ""
-      var resolvedRealtimeDecoderPath = ""
-      var resolvedRealtimeJoinerPath = ""
-
-      val modelConfig = OnlineModelConfig().apply {
-        val tokens = options.getString("tokens")
-        resolvedRealtimeTokensPath =
-          if (!tokens.isNullOrBlank()) {
-            modelContext.resolveModelPath(tokens)
-          } else {
-            modelContext.resolveModelPath("tokens.txt")
-          }
-        this.tokens = resolvedRealtimeTokensPath
-        this.numThreads = numThreads
-        this.provider = provider
-        this.debug = debug
-        when (modelType) {
-          "transducer" -> {
-            this.modelType = "transducer"
-            resolvedRealtimeEncoderPath = modelContext.resolveModelPath(options.getString("encoder") ?: "encoder.onnx")
-            resolvedRealtimeDecoderPath = modelContext.resolveModelPath(options.getString("decoder") ?: "decoder.onnx")
-            resolvedRealtimeJoinerPath = modelContext.resolveModelPath(options.getString("joiner") ?: "joiner.onnx")
-            this.transducer = OnlineTransducerModelConfig(
-              resolvedRealtimeEncoderPath,
-              resolvedRealtimeDecoderPath,
-              resolvedRealtimeJoinerPath,
-            )
-          }
-          else -> {
-            throw IllegalArgumentException("Unsupported realtime modelType: $modelType")
-          }
-        }
-      }
-
-      when (modelType) {
-        "transducer" -> {
-          ensureModelPathReadable(modelContext, resolvedRealtimeTokensPath, "tokens")
-          ensureModelPathReadable(modelContext, resolvedRealtimeEncoderPath, "encoder")
-          ensureModelPathReadable(modelContext, resolvedRealtimeDecoderPath, "decoder")
-          ensureModelPathReadable(modelContext, resolvedRealtimeJoinerPath, "joiner")
-        }
-      }
-
-      val recognizerConfig = OnlineRecognizerConfig().apply {
-        this.featConfig = FeatureConfig(sampleRate, featureDim, 0f)
-        this.modelConfig = modelConfig
-        this.decodingMethod = decodingMethod
-        this.maxActivePaths = maxActivePaths
-        this.blankPenalty = blankPenalty
-        this.enableEndpoint = enableEndpoint
-      }
-
-      recognizer = OnlineRecognizer(modelContext.assetManager, recognizerConfig)
-      stream = recognizer.createStream()
-      if (enableDenoise && !denoiseModel.isNullOrBlank()) {
-        try {
-          denoiser = createOfflineSpeechDenoiser(modelContext, denoiseModel, numThreads, provider, debug)
-          denoiseInfo = "enabled:${modelContext.resolveModelPath(denoiseModel)}"
-        } catch (e: Exception) {
-          denoiser = null
-          denoiseInfo = "init-failed:${e.message ?: "unknown"}"
-        }
-      } else {
-        denoiseInfo = if (enableDenoise) "enabled but denoiseModel empty" else "disabled by option"
-      }
-      if (enablePunctuation && !punctuationModel.isNullOrBlank()) {
-        try {
-          punctuation = createOfflinePunctuation(modelContext, punctuationModel, numThreads, provider, debug)
-          punctuationInfo = "enabled:${modelContext.resolveModelPath(punctuationModel)}"
-        } catch (e: Exception) {
-          punctuation = null
-          punctuationInfo = "init-failed:${e.message ?: "unknown"}"
-        }
-      } else {
-        punctuationInfo = if (enablePunctuation) "enabled but punctuationModel empty" else "disabled by option"
-      }
-      if (enableVad && !vadModel.isNullOrBlank()) {
-        try {
-          val vadModelPath = modelContext.resolveModelPath(vadModel)
-          val normalizedVadPath = vadModelPath.lowercase()
-          val useTenVad = normalizedVadPath.contains("ten-vad")
-          if (!useTenVad) {
-            println("[sherpa] Unsupported VAD model file for this runtime: $vadModelPath. Fallback without VAD.")
-            vadInfo = "unsupported model: $vadModelPath"
-          } else {
-          val vadThreshold = options.getFloat("vadThreshold") ?: 0.35f
-          val vadMinSilenceDuration = options.getFloat("vadMinSilenceDuration") ?: 0.9f
-          val vadMinSpeechDuration = options.getFloat("vadMinSpeechDuration") ?: 0.18f
-          val vadWindowSize = options.getInt("vadWindowSize") ?: 256
-          val vadMaxSpeechDuration = options.getFloat("vadMaxSpeechDuration") ?: 15.0f
-          val vadModelConfig = VadModelConfig().apply {
-            this.sampleRate = sampleRate
-            this.numThreads = numThreads
-            this.provider = provider
-            this.debug = debug
-            this.tenVadModelConfig = TenVadModelConfig().apply {
-              this.model = vadModelPath
-              this.threshold = vadThreshold
-              this.minSilenceDuration = vadMinSilenceDuration
-              this.minSpeechDuration = vadMinSpeechDuration
-              this.windowSize = vadWindowSize
-              this.maxSpeechDuration = vadMaxSpeechDuration
-            }
-          }
-          vad = Vad(modelContext.assetManager, vadModelConfig)
-          vadActive = true
-          vadInfo = "enabled:ten:$vadModelPath"
-          println("[sherpa] VAD enabled. model=$vadModelPath type=ten")
-          }
-        } catch (e: Exception) {
-          println("[sherpa] VAD initialization failed. fallback without VAD: ${e.message}")
-          vad = null
-          vadInfo = "init failed: ${e.message ?: "unknown"}"
-        }
-      } else {
-        vadInfo = if (enableVad) "enabled but vadModel empty" else "disabled by option"
-      }
-
-      if (enableSpeakerDiarization) {
-        if (vad == null) {
-          vadInfo = "$vadInfo | speaker=disabled:requires-vad"
-        } else {
-          try {
-            speakerDiarization = createOfflineSpeakerDiarization(modelContext, options, numThreads, provider, debug)
-            val embeddingModel =
-              options.getString("speakerEmbeddingModel")
-                ?: DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET
-            val extractorConfig =
-              SpeakerEmbeddingExtractorConfig(
-                modelContext.resolveModelPath(embeddingModel),
-                numThreads,
-                debug,
-                provider,
-              )
-            speakerExtractor = SpeakerEmbeddingExtractor(modelContext.assetManager, extractorConfig)
-            speakerManager = SpeakerEmbeddingManager(speakerExtractor.dim())
-            vadInfo = "$vadInfo | speaker=enabled"
-          } catch (e: Exception) {
-            speakerDiarization = null
-            speakerExtractor = null
-            speakerManager = null
-            vadInfo = "$vadInfo | speaker=init-failed:${e.message ?: "unknown"}"
-          }
-        }
-      }
-
-      audioRecord = createAudioRecord(sampleRate)
-
-      try {
-        val recordingRoot = resolveRealtimeRecordingRoot(options)
-        recoverRealtimeRecordingSessions(recordingRoot)
-        audioSaveSession =
-          createRealtimeAudioSession(
-            rootDir = recordingRoot,
-            sampleRate = sampleRate,
-            segmentSeconds = realtimeAudioSegmentSeconds,
-            maxSessionSeconds = realtimeAudioMaxSessionSeconds,
-            minFreeBytes = realtimeAudioMinFreeBytes,
-            syncIntervalMs = realtimeAudioSyncIntervalMs,
-          )
-        saveInfo = "enabled:${audioSaveSession.sessionId}"
-      } catch (e: Exception) {
-        throw IllegalStateException("Realtime audio save initialization failed: ${e.message ?: "unknown"}", e)
-      }
-
-      realtimeRecognizer = recognizer
-      realtimeStream = stream
-      realtimeAudioRecord = audioRecord
-
-      audioRecord.startRecording()
-      sendRealtimeState("running", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo | save=$saveInfo")
-
-      val shortBuffer = ShortArray(DEFAULT_AUDIO_BUFFER_SAMPLES)
-      var lastEmitTime = 0L
-
-      while (realtimeRunning) {
-        val read = audioRecord.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
-        if (read <= 0) {
-          continue
-        }
-
-        val currentSession = audioSaveSession ?: throw IllegalStateException("Realtime audio save session missing")
-        try {
-          val keepSaving = appendRealtimeAudioSegment(currentSession, shortBuffer, read)
-          if (!keepSaving) {
-            try {
-              closeRealtimeAudioSession(currentSession, "limit_reached")
-            } catch (_: Exception) {
-            }
-            audioSaveSession = null
-            saveInfo = "runtime-error:limit_reached"
-            throw IllegalStateException("Realtime audio save stopped: limit_reached")
-          }
-        } catch (e: Exception) {
-          if (audioSaveSession != null) {
-            try {
-              closeRealtimeAudioSession(currentSession, "error")
-            } catch (_: Exception) {
-            }
-            audioSaveSession = null
-          }
-          saveInfo = "runtime-error:${e.message ?: "unknown"}"
-          throw e
-        }
-
-        val rawSamples = FloatArray(read)
-        for (i in 0 until read) {
-          rawSamples[i] = shortBuffer[i] / 32768.0f
-        }
-        val denoised = denoiser?.run(rawSamples, sampleRate)
-        val samples = denoised?.samples ?: rawSamples
-        val processedSampleRate = denoised?.sampleRate ?: sampleRate
-
-        if (vad != null) {
-          vad.acceptWaveform(samples)
-          while (!vad.empty()) {
-            val segment = vad.front()
-            vad.pop()
-            stream.acceptWaveform(segment.samples, processedSampleRate)
-            while (recognizer.isReady(stream)) {
-              recognizer.decode(stream)
-            }
-            val segmentResult = recognizer.getResult(stream)
-            if (segmentResult.text.isNotBlank()) {
-              val outputText =
-                if (speakerDiarization != null) {
-                  val speakerSegments = speakerDiarization.process(segment.samples)
-                  val speakerNameResult =
-                    resolveSpeakerNamesForRealtimeSegment(
-                      segment.samples,
-                      sampleRate,
-                      speakerSegments,
-                      speakerExtractor,
-                      speakerManager,
-                      speakerSimilarityThreshold,
-                      nextSpeakerIndex,
-                    )
-                  nextSpeakerIndex = speakerNameResult.nextSpeakerIndex
-                  formatOnlineResultBySpeaker(segmentResult, speakerSegments, speakerNameResult.localSpeakerNameMap)
-                } else {
-                  segmentResult.text
-                }
-              val punctuatedText = applyPunctuation(punctuation, outputText)
-              lastText = ""
-              sendRealtimeResult(segmentResult, true, true, sampleRate, punctuatedText)
-              recognizer.reset(stream)
-            }
-          }
-        } else {
-          stream.acceptWaveform(samples, processedSampleRate)
-
-          while (recognizer.isReady(stream)) {
-            recognizer.decode(stream)
-          }
-
-          val now = System.currentTimeMillis()
-          if (now - lastEmitTime >= emitIntervalMs.toLong()) {
-            val partial = recognizer.getResult(stream)
-            if (partial.text != lastText) {
-              lastText = partial.text
-              val punctuatedPartialText = applyPunctuation(punctuation, partial.text)
-              sendRealtimeResult(partial, false, false, sampleRate, punctuatedPartialText)
-            }
-            lastEmitTime = now
-          }
-
-          if (enableEndpoint && recognizer.isEndpoint(stream)) {
-            val endpointResult = recognizer.getResult(stream)
-            if (endpointResult.text.isNotBlank()) {
-              val punctuatedText = applyPunctuation(punctuation, endpointResult.text)
-              lastText = ""
-              sendRealtimeResult(endpointResult, true, true, sampleRate, punctuatedText)
-            }
-            recognizer.reset(stream)
-          }
-        }
-      }
-
-      if (vad != null) {
-        vad.flush()
-        while (!vad.empty()) {
-          val segment = vad.front()
-          vad.pop()
-          stream.acceptWaveform(segment.samples, sampleRate)
-          while (recognizer.isReady(stream)) {
-            recognizer.decode(stream)
-          }
-        }
-      }
-
-      stream.inputFinished()
-      while (recognizer.isReady(stream)) {
-        recognizer.decode(stream)
-      }
-
-      val finalResult = recognizer.getResult(stream)
-      if (finalResult.text.isNotBlank()) {
-        val punctuatedText = applyPunctuation(punctuation, finalResult.text)
-        sendRealtimeResult(finalResult, true, false, sampleRate, punctuatedText)
-      }
-      sendRealtimeState("stopped", null, vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo | save=$saveInfo")
-    } catch (e: Exception) {
-      sendRealtimeState("error", e.message ?: "unknown", vadActive, "$vadInfo | denoise=$denoiseInfo | punct=$punctuationInfo | save=$saveInfo")
-      sendEvent(
-        REALTIME_EVENT_NAME,
-        mapOf(
-          "type" to "error",
-          "message" to (e.message ?: "unknown"),
-        ),
-      )
-    } finally {
-      try {
-        audioRecord?.stop()
-      } catch (_: Exception) {
-      }
-      audioRecord?.release()
-      denoiser?.release()
-      punctuation?.release()
-      vad?.release()
-      speakerDiarization?.release()
-      speakerExtractor?.release()
-      speakerManager?.release()
-      stream?.release()
-      recognizer?.release()
-      if (audioSaveSession != null) {
-        try {
-          closeRealtimeAudioSession(audioSaveSession, "realtime_exit")
-        } catch (_: Exception) {
-        }
-      }
-
-      realtimeAudioRecord = null
-      realtimeStream = null
-      realtimeRecognizer = null
-      realtimeRunning = false
-    }
-  }
-
-  private fun stopRealtimeInternal() {
-    realtimeRunning = false
-    try {
-      realtimeAudioRecord?.stop()
-    } catch (_: Exception) {
-    }
-  }
-
   private fun stopWavRecordingInternal() {
     wavRecordingRunning = false
     try {
@@ -900,316 +451,54 @@ class SherpaOnnxModule : Module() {
     )
   }
 
-  private fun resolveRealtimeRecordingRoot(options: Map<String, Any?>): File {
-    val customDir = options.getString("realtimeAudioSaveDir")?.removePrefix("file://")
-    if (!customDir.isNullOrBlank()) {
-      return File(customDir)
-    }
+  private fun resolveOfflineVadSegmentsRoot(): File {
     val context = appContext.reactContext ?: throw IllegalStateException("React context is not available")
-    return File(context.filesDir, DEFAULT_REALTIME_SAVE_SUBDIR)
+    return File(context.filesDir, DEFAULT_OFFLINE_VAD_SEGMENTS_SUBDIR)
   }
 
-  private fun recoverRealtimeRecordingSessions(rootDir: File) {
-    if (!rootDir.exists() || !rootDir.isDirectory) {
-      return
+  private fun createOfflineVadSessionDir(): File {
+    val root = resolveOfflineVadSegmentsRoot()
+    if (!root.exists()) {
+      root.mkdirs()
+    }
+    if (!root.exists() || !root.isDirectory) {
+      throw IllegalStateException("Unable to create offline VAD root directory: ${root.absolutePath}")
     }
 
-    val sessionDirs =
-      rootDir
-        .listFiles()
-        ?.filter { it.isDirectory && it.name.startsWith("session-") }
-        ?: return
-
-    for (sessionDir in sessionDirs) {
-      try {
-        val manifestFile = File(sessionDir, "session.jsonl")
-        val sampleRate = readRealtimeSessionSampleRate(manifestFile) ?: DEFAULT_SAMPLE_RATE
-        val stopped =
-          if (manifestFile.exists() && manifestFile.isFile) {
-            manifestFile.readText().contains("\"type\":\"session_stop\"")
-          } else {
-            false
-          }
-        if (stopped) {
-          continue
-        }
-
-        val wavFiles =
-          sessionDir
-            .listFiles()
-            ?.filter { it.isFile && it.name.endsWith(".wav") }
-            ?: emptyList()
-        for (wav in wavFiles) {
-          val totalBytes = wav.length()
-          if (totalBytes < WAV_HEADER_SIZE) {
-            continue
-          }
-          writeWavHeader(wav, totalBytes - WAV_HEADER_SIZE, sampleRate)
-        }
-
-        appendRealtimeSessionLog(
-          manifestFile,
-          """{"type":"session_recovered","recoveredAtMs":${System.currentTimeMillis()}}""",
-        )
-      } catch (_: Exception) {
-      }
-    }
-  }
-
-  private fun readRealtimeSessionSampleRate(manifestFile: File): Int? {
-    if (!manifestFile.exists() || !manifestFile.isFile) {
-      return null
-    }
-    return try {
-      val line =
-        manifestFile
-          .useLines { lines -> lines.firstOrNull { it.contains("\"type\":\"session_start\"") } }
-          ?: return null
-      val marker = "\"sampleRate\":"
-      val index = line.indexOf(marker)
-      if (index < 0) {
-        return null
-      }
-      val start = index + marker.length
-      var end = start
-      while (end < line.length && line[end].isDigit()) {
-        end += 1
-      }
-      line.substring(start, end).toIntOrNull()
-    } catch (_: Exception) {
-      null
-    }
-  }
-
-  private fun createRealtimeAudioSession(
-    rootDir: File,
-    sampleRate: Int,
-    segmentSeconds: Int,
-    maxSessionSeconds: Int,
-    minFreeBytes: Long,
-    syncIntervalMs: Long,
-  ): RealtimeAudioSession {
-    if (!rootDir.exists()) {
-      rootDir.mkdirs()
-    }
-    if (!rootDir.exists() || !rootDir.isDirectory) {
-      throw IllegalStateException("Unable to create realtime recording directory: ${rootDir.absolutePath}")
-    }
-
-    val safeSegmentSeconds = segmentSeconds.coerceAtLeast(5)
-    val safeMaxSessionSeconds = maxSessionSeconds.coerceAtLeast(60)
-    val safeSyncIntervalMs = syncIntervalMs.coerceAtLeast(200L)
-    val bytesPerSecond = sampleRate.toLong() * 2L
-    val now = System.currentTimeMillis()
-    val sessionId = "session-$now-${UUID.randomUUID().toString().substring(0, 8)}"
-    val sessionDir = File(rootDir, sessionId)
+    val sessionDir = File(root, "session-${System.currentTimeMillis()}-${UUID.randomUUID().toString().substring(0, 8)}")
     sessionDir.mkdirs()
     if (!sessionDir.exists() || !sessionDir.isDirectory) {
-      throw IllegalStateException("Unable to create session directory: ${sessionDir.absolutePath}")
+      throw IllegalStateException("Unable to create offline VAD session directory: ${sessionDir.absolutePath}")
     }
-
-    val session =
-      RealtimeAudioSession(
-        sessionId = sessionId,
-        sessionDir = sessionDir,
-        sampleRate = sampleRate,
-        segmentMaxBytes = bytesPerSecond * safeSegmentSeconds,
-        sessionMaxBytes = bytesPerSecond * safeMaxSessionSeconds,
-        minFreeBytes = minFreeBytes.coerceAtLeast(0L),
-        syncIntervalMs = safeSyncIntervalMs,
-        manifestFile = File(sessionDir, "session.jsonl"),
-        startedAtMs = now,
-      )
-
-    appendRealtimeSessionLog(
-      session.manifestFile,
-      """{"type":"session_start","sessionId":"${jsonEscape(session.sessionId)}","sampleRate":$sampleRate,"segmentMaxBytes":${session.segmentMaxBytes},"sessionMaxBytes":${session.sessionMaxBytes},"startedAtMs":$now}""",
-    )
-    openNextRealtimeAudioSegment(session)
-    return session
+    return sessionDir
   }
 
-  private fun appendRealtimeAudioSegment(
-    session: RealtimeAudioSession,
-    shortBuffer: ShortArray,
-    read: Int,
-  ): Boolean {
-    if (read <= 0) {
-      return true
-    }
-    if (session.sessionDir.usableSpace < session.minFreeBytes) {
-      return false
-    }
-    if (session.totalWrittenBytes >= session.sessionMaxBytes) {
-      return false
+  private fun writeFloatSamplesToWav(file: File, samples: FloatArray, sampleRate: Int) {
+    file.parentFile?.mkdirs()
+    if (file.exists()) {
+      file.delete()
     }
 
-    if (session.currentSegmentStream == null || session.currentSegmentFile == null) {
-      openNextRealtimeAudioSegment(session)
-    }
-
-    val bytesToWrite = read * 2L
-    if (session.currentSegmentWrittenBytes > 0 && session.currentSegmentWrittenBytes + bytesToWrite > session.segmentMaxBytes) {
-      closeCurrentRealtimeAudioSegment(session)
-      openNextRealtimeAudioSegment(session)
-    }
-
-    val outStream = session.currentSegmentStream ?: return false
-    val byteBuffer = ByteArray(read * 2)
-    var offset = 0
-    for (i in 0 until read) {
-      val sample = shortBuffer[i].toInt()
-      byteBuffer[offset] = (sample and 0xFF).toByte()
-      byteBuffer[offset + 1] = ((sample shr 8) and 0xFF).toByte()
-      offset += 2
-    }
-
-    outStream.write(byteBuffer, 0, offset)
-    session.currentSegmentWrittenBytes += offset.toLong()
-    session.totalWrittenBytes += offset.toLong()
-
-    val now = System.currentTimeMillis()
-    if (now - session.lastSyncAtMs >= session.syncIntervalMs) {
-      outStream.fd.sync()
-      session.lastSyncAtMs = now
-    }
-
-    if (session.currentSegmentWrittenBytes >= session.segmentMaxBytes) {
-      closeCurrentRealtimeAudioSegment(session)
-      openNextRealtimeAudioSegment(session)
-    }
-    return session.totalWrittenBytes < session.sessionMaxBytes
-  }
-
-  private fun openNextRealtimeAudioSegment(session: RealtimeAudioSession) {
-    session.segmentIndex += 1
-    val segmentName = "seg-${session.segmentIndex.toString().padStart(6, '0')}.wav"
-    val segmentFile = File(session.sessionDir, segmentName)
-    if (segmentFile.exists()) {
-      segmentFile.delete()
-    }
-    FileOutputStream(segmentFile).use { fos ->
+    FileOutputStream(file).use { fos ->
       fos.write(ByteArray(WAV_HEADER_SIZE))
+      val bytes = ByteArray(samples.size * 2)
+      var offset = 0
+      for (sample in samples) {
+        val clamped = when {
+          sample > 1f -> 1f
+          sample < -1f -> -1f
+          else -> sample
+        }
+        val pcm = (clamped * 32767f).toInt()
+        bytes[offset] = (pcm and 0xFF).toByte()
+        bytes[offset + 1] = ((pcm shr 8) and 0xFF).toByte()
+        offset += 2
+      }
+      fos.write(bytes, 0, offset)
       fos.flush()
       fos.fd.sync()
     }
-    val stream = FileOutputStream(segmentFile, true)
-    session.currentSegmentFile = segmentFile
-    session.currentSegmentStream = stream
-    session.currentSegmentWrittenBytes = 0
-    appendRealtimeSessionLog(
-      session.manifestFile,
-      """{"type":"segment_open","index":${session.segmentIndex},"file":"${jsonEscape(segmentName)}","openedAtMs":${System.currentTimeMillis()}}""",
-    )
-  }
-
-  private fun closeCurrentRealtimeAudioSegment(session: RealtimeAudioSession) {
-    val file = session.currentSegmentFile
-    val stream = session.currentSegmentStream
-    val pcmBytes = session.currentSegmentWrittenBytes
-    if (file == null || stream == null) {
-      session.currentSegmentFile = null
-      session.currentSegmentStream = null
-      session.currentSegmentWrittenBytes = 0
-      return
-    }
-
-    try {
-      stream.flush()
-      stream.fd.sync()
-    } catch (_: Exception) {
-    } finally {
-      try {
-        stream.close()
-      } catch (_: Exception) {
-      }
-    }
-
-    try {
-      writeWavHeader(file, pcmBytes, session.sampleRate)
-    } catch (_: Exception) {
-    }
-
-    appendRealtimeSessionLog(
-      session.manifestFile,
-      """{"type":"segment_close","index":${session.segmentIndex},"file":"${jsonEscape(file.name)}","pcmBytes":$pcmBytes,"closedAtMs":${System.currentTimeMillis()}}""",
-    )
-    session.currentSegmentFile = null
-    session.currentSegmentStream = null
-    session.currentSegmentWrittenBytes = 0
-  }
-
-  private fun closeRealtimeAudioSession(session: RealtimeAudioSession, reason: String) {
-    try {
-      closeCurrentRealtimeAudioSegment(session)
-    } catch (_: Exception) {
-    }
-    appendRealtimeSessionLog(
-      session.manifestFile,
-      """{"type":"session_stop","reason":"${jsonEscape(reason)}","totalBytes":${session.totalWrittenBytes},"durationMs":${System.currentTimeMillis() - session.startedAtMs},"stoppedAtMs":${System.currentTimeMillis()}}""",
-    )
-  }
-
-  private fun appendRealtimeSessionLog(manifestFile: File, line: String) {
-    manifestFile.parentFile?.mkdirs()
-    FileOutputStream(manifestFile, true).use { fos ->
-      fos.write((line + "\n").toByteArray(Charsets.UTF_8))
-      fos.flush()
-      fos.fd.sync()
-    }
-  }
-
-  private fun jsonEscape(raw: String): String {
-    val builder = StringBuilder(raw.length + 8)
-    for (ch in raw) {
-      when (ch) {
-        '\\' -> builder.append("\\\\")
-        '"' -> builder.append("\\\"")
-        '\n' -> builder.append("\\n")
-        '\r' -> builder.append("\\r")
-        '\t' -> builder.append("\\t")
-        else -> builder.append(ch)
-      }
-    }
-    return builder.toString()
-  }
-
-  private fun sendRealtimeResult(
-    result: OnlineRecognizerResult,
-    isFinal: Boolean,
-    isEndpoint: Boolean,
-    sampleRate: Int,
-    overrideText: String? = null,
-  ) {
-    sendEvent(
-      REALTIME_EVENT_NAME,
-      mapOf(
-        "type" to if (isFinal) "final" else "partial",
-        "text" to (overrideText ?: result.text),
-        "tokens" to result.tokens.toList(),
-        "timestamps" to result.timestamps.map { it.toDouble() },
-        "isFinal" to isFinal,
-        "isEndpoint" to isEndpoint,
-        "sampleRate" to sampleRate,
-      ),
-    )
-  }
-
-  private fun sendRealtimeState(
-    state: String,
-    error: String? = null,
-    vadActive: Boolean? = null,
-    vadInfo: String? = null,
-  ) {
-    sendEvent(
-      REALTIME_STATE_EVENT_NAME,
-      mapOf(
-        "state" to state,
-        "error" to error,
-        "vadActive" to vadActive,
-        "vadInfo" to vadInfo,
-      ),
-    )
+    writeWavHeader(file, samples.size.toLong() * 2L, sampleRate)
   }
 
   private fun createAudioRecord(sampleRate: Int): AudioRecord {
@@ -1347,6 +636,62 @@ class SherpaOnnxModule : Module() {
     throw IllegalArgumentException("No readable model path for $label: ${issues.joinToString("; ")}")
   }
 
+  private fun resolveVadModelPath(modelContext: ModelContext, vadModel: String?): String {
+    if (!vadModel.isNullOrBlank()) {
+      return modelContext.resolveModelPath(vadModel)
+    }
+
+    if (!modelContext.useFileModelDir) {
+      return modelContext.resolveModelPath(DEFAULT_VAD_MODEL_ASSET)
+    }
+
+    val context = appContext.reactContext ?: throw IllegalStateException("React context is not available")
+    val defaultVadDir = File(context.filesDir, DEFAULT_RUNTIME_VAD_SUBDIR)
+    if (!defaultVadDir.exists()) {
+      defaultVadDir.mkdirs()
+    }
+    if (!defaultVadDir.exists() || !defaultVadDir.isDirectory) {
+      throw IllegalStateException("Unable to create runtime VAD directory: ${defaultVadDir.absolutePath}")
+    }
+
+    val fileName = DEFAULT_VAD_MODEL_ASSET.substringAfterLast("/")
+    val destFile = File(defaultVadDir, fileName)
+    if (destFile.exists() && destFile.isFile && destFile.length() > 0L) {
+      return destFile.absolutePath
+    }
+
+    val assetManager = context.assets
+    var copied = false
+    var lastError: Exception? = null
+    for (candidate in buildAssetCandidates(DEFAULT_VAD_MODEL_ASSET)) {
+      try {
+        assetManager.open(candidate).use { input ->
+          FileOutputStream(destFile).use { output ->
+            val buffer = ByteArray(8192)
+            var read = input.read(buffer)
+            while (read > 0) {
+              output.write(buffer, 0, read)
+              read = input.read(buffer)
+            }
+            output.flush()
+          }
+        }
+        copied = true
+        break
+      } catch (e: Exception) {
+        lastError = e
+      }
+    }
+
+    if (!copied) {
+      throw IllegalArgumentException("Default VAD asset not found: $DEFAULT_VAD_MODEL_ASSET", lastError)
+    }
+    if (!destFile.exists() || !destFile.isFile || destFile.length() <= 0L) {
+      throw IllegalStateException("Copied default VAD file is invalid: ${destFile.absolutePath}")
+    }
+    return destFile.absolutePath
+  }
+
   private fun transcribeWave(waveData: WaveData, options: Map<String, Any?>?): Map<String, Any?> {
     val modelContext = resolveModelContext(options)
 
@@ -1376,6 +721,8 @@ class SherpaOnnxModule : Module() {
     val decodingMethod = options?.getString("decodingMethod") ?: "greedy_search"
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
+    val vadModel = options?.getString("vadModel")
+    val enableVad = options?.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
     val enableSpeakerDiarization = options?.getBoolean("enableSpeakerDiarization") ?: false
 
     var resolvedTokensPath = ""
@@ -1505,6 +852,7 @@ class SherpaOnnxModule : Module() {
     var recognizer: OfflineRecognizer? = null
     var denoiser: OfflineSpeechDenoiser? = null
     var punctuation: OfflinePunctuation? = null
+    var vad: Vad? = null
     var speakerDiarization: OfflineSpeakerDiarization? = null
     var stream: OfflineStream? = null
     var resultMap = mutableMapOf<String, Any?>()
@@ -1543,6 +891,40 @@ class SherpaOnnxModule : Module() {
       if (enablePunctuation && !punctuationModel.isNullOrBlank()) {
         punctuation = createOfflinePunctuation(modelContext, punctuationModel, numThreads, provider, debug)
       }
+      if (enableVad) {
+        try {
+          val vadModelPath = resolveVadModelPath(modelContext, vadModel)
+          val normalizedVadPath = vadModelPath.lowercase()
+          val useTenVad = normalizedVadPath.contains("ten-vad")
+          if (!useTenVad) {
+            println("[sherpa] Unsupported offline VAD model file: $vadModelPath. Fallback without VAD.")
+          } else {
+            val vadThreshold = options?.getFloat("vadThreshold") ?: 0.25f
+            val vadMinSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
+            val vadMinSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.5f
+            val vadWindowSize = options?.getInt("vadWindowSize") ?: 256
+            val vadMaxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 6.0f
+            val vadModelConfig = VadModelConfig().apply {
+              this.sampleRate = sampleRate
+              this.numThreads = numThreads
+              this.provider = provider
+              this.debug = debug
+              this.tenVadModelConfig = TenVadModelConfig().apply {
+                this.model = vadModelPath
+                this.threshold = vadThreshold
+                this.minSilenceDuration = vadMinSilenceDuration
+                this.minSpeechDuration = vadMinSpeechDuration
+                this.windowSize = vadWindowSize
+                this.maxSpeechDuration = vadMaxSpeechDuration
+              }
+            }
+            vad = Vad(modelContext.assetManager, vadModelConfig)
+          }
+        } catch (e: Exception) {
+          println("[sherpa] Offline VAD initialization failed. fallback without VAD: ${e.message}")
+          vad = null
+        }
+      }
 
       val effectiveWaveData =
         if (enableDenoise && !denoiseModel.isNullOrBlank()) {
@@ -1555,29 +937,98 @@ class SherpaOnnxModule : Module() {
 
       stream = recognizer.createStream()
 
-      stream.acceptWaveform(effectiveWaveData.samples, effectiveWaveData.sampleRate)
-
-      recognizer.decode(stream)
-
-      val result = recognizer.getResult(stream)
-
-      resultMap = result.toMap(effectiveWaveData).toMutableMap()
-      if (speakerDiarization != null && result.text.isNotBlank()) {
-        val speakerSegments = speakerDiarization.process(effectiveWaveData.samples)
-
-        val speakerText = formatOfflineResultBySpeaker(recognizer, effectiveWaveData, speakerSegments)
-        if (speakerText.isNotBlank()) {
-          resultMap["text"] = speakerText
+      if (vad != null) {
+        val vadSegments = mutableListOf<Map<String, Any?>>()
+        val sampleRateForVad = effectiveWaveData.sampleRate
+        var segmentIndex = 0
+        val offlineVadSessionDir =
+          try {
+            createOfflineVadSessionDir()
+          } catch (_: Exception) {
+            null
+          }
+        val decodeSegmentWithVad: (FloatArray) -> Unit = { segmentSamples ->
+          segmentIndex += 1
+          val segmentFile = offlineVadSessionDir?.let { File(it, "seg-${segmentIndex.toString().padStart(6, '0')}.wav") }
+          try {
+            if (segmentFile != null) {
+              writeFloatSamplesToWav(segmentFile, segmentSamples, sampleRateForVad)
+            }
+          } catch (_: Exception) {
+          }
+          vadSegments.add(
+            mapOf(
+              "index" to segmentIndex,
+              "path" to (segmentFile?.absolutePath ?: ""),
+              "text" to "",
+              "numSamples" to segmentSamples.size,
+              "durationMs" to ((segmentSamples.size.toDouble() / sampleRateForVad.toDouble()) * 1000.0),
+            ),
+          )
         }
-      }
-      val rawText = resultMap["text"] as? String
-      if (!rawText.isNullOrBlank()) {
-        resultMap["text"] = applyPunctuation(punctuation, rawText)
+
+        val allSamples = effectiveWaveData.samples
+        var chunkStart = 0
+        while (chunkStart < allSamples.size) {
+          val chunkEnd = minOf(chunkStart + DEFAULT_AUDIO_BUFFER_SAMPLES, allSamples.size)
+          val chunk = allSamples.copyOfRange(chunkStart, chunkEnd)
+          vad.acceptWaveform(chunk)
+          while (!vad.empty()) {
+            val segment = vad.front()
+            vad.pop()
+            decodeSegmentWithVad(segment.samples)
+          }
+          chunkStart = chunkEnd
+        }
+        vad.flush()
+        while (!vad.empty()) {
+          val segment = vad.front()
+          vad.pop()
+          decodeSegmentWithVad(segment.samples)
+        }
+
+        stream.acceptWaveform(effectiveWaveData.samples, effectiveWaveData.sampleRate)
+        recognizer.decode(stream)
+        val result = recognizer.getResult(stream)
+        resultMap = result.toMap(effectiveWaveData).toMutableMap()
+        if (speakerDiarization != null && result.text.isNotBlank()) {
+          val speakerSegments = speakerDiarization.process(effectiveWaveData.samples)
+          val speakerText = formatOfflineResultBySpeaker(recognizer, effectiveWaveData, speakerSegments)
+          if (speakerText.isNotBlank()) {
+            resultMap["text"] = speakerText
+          }
+        }
+        val rawText = resultMap["text"] as? String
+        if (!rawText.isNullOrBlank()) {
+          resultMap["text"] = applyPunctuation(punctuation, rawText)
+        }
+        resultMap["vadSegments"] = vadSegments
+      } else {
+        stream.acceptWaveform(effectiveWaveData.samples, effectiveWaveData.sampleRate)
+
+        recognizer.decode(stream)
+
+        val result = recognizer.getResult(stream)
+
+        resultMap = result.toMap(effectiveWaveData).toMutableMap()
+        if (speakerDiarization != null && result.text.isNotBlank()) {
+          val speakerSegments = speakerDiarization.process(effectiveWaveData.samples)
+
+          val speakerText = formatOfflineResultBySpeaker(recognizer, effectiveWaveData, speakerSegments)
+          if (speakerText.isNotBlank()) {
+            resultMap["text"] = speakerText
+          }
+        }
+        val rawText = resultMap["text"] as? String
+        if (!rawText.isNullOrBlank()) {
+          resultMap["text"] = applyPunctuation(punctuation, rawText)
+        }
       }
     } finally {
       stream?.release()
       denoiser?.release()
       punctuation?.release()
+      vad?.release()
       speakerDiarization?.release()
     }
 
@@ -1761,24 +1212,6 @@ class SherpaOnnxModule : Module() {
     val text: String,
   )
 
-  private data class RealtimeAudioSession(
-    val sessionId: String,
-    val sessionDir: File,
-    val sampleRate: Int,
-    val segmentMaxBytes: Long,
-    val sessionMaxBytes: Long,
-    val minFreeBytes: Long,
-    val syncIntervalMs: Long,
-    val manifestFile: File,
-    val startedAtMs: Long,
-    var segmentIndex: Int = 0,
-    var currentSegmentFile: File? = null,
-    var currentSegmentStream: FileOutputStream? = null,
-    var currentSegmentWrittenBytes: Long = 0,
-    var totalWrittenBytes: Long = 0,
-    var lastSyncAtMs: Long = 0,
-  )
-
   private fun formatOfflineResultBySpeaker(
     recognizer: OfflineRecognizer,
     waveData: WaveData,
@@ -1826,45 +1259,6 @@ class SherpaOnnxModule : Module() {
     return formatSpeakerChunks(chunks)
   }
 
-  private fun formatOnlineResultBySpeaker(
-    result: OnlineRecognizerResult,
-    segments: Array<OfflineSpeakerDiarizationSegment>,
-    localSpeakerNameMap: Map<Int, String> = emptyMap(),
-  ): String {
-    if (segments.isEmpty()) {
-      return result.text
-    }
-    val tokens = result.tokens
-    val timestamps = result.timestamps
-    if (tokens.isEmpty() || timestamps.isEmpty()) {
-      val speakerName = localSpeakerNameMap[segments[0].speaker] ?: speakerLabel(segments[0].speaker)
-      return "$speakerName: ${result.text}"
-    }
-
-    val chunks = mutableListOf<SpeakerChunk>()
-    val count = minOf(tokens.size, timestamps.size)
-    for (index in 0 until count) {
-      val normalized = normalizeToken(tokens[index])
-      if (normalized.isBlank()) {
-        continue
-      }
-      val localSpeaker = speakerForTime(timestamps[index], segments)
-      val speaker = localSpeakerNameMap[localSpeaker] ?: speakerLabel(localSpeaker)
-      if (chunks.isNotEmpty() && chunks.last().speaker == speaker) {
-        val merged = mergePieceText(chunks.last().text, normalized)
-        chunks[chunks.lastIndex] = SpeakerChunk(speaker, merged)
-      } else {
-        chunks.add(SpeakerChunk(speaker, normalized))
-      }
-    }
-
-    if (chunks.isEmpty()) {
-      val speakerName = localSpeakerNameMap[segments[0].speaker] ?: speakerLabel(segments[0].speaker)
-      return "$speakerName: ${result.text}"
-    }
-    return formatSpeakerChunks(chunks)
-  }
-
   private fun formatSpeakerChunks(chunks: List<SpeakerChunk>): String {
     if (chunks.isEmpty()) {
       return ""
@@ -1882,38 +1276,6 @@ class SherpaOnnxModule : Module() {
     return "speaker${speaker + 1}"
   }
 
-  private fun speakerForTime(time: Float, segments: Array<OfflineSpeakerDiarizationSegment>): Int {
-    for (segment in segments) {
-      if (time >= segment.start && time <= segment.end) {
-        return segment.speaker
-      }
-    }
-
-    var nearestSpeaker = segments[0].speaker
-    var nearestDistance = Float.MAX_VALUE
-    for (segment in segments) {
-      val distance =
-        when {
-          time < segment.start -> segment.start - time
-          time > segment.end -> time - segment.end
-          else -> 0f
-        }
-      if (distance < nearestDistance) {
-        nearestDistance = distance
-        nearestSpeaker = segment.speaker
-      }
-    }
-    return nearestSpeaker
-  }
-
-  private fun normalizeToken(token: String): String {
-    return token
-      .replace("▁", " ")
-      .replace("Ġ", " ")
-      .replace("<blk>", "")
-      .trim()
-  }
-
   private fun mergePieceText(left: String, right: String): String {
     if (left.isBlank()) return right
     if (right.isBlank()) return left
@@ -1921,112 +1283,6 @@ class SherpaOnnxModule : Module() {
     val rightFirst = right.first()
     val needsSpace = leftLast.isLetterOrDigit() && rightFirst.isLetterOrDigit()
     return if (needsSpace) "$left $right" else "$left$right"
-  }
-
-  private data class RealtimeSpeakerNameResolveResult(
-    val localSpeakerNameMap: Map<Int, String>,
-    val nextSpeakerIndex: Int,
-  )
-
-  private fun resolveSpeakerNamesForRealtimeSegment(
-    segmentSamples: FloatArray,
-    sampleRate: Int,
-    segments: Array<OfflineSpeakerDiarizationSegment>,
-    extractor: SpeakerEmbeddingExtractor?,
-    manager: SpeakerEmbeddingManager?,
-    similarityThreshold: Float,
-    startSpeakerIndex: Int,
-  ): RealtimeSpeakerNameResolveResult {
-    if (segments.isEmpty() || extractor == null || manager == null) {
-      return RealtimeSpeakerNameResolveResult(emptyMap(), startSpeakerIndex)
-    }
-
-    var nextSpeaker = startSpeakerIndex
-    val speakerMap = mutableMapOf<Int, String>()
-    val localSpeakerIds = segments.map { it.speaker }.toSet()
-    for (localSpeakerId in localSpeakerIds) {
-      val speakerSamples = collectSamplesForSpeaker(segmentSamples, sampleRate, segments, localSpeakerId)
-      if (speakerSamples.isEmpty()) {
-        continue
-      }
-
-      var embedStream: OnlineStream? = null
-      try {
-        embedStream = extractor.createStream()
-        embedStream.acceptWaveform(speakerSamples, sampleRate)
-        if (!extractor.isReady(embedStream)) {
-          continue
-        }
-
-        val embedding = extractor.compute(embedStream)
-        val matchedName = manager.search(embedding, similarityThreshold)
-        if (matchedName.isNotBlank()) {
-          speakerMap[localSpeakerId] = matchedName
-          continue
-        }
-
-        val newName = speakerNameByIndex(nextSpeaker)
-        val added = manager.add(newName, embedding)
-        if (added) {
-          speakerMap[localSpeakerId] = newName
-          nextSpeaker += 1
-        } else {
-          speakerMap[localSpeakerId] = speakerLabel(localSpeakerId)
-        }
-      } catch (_: Exception) {
-        speakerMap[localSpeakerId] = speakerLabel(localSpeakerId)
-      } finally {
-        embedStream?.release()
-      }
-    }
-
-    return RealtimeSpeakerNameResolveResult(speakerMap, nextSpeaker)
-  }
-
-  private fun collectSamplesForSpeaker(
-    segmentSamples: FloatArray,
-    sampleRate: Int,
-    segments: Array<OfflineSpeakerDiarizationSegment>,
-    speakerId: Int,
-  ): FloatArray {
-    val speakerSegments = segments.filter { it.speaker == speakerId }
-    if (speakerSegments.isEmpty()) {
-      return FloatArray(0)
-    }
-
-    var total = 0
-    for (segment in speakerSegments) {
-      val startIndex = (segment.start * sampleRate).toInt().coerceAtLeast(0)
-      val endIndex = (segment.end * sampleRate).toInt().coerceAtMost(segmentSamples.size)
-      if (endIndex > startIndex) {
-        total += endIndex - startIndex
-      }
-    }
-    if (total <= 0) {
-      return FloatArray(0)
-    }
-
-    val out = FloatArray(total)
-    var offset = 0
-    for (segment in speakerSegments) {
-      val startIndex = (segment.start * sampleRate).toInt().coerceAtLeast(0)
-      val endIndex = (segment.end * sampleRate).toInt().coerceAtMost(segmentSamples.size)
-      if (endIndex <= startIndex) {
-        continue
-      }
-      val length = endIndex - startIndex
-      System.arraycopy(segmentSamples, startIndex, out, offset, length)
-      offset += length
-    }
-    return if (offset == out.size) out else out.copyOf(offset)
-  }
-
-  private fun speakerNameByIndex(index: Int): String {
-    if (index in 0..25) {
-      val suffix = ('A'.code + index).toChar()
-      return "speaker$suffix"
-    }
-    return "speaker${index + 1}"
   }
 
   private fun OfflineRecognizerResult.toMap(waveData: WaveData): Map<String, Any?> {
@@ -2071,32 +1327,16 @@ class SherpaOnnxModule : Module() {
     }
   }
 
-  private fun Map<String, Any?>.getLong(key: String): Long? {
-    val value = this[key]
-    return when (value) {
-      is Long -> value
-      is Int -> value.toLong()
-      is Double -> value.toLong()
-      is Float -> value.toLong()
-      else -> null
-    }
-  }
-
   companion object {
-    private const val REALTIME_EVENT_NAME = "onRealtimeTranscription"
-    private const val REALTIME_STATE_EVENT_NAME = "onRealtimeState"
     private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/asr/zh"
     private const val DEFAULT_SAMPLE_RATE = 16000
     private const val DEFAULT_FEATURE_DIM = 80
     private const val DEFAULT_NUM_THREADS = 2
     private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 512
-    private const val DEFAULT_EMIT_INTERVAL_MS = 150
     private const val WAV_HEADER_SIZE = 44
-    private const val DEFAULT_REALTIME_SAVE_SUBDIR = "sherpa/realtime-recordings"
-    private const val DEFAULT_REALTIME_SAVE_SEGMENT_SECONDS = 60
-    private const val DEFAULT_REALTIME_SAVE_MAX_SESSION_SECONDS = 2 * 60 * 60
-    private const val DEFAULT_REALTIME_SAVE_MIN_FREE_BYTES = 300L * 1024L * 1024L
-    private const val DEFAULT_REALTIME_SAVE_SYNC_INTERVAL_MS = 1_000L
+    private const val DEFAULT_VAD_MODEL_ASSET = "sherpa/onnx/ten-vad.onnx"
+    private const val DEFAULT_RUNTIME_VAD_SUBDIR = "sherpa/vad"
+    private const val DEFAULT_OFFLINE_VAD_SEGMENTS_SUBDIR = "sherpa/offline-vad-segments"
     private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/onnx/speaker-diarization.onnx"
     private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/onnx/speaker-recognition.onnx"
   }

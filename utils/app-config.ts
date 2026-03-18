@@ -4,7 +4,6 @@ const storage = createMMKV({ id: 'app-config' });
 
 export const APP_CONFIG_KEYS = {
     darkMode: 'app.config.darkMode',
-    vadEnabled: 'app.config.vadEnabled',
     speakerDiarizationEnabled: 'app.config.speakerDiarizationEnabled',
     denoiseEnabled: 'app.config.denoiseEnabled',
     recognitionProfile: 'app.config.recognitionProfile',
@@ -12,7 +11,6 @@ export const APP_CONFIG_KEYS = {
 
 type BoolConfigKey =
     | typeof APP_CONFIG_KEYS.darkMode
-    | typeof APP_CONFIG_KEYS.vadEnabled
     | typeof APP_CONFIG_KEYS.speakerDiarizationEnabled
     | typeof APP_CONFIG_KEYS.denoiseEnabled;
 export type RecognitionProfileId = 'zh-cn' | 'en' | 'universal';
@@ -21,7 +19,6 @@ const DEFAULT_RECOGNITION_PROFILE: RecognitionProfileId = 'zh-cn';
 
 const DEFAULT_BOOL_VALUES: Record<BoolConfigKey, boolean> = {
     [APP_CONFIG_KEYS.darkMode]: false,
-    [APP_CONFIG_KEYS.vadEnabled]: true,
     [APP_CONFIG_KEYS.speakerDiarizationEnabled]: false,
     [APP_CONFIG_KEYS.denoiseEnabled]: true,
 };
@@ -44,14 +41,6 @@ export function getDarkModeEnabled(): boolean {
 
 export function setDarkModeEnabled(value: boolean): void {
     setBool(APP_CONFIG_KEYS.darkMode, value);
-}
-
-export function getVadEnabled(): boolean {
-    return getBool(APP_CONFIG_KEYS.vadEnabled);
-}
-
-export function setVadEnabled(value: boolean): void {
-    setBool(APP_CONFIG_KEYS.vadEnabled, value);
 }
 
 export function getSpeakerDiarizationEnabled(): boolean {

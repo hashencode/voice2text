@@ -58,6 +58,13 @@ export type SherpaTranscribeResult = {
     event: string;
     sampleRate: number;
     numSamples: number;
+    vadSegments?: {
+        index: number;
+        path: string;
+        text: string;
+        numSamples: number;
+        durationMs: number;
+    }[];
 };
 
 type SherpaOnnxNative = {
@@ -84,6 +91,7 @@ export const SHERPA_MODEL_PRESETS = {
         denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/onnx/punctuation.onnx',
+        enableVad: true,
         encoder: 'encoder_model.ort',
         mergedDecoder: 'decoder_model_merged.ort',
         tokens: 'tokens.txt',
@@ -96,6 +104,7 @@ export const SHERPA_MODEL_PRESETS = {
         denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/onnx/punctuation.onnx',
+        enableVad: true,
         encoder: 'encoder_model.ort',
         mergedDecoder: 'decoder_model_merged.ort',
         tokens: 'tokens.txt',
@@ -108,6 +117,7 @@ export const SHERPA_MODEL_PRESETS = {
         denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/onnx/punctuation.onnx',
+        enableVad: true,
         encoderAdaptor: 'encoder_adaptor.onnx',
         llm: 'llm.onnx',
         embedding: 'embedding.onnx',
@@ -169,10 +179,6 @@ function ensureDocumentDirectory(): string {
 
 export function getDownloadedModelsRootDir(): string {
     return `${ensureDocumentDirectory()}sherpa/models/`;
-}
-
-export function getRealtimeRecordingRootDir(): string {
-    return `${ensureDocumentDirectory()}sherpa/realtime-recordings/`;
 }
 
 export function getDownloadedModelDir(modelId: SherpaModelId): string {

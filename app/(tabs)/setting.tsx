@@ -22,12 +22,10 @@ import {
     getDenoiseEnabled,
     getRecognitionProfile,
     getSpeakerDiarizationEnabled,
-    getVadEnabled,
     setDarkModeEnabled,
     setDenoiseEnabled,
     setRecognitionProfile,
     setSpeakerDiarizationEnabled,
-    setVadEnabled,
     type RecognitionProfileId,
 } from '~/utils/app-config';
 import { getCurrentModel, setCurrentModel } from '~/utils/model-selection';
@@ -84,7 +82,6 @@ export default function Setting() {
     const [refreshing, setRefreshing] = useState(false);
     const [currentModel, setCurrentModelState] = useState<SherpaModelId | null>(null);
     const [selectingModelId, setSelectingModelId] = useState<SherpaModelId | null>(null);
-    const [vadEnabled, setVadEnabledState] = useState(getVadEnabled());
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabledState] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabledState] = useState(getDenoiseEnabled());
     const [darkModeEnabled, setDarkModeEnabledState] = useState(getDarkModeEnabled());
@@ -147,11 +144,6 @@ export default function Setting() {
         setDarkModeEnabled(value);
         setDarkModeEnabledState(value);
         Appearance.setColorScheme(value ? 'dark' : 'light');
-    }, []);
-
-    const handleToggleVad = useCallback((value: boolean) => {
-        setVadEnabled(value);
-        setVadEnabledState(value);
     }, []);
 
     const handleToggleSpeakerDiarization = useCallback((value: boolean) => {
@@ -283,10 +275,6 @@ export default function Setting() {
                     <View className="flex flex-row items-center justify-between">
                         <TextX>深色模式：{darkModeEnabled ? '开启' : '关闭'}</TextX>
                         <SwitchX value={darkModeEnabled} onValueChange={handleToggleDarkMode} />
-                    </View>
-                    <View className="flex flex-row items-center justify-between">
-                        <TextX>VAD 开关：{vadEnabled ? '开启' : '关闭'}</TextX>
-                        <SwitchX value={vadEnabled} onValueChange={handleToggleVad} />
                     </View>
                     <View className="flex flex-row items-center justify-between">
                         <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
