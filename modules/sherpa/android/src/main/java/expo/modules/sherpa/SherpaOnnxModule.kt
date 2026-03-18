@@ -2097,7 +2097,7 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_REALTIME_SAVE_MAX_SESSION_SECONDS = 2 * 60 * 60
     private const val DEFAULT_REALTIME_SAVE_MIN_FREE_BYTES = 300L * 1024L * 1024L
     private const val DEFAULT_REALTIME_SAVE_SYNC_INTERVAL_MS = 1_000L
-    private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/speaker-diarization/pyannote-segmentation.onnx"
+    private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/onnx/speaker-diarization.onnx"
     private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/onnx/speaker-recognition.onnx"
   }
 }

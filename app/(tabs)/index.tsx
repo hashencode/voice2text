@@ -14,7 +14,7 @@ import { getDenoiseEnabled, getSpeakerDiarizationEnabled } from '~/utils/app-con
 import { getCurrentModel } from '~/utils/model-selection';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/tools';
 
-const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/speaker-diarization/speaker-diarization.onnx';
+const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
 
 function compareModelVersion(left: string, right: string): number {

@@ -44,25 +44,9 @@ module.exports = function withSherpaOnnx(config) {
             const modelDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/asr');
             syncModelPackages(modelSrcDir, modelDestDir);
 
-            const vadSrcDir = path.join(projectRoot, 'assets/sherpa/vad');
-            const vadDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/vad');
-            syncModelPackages(vadSrcDir, vadDestDir);
-
-            const segmentationSrcDir = path.join(projectRoot, 'assets/sherpa/speaker-diarization');
-            const segmentationDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speaker-diarization');
-            syncModelPackages(segmentationSrcDir, segmentationDestDir);
-
-            const speakerEmbeddingSrcDir = path.join(projectRoot, 'assets/sherpa/speaker-recognition');
-            const speakerEmbeddingDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speaker-recognition');
-            syncModelPackages(speakerEmbeddingSrcDir, speakerEmbeddingDestDir);
-
-            const speechEnhancementSrcDir = path.join(projectRoot, 'assets/sherpa/speech-enhancement');
-            const speechEnhancementDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/speech-enhancement');
-            syncModelPackages(speechEnhancementSrcDir, speechEnhancementDestDir);
-
-            const punctuationSrcDir = path.join(projectRoot, 'assets/sherpa/punctuation');
-            const punctuationDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/punctuation');
-            syncModelPackages(punctuationSrcDir, punctuationDestDir);
+            const onnxSrcDir = path.join(projectRoot, 'assets/sherpa/onnx');
+            const onnxDestDir = path.join(projectRoot, 'android/app/src/main/assets/sherpa/onnx');
+            syncModelPackages(onnxSrcDir, onnxDestDir);
 
             const wavSrcDir = path.join(projectRoot, 'assets/wav');
             const wavDestDir = path.join(projectRoot, 'android/app/src/main/assets/wav');
