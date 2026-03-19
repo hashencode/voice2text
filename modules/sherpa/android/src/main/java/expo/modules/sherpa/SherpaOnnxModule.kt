@@ -2,6 +2,7 @@ package expo.modules.sherpa
 
 import android.content.res.AssetManager
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import com.k2fsa.sherpa.onnx.FeatureConfig
@@ -49,6 +50,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 import java.util.zip.ZipInputStream
+import org.json.JSONArray
+import org.json.JSONObject
 
 class SherpaOnnxModule : Module() {
   private val executor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -72,8 +75,46 @@ class SherpaOnnxModule : Module() {
   @Volatile
   private var wavStopLatch: CountDownLatch? = null
 
+  @Volatile
+  private var wavStopReason = STOP_REASON_MANUAL
+
+  @Volatile
+  private var wavInterruptedBySystem = false
+
+  @Volatile
+  private var wavSessionId: String? = null
+
+  @Volatile
+  private var wavSessionDir: File? = null
+
+  @Volatile
+  private var wavSessionMetaFile: File? = null
+
+  @Volatile
+  private var wavSessionStartedAtMs: Long = 0L
+
+  @Volatile
+  private var wavChunkDurationMs = DEFAULT_WAV_CHUNK_DURATION_MS
+
+  @Volatile
+  private var wavSessionState = SESSION_STATE_IDLE
+
+  @Volatile
+  private var wavAudioManager: AudioManager? = null
+
   private val wavLock = Any()
   private val offlineCacheLock = Any()
+  private val wavChunkList = mutableListOf<WavChunkMeta>()
+
+  private val wavAudioFocusChangeListener =
+    AudioManager.OnAudioFocusChangeListener { focusChange ->
+      when (focusChange) {
+        AudioManager.AUDIOFOCUS_LOSS,
+        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK
+        -> stopWavRecordingInternal(STOP_REASON_AUDIO_FOCUS_LOSS, interruptedBySystem = true)
+      }
+    }
 
   @Volatile
   private var cachedOfflineRecognizer: OfflineRecognizer? = null
@@ -81,11 +122,25 @@ class SherpaOnnxModule : Module() {
   @Volatile
   private var cachedOfflineRecognizerKey: String? = null
 
+  private data class WavChunkMeta(
+    val index: Int,
+    val path: String,
+    val bytes: Long,
+    val startSample: Long,
+    val endSample: Long,
+  )
+
+  private data class WavInfo(
+    val sampleRate: Int,
+    val numSamples: Long,
+    val durationMs: Long,
+  )
+
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
 
     OnDestroy {
-      stopWavRecordingInternal()
+      stopWavRecordingInternal(STOP_REASON_MODULE_DESTROYED, interruptedBySystem = true)
       clearOfflineRecognizerCache()
       executor.shutdownNow()
       wavRecordExecutor.shutdownNow()
@@ -108,6 +163,7 @@ class SherpaOnnxModule : Module() {
 
         try {
           val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
+          val chunkDurationMs = (options?.getInt("chunkDurationMs") ?: DEFAULT_WAV_CHUNK_DURATION_MS).coerceIn(250, 5000)
           val outputPath =
             options?.getString("path")?.removePrefix("file://")
               ?: run {
@@ -115,34 +171,43 @@ class SherpaOnnxModule : Module() {
                   appContext.reactContext?.cacheDir ?: throw IllegalStateException("React context is not available")
                 File(cacheDir, "recording-${System.currentTimeMillis()}.wav").absolutePath
               }
+          val sessionId = "session-${System.currentTimeMillis()}-${UUID.randomUUID().toString().substring(0, 8)}"
+          val sessionDir = createWavSessionDir(sessionId)
+          val sessionMetaFile = File(sessionDir, DEFAULT_WAV_SESSION_META_FILE)
 
           val outFile = File(outputPath)
           outFile.parentFile?.mkdirs()
-          if (outFile.exists()) {
-            outFile.delete()
-          }
 
           val audioRecord = createAudioRecord(sampleRate)
-          FileOutputStream(outFile).use { fos ->
-            fos.write(ByteArray(WAV_HEADER_SIZE))
-            fos.flush()
-          }
 
           wavRecordingRunning = true
           wavAudioRecord = audioRecord
           wavOutputFile = outFile
           wavSampleRate = sampleRate
           wavWrittenBytes = 0
+          wavStopReason = STOP_REASON_MANUAL
+          wavInterruptedBySystem = false
+          wavSessionId = sessionId
+          wavSessionDir = sessionDir
+          wavSessionMetaFile = sessionMetaFile
+          wavSessionStartedAtMs = System.currentTimeMillis()
+          wavChunkDurationMs = chunkDurationMs
+          wavSessionState = SESSION_STATE_RECORDING
+          wavChunkList.clear()
           wavStopLatch = CountDownLatch(1)
+          persistCurrentWavSessionMeta()
+          requestWavAudioFocus()
 
           wavRecordExecutor.execute {
-            runWavRecordingLoop(outFile, audioRecord, sampleRate)
+            runWavRecordingLoop(outFile, audioRecord, sampleRate, sessionDir)
           }
 
           promise.resolve(
             mapOf(
               "path" to outFile.absolutePath,
               "sampleRate" to sampleRate,
+              "sessionId" to sessionId,
+              "chunkDurationMs" to chunkDurationMs,
             ),
           )
         } catch (e: Exception) {
@@ -150,7 +215,13 @@ class SherpaOnnxModule : Module() {
           wavAudioRecord?.release()
           wavAudioRecord = null
           wavOutputFile = null
+          wavSessionState = SESSION_STATE_IDLE
+          wavChunkList.clear()
+          wavSessionId = null
+          wavSessionDir = null
+          wavSessionMetaFile = null
           wavStopLatch = null
+          abandonWavAudioFocus()
           promise.reject("ERR_WAV_RECORDING_START", e.message, e)
         }
       }
@@ -161,7 +232,7 @@ class SherpaOnnxModule : Module() {
       val outputFile = wavOutputFile
       val sampleRate = wavSampleRate
 
-      stopWavRecordingInternal()
+      stopWavRecordingInternal(STOP_REASON_MANUAL, interruptedBySystem = false)
 
       if (latch != null) {
         latch.await(5, TimeUnit.SECONDS)
@@ -176,8 +247,42 @@ class SherpaOnnxModule : Module() {
             "path" to path,
             "sampleRate" to sampleRate,
             "numSamples" to (wavWrittenBytes / 2).toDouble(),
+            "sessionId" to wavSessionId,
           ),
         )
+      }
+    }
+
+    AsyncFunction("recoverWavRecordings") { promise: Promise ->
+      executor.execute {
+        try {
+          val sessions = recoverInterruptedWavSessions()
+          promise.resolve(sessions)
+        } catch (e: Exception) {
+          promise.reject("ERR_WAV_RECORDING_RECOVER", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("getWavInfo") { wavPath: String, promise: Promise ->
+      executor.execute {
+        try {
+          val cleanPath = wavPath.removePrefix("file://")
+          val file = File(cleanPath)
+          if (!file.exists() || !file.isFile) {
+            throw IllegalArgumentException("WAV file does not exist: $cleanPath")
+          }
+          val info = readWavInfo(file)
+          promise.resolve(
+            mapOf(
+              "sampleRate" to info.sampleRate,
+              "numSamples" to info.numSamples.toDouble(),
+              "durationMs" to info.durationMs.toDouble(),
+            ),
+          )
+        } catch (e: Exception) {
+          promise.reject("ERR_WAV_INFO", e.message, e)
+        }
       }
     }
 
@@ -355,7 +460,12 @@ class SherpaOnnxModule : Module() {
     }
   }
 
-  private fun stopWavRecordingInternal() {
+  private fun stopWavRecordingInternal(reason: String, interruptedBySystem: Boolean) {
+    if (!wavRecordingRunning) {
+      return
+    }
+    wavStopReason = reason
+    wavInterruptedBySystem = interruptedBySystem
     wavRecordingRunning = false
     try {
       wavAudioRecord?.stop()
@@ -363,45 +473,131 @@ class SherpaOnnxModule : Module() {
     }
   }
 
-  private fun runWavRecordingLoop(outputFile: File, audioRecord: AudioRecord, sampleRate: Int) {
+  private fun runWavRecordingLoop(outputFile: File, audioRecord: AudioRecord, sampleRate: Int, sessionDir: File) {
     var localWrittenBytes = 0L
+    var chunkIndex = 0
+    var chunkWrittenBytes = 0L
+    var chunkStartSample = 0L
+    var chunkFile: File? = null
+    var chunkStream: FileOutputStream? = null
+    val targetChunkBytes = maxOf((sampleRate.toLong() * 2L * wavChunkDurationMs.toLong()) / 1000L, MIN_WAV_CHUNK_BYTES)
+    val chunksDir = File(sessionDir, DEFAULT_WAV_CHUNKS_DIR)
+    chunksDir.mkdirs()
+
+    fun openNewChunk() {
+      chunkIndex += 1
+      chunkWrittenBytes = 0L
+      chunkStartSample = localWrittenBytes / 2L
+      chunkFile = File(chunksDir, "chunk-${chunkIndex.toString().padStart(6, '0')}.pcm")
+      chunkStream = FileOutputStream(chunkFile!!)
+    }
+
+    fun closeCurrentChunk() {
+      val stream = chunkStream ?: return
+      val file = chunkFile
+      stream.flush()
+      stream.fd.sync()
+      stream.close()
+      chunkStream = null
+      if (chunkWrittenBytes <= 0L || file == null) {
+        file?.delete()
+        return
+      }
+
+      val endSample = chunkStartSample + (chunkWrittenBytes / 2L)
+      synchronized(wavLock) {
+        wavChunkList.add(
+          WavChunkMeta(
+            index = chunkIndex,
+            path = file.absolutePath,
+            bytes = chunkWrittenBytes,
+            startSample = chunkStartSample,
+            endSample = endSample,
+          ),
+        )
+        wavWrittenBytes = localWrittenBytes
+        persistCurrentWavSessionMeta()
+      }
+    }
+
     try {
       audioRecord.startRecording()
-      FileOutputStream(outputFile, true).use { fos ->
-        val shortBuffer = ShortArray(DEFAULT_AUDIO_BUFFER_SAMPLES)
-        val byteBuffer = ByteArray(DEFAULT_AUDIO_BUFFER_SAMPLES * 2)
+      val shortBuffer = ShortArray(DEFAULT_AUDIO_BUFFER_SAMPLES)
+      val byteBuffer = ByteArray(DEFAULT_AUDIO_BUFFER_SAMPLES * 2)
+      openNewChunk()
 
-        while (wavRecordingRunning) {
-          val read = audioRecord.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
-          if (read <= 0) {
-            continue
-          }
-
-          var offset = 0
-          for (i in 0 until read) {
-            val sample = shortBuffer[i].toInt()
-            byteBuffer[offset] = (sample and 0xFF).toByte()
-            byteBuffer[offset + 1] = ((sample shr 8) and 0xFF).toByte()
-            offset += 2
-          }
-          fos.write(byteBuffer, 0, offset)
-          localWrittenBytes += offset.toLong()
+      while (wavRecordingRunning) {
+        val read = audioRecord.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
+        if (read <= 0) {
+          continue
         }
-        fos.flush()
+
+        var offset = 0
+        for (i in 0 until read) {
+          val sample = shortBuffer[i].toInt()
+          byteBuffer[offset] = (sample and 0xFF).toByte()
+          byteBuffer[offset + 1] = ((sample shr 8) and 0xFF).toByte()
+          offset += 2
+        }
+
+        if (chunkStream == null) {
+          openNewChunk()
+        }
+        val stream = chunkStream ?: continue
+        stream.write(byteBuffer, 0, offset)
+        localWrittenBytes += offset.toLong()
+        chunkWrittenBytes += offset.toLong()
+
+        if (chunkWrittenBytes >= targetChunkBytes) {
+          closeCurrentChunk()
+          openNewChunk()
+        }
       }
     } finally {
+      try {
+        closeCurrentChunk()
+      } catch (_: Exception) {
+      }
+
       try {
         audioRecord.stop()
       } catch (_: Exception) {
       }
       audioRecord.release()
 
-      try {
-        writeWavHeader(outputFile, localWrittenBytes, sampleRate)
-      } catch (_: Exception) {
+      var finalState = SESSION_STATE_FINALIZING
+      val finalReason = wavStopReason
+      if (wavInterruptedBySystem) {
+        finalState = SESSION_STATE_INTERRUPTED
       }
 
-      wavWrittenBytes = localWrittenBytes
+      synchronized(wavLock) {
+        wavWrittenBytes = localWrittenBytes
+        wavSessionState = finalState
+        persistCurrentWavSessionMeta()
+      }
+
+      try {
+        if (wavChunkList.isNotEmpty()) {
+          localWrittenBytes = mergeChunksToWav(outputFile, wavChunkList.toList(), sampleRate)
+        }
+      } catch (_: Exception) {
+        finalState = SESSION_STATE_INTERRUPTED
+      }
+
+      synchronized(wavLock) {
+        wavWrittenBytes = localWrittenBytes
+        wavSessionState =
+          if (finalState == SESSION_STATE_INTERRUPTED) {
+            SESSION_STATE_INTERRUPTED
+          } else {
+            SESSION_STATE_COMPLETED
+          }
+        wavStopReason = finalReason
+        persistCurrentWavSessionMeta()
+      }
+
+      abandonWavAudioFocus()
       wavAudioRecord = null
       wavRecordingRunning = false
       wavStopLatch?.countDown()
@@ -434,6 +630,37 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun readWavInfo(file: File): WavInfo {
+    val fileSize = file.length()
+    if (fileSize <= WAV_HEADER_SIZE) {
+      return WavInfo(sampleRate = DEFAULT_SAMPLE_RATE, numSamples = 0L, durationMs = 0L)
+    }
+
+    var sampleRate = DEFAULT_SAMPLE_RATE
+    var bitsPerSample = 16
+    var dataSize = fileSize - WAV_HEADER_SIZE
+    RandomAccessFile(file, "r").use { raf ->
+      if (raf.length() >= WAV_HEADER_SIZE) {
+        raf.seek(24)
+        sampleRate = Integer.reverseBytes(raf.readInt())
+        raf.seek(34)
+        bitsPerSample = java.lang.Short.reverseBytes(raf.readShort()).toInt()
+        raf.seek(40)
+        dataSize = Integer.reverseBytes(raf.readInt()).toLong() and 0xFFFFFFFFL
+      }
+    }
+
+    val bytesPerSample = when {
+      bitsPerSample <= 8 -> 1L
+      bitsPerSample <= 16 -> 2L
+      else -> 4L
+    }
+    val safeSampleRate = if (sampleRate > 0) sampleRate else DEFAULT_SAMPLE_RATE
+    val numSamples = maxOf(dataSize / bytesPerSample, 0L)
+    val durationMs = ((numSamples.toDouble() / safeSampleRate.toDouble()) * 1000.0).toLong()
+    return WavInfo(sampleRate = safeSampleRate, numSamples = numSamples, durationMs = durationMs)
+  }
+
   private fun intToLittleEndianBytes(value: Int): ByteArray {
     return byteArrayOf(
       (value and 0xFF).toByte(),
@@ -449,6 +676,306 @@ class SherpaOnnxModule : Module() {
       (v and 0xFF).toByte(),
       ((v shr 8) and 0xFF).toByte(),
     )
+  }
+
+  private fun resolveWavRecordingSessionsRoot(): File {
+    val context = appContext.reactContext ?: throw IllegalStateException("React context is not available")
+    val root = File(context.filesDir, DEFAULT_WAV_RECORDING_SESSIONS_SUBDIR)
+    if (!root.exists()) {
+      root.mkdirs()
+    }
+    if (!root.exists() || !root.isDirectory) {
+      throw IllegalStateException("Unable to create wav recording sessions root: ${root.absolutePath}")
+    }
+    return root
+  }
+
+  private fun createWavSessionDir(sessionId: String): File {
+    val root = resolveWavRecordingSessionsRoot()
+    val sessionDir = File(root, sessionId)
+    if (!sessionDir.exists()) {
+      sessionDir.mkdirs()
+    }
+    val chunksDir = File(sessionDir, DEFAULT_WAV_CHUNKS_DIR)
+    if (!chunksDir.exists()) {
+      chunksDir.mkdirs()
+    }
+    if (!sessionDir.exists() || !sessionDir.isDirectory || !chunksDir.exists() || !chunksDir.isDirectory) {
+      throw IllegalStateException("Unable to create wav recording session directory: ${sessionDir.absolutePath}")
+    }
+    return sessionDir
+  }
+
+  private fun persistCurrentWavSessionMeta() {
+    val sessionId = wavSessionId ?: return
+    val sessionMetaFile = wavSessionMetaFile ?: return
+    val outputPath = wavOutputFile?.absolutePath ?: ""
+    val snapshot = wavChunkList.toList().sortedBy { it.index }
+    writeWavSessionMetaFile(
+      metaFile = sessionMetaFile,
+      sessionId = sessionId,
+      state = wavSessionState,
+      reason = wavStopReason,
+      outputPath = outputPath,
+      sampleRate = wavSampleRate,
+      chunkDurationMs = wavChunkDurationMs,
+      startedAtMs = wavSessionStartedAtMs,
+      totalPcmBytes = wavWrittenBytes,
+      interruptedBySystem = wavInterruptedBySystem,
+      chunks = snapshot,
+    )
+  }
+
+  private fun writeWavSessionMetaFile(
+    metaFile: File,
+    sessionId: String,
+    state: String,
+    reason: String,
+    outputPath: String,
+    sampleRate: Int,
+    chunkDurationMs: Int,
+    startedAtMs: Long,
+    totalPcmBytes: Long,
+    interruptedBySystem: Boolean,
+    chunks: List<WavChunkMeta>,
+  ) {
+    metaFile.parentFile?.mkdirs()
+    val now = System.currentTimeMillis()
+    val json =
+      JSONObject().apply {
+        put("sessionId", sessionId)
+        put("state", state)
+        put("reason", reason)
+        put("outputPath", outputPath)
+        put("sampleRate", sampleRate)
+        put("chunkDurationMs", chunkDurationMs)
+        put("startedAtMs", startedAtMs)
+        put("updatedAtMs", now)
+        put("totalPcmBytes", totalPcmBytes)
+        put("numSamples", totalPcmBytes / 2L)
+        put("interruptedBySystem", interruptedBySystem)
+        put(
+          "chunks",
+          JSONArray().apply {
+            chunks.forEach { chunk ->
+              put(
+                JSONObject().apply {
+                  put("index", chunk.index)
+                  put("path", chunk.path)
+                  put("bytes", chunk.bytes)
+                  put("startSample", chunk.startSample)
+                  put("endSample", chunk.endSample)
+                },
+              )
+            }
+          },
+        )
+      }
+
+    val tmpFile = File(metaFile.parentFile, "${metaFile.name}.tmp")
+    FileOutputStream(tmpFile).use { fos ->
+      fos.write(json.toString(2).toByteArray(Charsets.UTF_8))
+      fos.flush()
+      fos.fd.sync()
+    }
+    if (metaFile.exists()) {
+      metaFile.delete()
+    }
+    if (!tmpFile.renameTo(metaFile)) {
+      FileInputStream(tmpFile).use { input ->
+        FileOutputStream(metaFile).use { output ->
+          val buffer = ByteArray(8192)
+          var read = input.read(buffer)
+          while (read > 0) {
+            output.write(buffer, 0, read)
+            read = input.read(buffer)
+          }
+          output.flush()
+          output.fd.sync()
+        }
+      }
+      tmpFile.delete()
+    }
+  }
+
+  private fun mergeChunksToWav(outputFile: File, chunks: List<WavChunkMeta>, sampleRate: Int): Long {
+    if (chunks.isEmpty()) {
+      return 0L
+    }
+    outputFile.parentFile?.mkdirs()
+    if (outputFile.exists()) {
+      outputFile.delete()
+    }
+
+    var totalBytes = 0L
+    FileOutputStream(outputFile).use { fos ->
+      fos.write(ByteArray(WAV_HEADER_SIZE))
+      val buffer = ByteArray(8192)
+      chunks.sortedBy { it.index }.forEach { chunk ->
+        val chunkFile = File(chunk.path)
+        if (!chunkFile.exists() || !chunkFile.isFile) {
+          return@forEach
+        }
+        FileInputStream(chunkFile).use { fis ->
+          var read = fis.read(buffer)
+          while (read > 0) {
+            fos.write(buffer, 0, read)
+            totalBytes += read.toLong()
+            read = fis.read(buffer)
+          }
+        }
+      }
+      fos.flush()
+      fos.fd.sync()
+    }
+    writeWavHeader(outputFile, totalBytes, sampleRate)
+    return totalBytes
+  }
+
+  private fun collectChunkFiles(sessionDir: File): List<WavChunkMeta> {
+    val chunksDir = File(sessionDir, DEFAULT_WAV_CHUNKS_DIR)
+    if (!chunksDir.exists() || !chunksDir.isDirectory) {
+      return emptyList()
+    }
+    val files =
+      chunksDir
+        .listFiles { file -> file.isFile && file.name.endsWith(".pcm") }
+        ?.sortedBy { it.name }
+        ?: emptyList()
+
+    val out = mutableListOf<WavChunkMeta>()
+    var sampleCursor = 0L
+    for ((idx, file) in files.withIndex()) {
+      val bytes = file.length()
+      if (bytes <= 0L) {
+        continue
+      }
+      val startSample = sampleCursor
+      val endSample = startSample + bytes / 2L
+      sampleCursor = endSample
+      out.add(
+        WavChunkMeta(
+          index = idx + 1,
+          path = file.absolutePath,
+          bytes = bytes,
+          startSample = startSample,
+          endSample = endSample,
+        ),
+      )
+    }
+    return out
+  }
+
+  private fun parseSessionMeta(metaFile: File): JSONObject? {
+    return try {
+      val content = FileInputStream(metaFile).use { fis ->
+        fis.readBytes().toString(Charsets.UTF_8)
+      }
+      JSONObject(content)
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  private fun recoverInterruptedWavSessions(): List<Map<String, Any?>> {
+    val root = resolveWavRecordingSessionsRoot()
+    if (!root.exists() || !root.isDirectory) {
+      return emptyList()
+    }
+
+    val recovered = mutableListOf<Map<String, Any?>>()
+    val sessionDirs = root.listFiles { file -> file.isDirectory }?.sortedByDescending { it.name } ?: emptyList()
+    for (sessionDir in sessionDirs) {
+      val metaFile = File(sessionDir, DEFAULT_WAV_SESSION_META_FILE)
+      if (!metaFile.exists() || !metaFile.isFile) {
+        continue
+      }
+
+      val meta = parseSessionMeta(metaFile) ?: continue
+      val state = meta.optString("state", SESSION_STATE_IDLE)
+      if (state == SESSION_STATE_COMPLETED) {
+        continue
+      }
+      val reason = meta.optString("reason", "")
+      val existingOutputPath = meta.optString("outputPath", "")
+      if (state == SESSION_STATE_INTERRUPTED && reason == STOP_REASON_RECOVERED_AFTER_RESTART && existingOutputPath.isNotBlank()) {
+        val existingOutput = File(existingOutputPath)
+        if (existingOutput.exists() && existingOutput.isFile && existingOutput.length() > WAV_HEADER_SIZE) {
+          continue
+        }
+      }
+
+      val sessionId = meta.optString("sessionId", sessionDir.name)
+      val sampleRate = meta.optInt("sampleRate", DEFAULT_SAMPLE_RATE)
+      val chunkDurationMs = meta.optInt("chunkDurationMs", DEFAULT_WAV_CHUNK_DURATION_MS)
+      val startedAtMs = meta.optLong("startedAtMs", 0L)
+      val outputPathRaw = meta.optString("outputPath", "")
+      val outputPath =
+        if (outputPathRaw.isBlank()) {
+          File(sessionDir, "recovered-${sessionId}.wav").absolutePath
+        } else {
+          outputPathRaw
+        }
+
+      val chunks = collectChunkFiles(sessionDir)
+      if (chunks.isEmpty()) {
+        continue
+      }
+
+      val outFile = File(outputPath)
+      val mergedBytes =
+        try {
+          mergeChunksToWav(outFile, chunks, sampleRate)
+        } catch (_: Exception) {
+          continue
+        }
+
+      writeWavSessionMetaFile(
+        metaFile = metaFile,
+        sessionId = sessionId,
+        state = SESSION_STATE_COMPLETED,
+        reason = STOP_REASON_RECOVERED_AFTER_RESTART,
+        outputPath = outFile.absolutePath,
+        sampleRate = sampleRate,
+        chunkDurationMs = chunkDurationMs,
+        startedAtMs = startedAtMs,
+        totalPcmBytes = mergedBytes,
+        interruptedBySystem = true,
+        chunks = chunks,
+      )
+
+      recovered.add(
+        mapOf(
+          "sessionId" to sessionId,
+          "path" to outFile.absolutePath,
+          "sampleRate" to sampleRate,
+          "numSamples" to (mergedBytes / 2L).toDouble(),
+          "state" to SESSION_STATE_INTERRUPTED,
+          "reason" to STOP_REASON_RECOVERED_AFTER_RESTART,
+        ),
+      )
+    }
+    return recovered
+  }
+
+  private fun requestWavAudioFocus() {
+    val context = appContext.reactContext ?: return
+    val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as? AudioManager ?: return
+    wavAudioManager = audioManager
+    audioManager.requestAudioFocus(
+      wavAudioFocusChangeListener,
+      AudioManager.STREAM_MUSIC,
+      AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
+    )
+  }
+
+  private fun abandonWavAudioFocus() {
+    try {
+      wavAudioManager?.abandonAudioFocus(wavAudioFocusChangeListener)
+    } catch (_: Exception) {
+    } finally {
+      wavAudioManager = null
+    }
   }
 
   private fun resolveOfflineVadSegmentsRoot(): File {
@@ -1339,5 +1866,19 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_OFFLINE_VAD_SEGMENTS_SUBDIR = "sherpa/offline-vad-segments"
     private const val DEFAULT_SPEAKER_SEGMENTATION_MODEL_ASSET = "sherpa/onnx/speaker-diarization.onnx"
     private const val DEFAULT_SPEAKER_EMBEDDING_MODEL_ASSET = "sherpa/onnx/speaker-recognition.onnx"
+    private const val DEFAULT_WAV_RECORDING_SESSIONS_SUBDIR = "sherpa/wav-recordings/sessions"
+    private const val DEFAULT_WAV_CHUNKS_DIR = "chunks"
+    private const val DEFAULT_WAV_SESSION_META_FILE = "session.meta.json"
+    private const val DEFAULT_WAV_CHUNK_DURATION_MS = 1000
+    private const val MIN_WAV_CHUNK_BYTES = 2048L
+    private const val SESSION_STATE_IDLE = "IDLE"
+    private const val SESSION_STATE_RECORDING = "RECORDING"
+    private const val SESSION_STATE_FINALIZING = "FINALIZING"
+    private const val SESSION_STATE_COMPLETED = "COMPLETED"
+    private const val SESSION_STATE_INTERRUPTED = "INTERRUPTED"
+    private const val STOP_REASON_MANUAL = "manual_stop"
+    private const val STOP_REASON_AUDIO_FOCUS_LOSS = "audio_focus_loss"
+    private const val STOP_REASON_MODULE_DESTROYED = "module_destroyed"
+    private const val STOP_REASON_RECOVERED_AFTER_RESTART = "recovered_after_restart"
   }
 }

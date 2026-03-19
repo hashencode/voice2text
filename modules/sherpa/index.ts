@@ -67,11 +67,48 @@ export type SherpaTranscribeResult = {
     }[];
 };
 
+export type WavRecordingStartOptions = {
+    path?: string;
+    sampleRate?: number;
+    chunkDurationMs?: number;
+};
+
+export type WavRecordingStartResult = {
+    path: string;
+    sampleRate: number;
+    sessionId?: string;
+    chunkDurationMs?: number;
+};
+
+export type WavRecordingStopResult = {
+    path: string;
+    sampleRate: number;
+    numSamples: number;
+    sessionId?: string;
+};
+
+export type RecoveredWavRecording = {
+    sessionId: string;
+    path: string;
+    sampleRate: number;
+    numSamples: number;
+    state: string;
+    reason: string;
+};
+
+export type WavFileInfo = {
+    sampleRate: number;
+    numSamples: number;
+    durationMs: number;
+};
+
 type SherpaOnnxNative = {
     hello(): string;
     isWavRecording(): boolean;
-    startWavRecording(options?: { path?: string; sampleRate?: number }): Promise<{ path: string; sampleRate: number }>;
-    stopWavRecording(): Promise<{ path: string; sampleRate: number; numSamples: number }>;
+    startWavRecording(options?: WavRecordingStartOptions): Promise<WavRecordingStartResult>;
+    stopWavRecording(): Promise<WavRecordingStopResult>;
+    recoverWavRecordings(): Promise<RecoveredWavRecording[]>;
+    getWavInfo(path: string): Promise<WavFileInfo>;
     transcribeWav(path: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     transcribeAssetWav(assetPath: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     getFileSha256(filePath: string): Promise<{ size: number; sha256: string }>;
@@ -836,6 +873,8 @@ const SherpaOnnx = {
     isWavRecording: NativeSherpaOnnx.isWavRecording,
     startWavRecording: NativeSherpaOnnx.startWavRecording,
     stopWavRecording: NativeSherpaOnnx.stopWavRecording,
+    recoverWavRecordings: NativeSherpaOnnx.recoverWavRecordings,
+    getWavInfo: NativeSherpaOnnx.getWavInfo,
     transcribeWav: NativeSherpaOnnx.transcribeWav,
     transcribeAssetWav: NativeSherpaOnnx.transcribeAssetWav,
     getFileSha256: NativeSherpaOnnx.getFileSha256,

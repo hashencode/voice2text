@@ -1,17 +1,30 @@
 import { AudioModule } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Stack } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
+import { deleteRecordingMeta, hasRecordingSession, listRecordingMeta, upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import SherpaOnnx from '~/modules/sherpa';
 
 type SavedRecordingItem = {
     path: string;
     sampleRate: number | null;
     numSamples: number | null;
+    durationMs: number | null;
+    recordedAtMs: number | null;
+    sessionId?: string;
+    reason?: string;
+};
+
+type WavFileMeta = {
+    path: string;
+    sampleRate: number | null;
+    numSamples: number | null;
+    durationMs: number | null;
+    recordedAtMs: number | null;
 };
 
 function getRecordingsDir(): string {
@@ -26,11 +39,51 @@ function createRecordingPath(): string {
     return `${getRecordingsDir()}${fileName}`;
 }
 
+function formatDuration(ms: number): string {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function formatDateTime(ms: number): string {
+    const date = new Date(ms);
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    const hour = `${date.getHours()}`.padStart(2, '0');
+    const minute = `${date.getMinutes()}`.padStart(2, '0');
+    const second = `${date.getSeconds()}`.padStart(2, '0');
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
 export default function RecordPage() {
     const [recordingActionLoading, setRecordingActionLoading] = useState(false);
     const [isRecordingByButton, setIsRecordingByButton] = useState(false);
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
     const [savedRecordings, setSavedRecordings] = useState<SavedRecordingItem[]>([]);
+    const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
+    const [deletingPath, setDeletingPath] = useState<string | null>(null);
+    const recordingStartAtRef = useRef<number | null>(null);
+
+    const readWavMeta = useCallback(async (path: string): Promise<WavFileMeta> => {
+        const fileInfo = await FileSystem.getInfoAsync(path);
+        const info = await SherpaOnnx.getWavInfo(path);
+        const rawModifiedAt =
+            'modificationTime' in fileInfo && typeof fileInfo.modificationTime === 'number' ? fileInfo.modificationTime : null;
+        const recordedAtMs = rawModifiedAt === null ? null : rawModifiedAt > 1e12 ? rawModifiedAt : rawModifiedAt * 1000;
+        return {
+            path,
+            sampleRate: info.sampleRate,
+            numSamples: info.numSamples,
+            durationMs: info.durationMs,
+            recordedAtMs,
+        };
+    }, []);
 
     const refreshSavedRecordings = useCallback(async () => {
         try {
@@ -38,19 +91,82 @@ export default function RecordPage() {
             await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
             const files = await FileSystem.readDirectoryAsync(directory);
             const wavPaths = files.filter(fileName => fileName.endsWith('.wav')).map(fileName => `${directory}${fileName}`);
+            const pathSet = new Set(wavPaths);
+            const existingRows = await listRecordingMeta();
+            const existingPathSet = new Set(existingRows.map(item => item.path));
+
+            await Promise.all(existingRows.filter(item => !pathSet.has(item.path)).map(item => deleteRecordingMeta(item.path)));
+            await Promise.all(
+                wavPaths.map(async path => {
+                    try {
+                        const hasRow = existingPathSet.has(path);
+                        if (hasRow) {
+                            return;
+                        }
+                        const meta = await readWavMeta(path);
+                        await upsertRecordingMeta(meta);
+                    } catch {
+                        // Ignore single-file import error.
+                    }
+                }),
+            );
+
+            const rows = await listRecordingMeta();
             setSavedRecordings(
-                wavPaths
-                    .sort((left, right) => right.localeCompare(left))
-                    .map(path => ({
-                        path,
-                        sampleRate: null,
-                        numSamples: null,
-                    })),
+                rows.map(item => ({
+                    ...item,
+                    sessionId: item.sessionId ?? undefined,
+                    reason: item.reason ?? undefined,
+                })),
             );
         } catch (error) {
             setRecordingStatusText(`读取录音列表失败: ${(error as Error).message}`);
         }
+    }, [readWavMeta]);
+
+    const startRecordingTimer = useCallback(() => {
+        recordingStartAtRef.current = Date.now();
+        setRecordingElapsedMs(0);
     }, []);
+
+    const stopRecordingTimer = useCallback(() => {
+        recordingStartAtRef.current = null;
+        setRecordingElapsedMs(0);
+    }, []);
+
+    useEffect(() => {
+        if (!isRecordingByButton) {
+            return;
+        }
+        const timer = setInterval(() => {
+            const startAt = recordingStartAtRef.current;
+            if (!startAt) {
+                return;
+            }
+            setRecordingElapsedMs(Date.now() - startAt);
+        }, 200);
+        return () => clearInterval(timer);
+    }, [isRecordingByButton]);
+
+    const handleDeleteRecording = useCallback(
+        async (path: string) => {
+            if (isRecordingByButton || deletingPath) {
+                return;
+            }
+            setDeletingPath(path);
+            try {
+                await FileSystem.deleteAsync(path, { idempotent: true });
+                await deleteRecordingMeta(path);
+                setSavedRecordings(prev => prev.filter(item => item.path !== path));
+                setRecordingStatusText('录音已删除');
+            } catch (error) {
+                setRecordingStatusText(`删除失败: ${(error as Error).message}`);
+            } finally {
+                setDeletingPath(null);
+            }
+        },
+        [deletingPath, isRecordingByButton],
+    );
 
     const toggleRecordAndSave = useCallback(async () => {
         if (recordingActionLoading) {
@@ -70,6 +186,7 @@ export default function RecordPage() {
                 await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
                 const targetPath = createRecordingPath();
                 await SherpaOnnx.startWavRecording({ sampleRate: 16000, path: targetPath });
+                startRecordingTimer();
                 setIsRecordingByButton(true);
                 setRecordingStatusText('录音中，再次点击停止并保存');
                 return;
@@ -77,6 +194,8 @@ export default function RecordPage() {
 
             const wavResult = await SherpaOnnx.stopWavRecording();
             setIsRecordingByButton(false);
+            stopRecordingTimer();
+            const sessionId = wavResult.sessionId?.trim() || undefined;
 
             if (!wavResult.path) {
                 setRecordingStatusText('停止录音失败，未拿到音频文件');
@@ -88,26 +207,72 @@ export default function RecordPage() {
                     path: wavResult.path,
                     sampleRate: wavResult.sampleRate,
                     numSamples: wavResult.numSamples,
+                    durationMs: wavResult.sampleRate > 0 ? Math.round((wavResult.numSamples / wavResult.sampleRate) * 1000) : null,
+                    recordedAtMs: Date.now(),
+                    sessionId,
                 },
                 ...prev.filter(item => item.path !== wavResult.path),
             ]);
-            setRecordingStatusText('录音完成，音频已保存');
+
+            try {
+                await upsertRecordingMeta({
+                    path: wavResult.path,
+                    sampleRate: wavResult.sampleRate,
+                    numSamples: wavResult.numSamples,
+                    durationMs: wavResult.sampleRate > 0 ? Math.round((wavResult.numSamples / wavResult.sampleRate) * 1000) : null,
+                    recordedAtMs: Date.now(),
+                    sessionId,
+                });
+                setRecordingStatusText('录音完成，音频已保存');
+            } catch (dbError) {
+                console.error('[record-page] upsertRecordingMeta failed', dbError);
+                setRecordingStatusText('录音已保存，索引写入失败');
+            }
         } catch (error) {
             setIsRecordingByButton(false);
+            stopRecordingTimer();
             setRecordingStatusText(`录音/保存失败: ${(error as Error).message}`);
         } finally {
             setRecordingActionLoading(false);
         }
-    }, [isRecordingByButton, recordingActionLoading]);
+    }, [isRecordingByButton, recordingActionLoading, startRecordingTimer, stopRecordingTimer]);
 
     useEffect(() => {
-        refreshSavedRecordings().catch(error => {
-            setRecordingStatusText(`读取录音列表失败: ${(error as Error).message}`);
-        });
-    }, [refreshSavedRecordings]);
+        (async () => {
+            try {
+                const recovered = await SherpaOnnx.recoverWavRecordings();
+                let importedCount = 0;
+                for (const item of recovered) {
+                    try {
+                        const normalizedSessionId = item.sessionId?.trim();
+                        const alreadyImported = normalizedSessionId ? await hasRecordingSession(normalizedSessionId) : false;
+                        if (alreadyImported) {
+                            continue;
+                        }
+                        const meta = await readWavMeta(item.path);
+                        await upsertRecordingMeta({
+                            ...meta,
+                            sessionId: normalizedSessionId,
+                            reason: item.reason,
+                        });
+                        importedCount += 1;
+                    } catch {
+                        // Ignore one failed recovered record and continue.
+                    }
+                }
+                if (importedCount > 0) {
+                    setRecordingStatusText(`已恢复 ${importedCount} 条中断录音`);
+                }
+                await refreshSavedRecordings();
+            } catch (error) {
+                setRecordingStatusText(`读取录音列表失败: ${(error as Error).message}`);
+            }
+        })();
+    }, [readWavMeta, refreshSavedRecordings]);
 
     useEffect(() => {
         return () => {
+            stopRecordingTimer();
             if (!SherpaOnnx.isWavRecording()) {
                 return;
             }
@@ -115,7 +280,7 @@ export default function RecordPage() {
                 console.error('[record-page] stop recording on unmount failed', error);
             });
         };
-    }, []);
+    }, [stopRecordingTimer]);
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
@@ -125,6 +290,7 @@ export default function RecordPage() {
                     {isRecordingByButton ? '停止录音并保存' : '开始录音'}
                 </Button>
                 <TextX>录音状态：{recordingStatusText}</TextX>
+                <TextX>当前录音时长：{formatDuration(recordingElapsedMs)}</TextX>
 
                 <View className="gap-2">
                     <TextX variant="description">已保存录音：{savedRecordings.length}</TextX>
@@ -133,12 +299,25 @@ export default function RecordPage() {
                             <TextX numberOfLines={1} variant="description">
                                 {item.path}
                             </TextX>
+                            <TextX variant="description">{item.sampleRate ? `采样率: ${item.sampleRate} Hz` : '采样率: 未知'}</TextX>
+                            <TextX variant="description">{item.numSamples !== null ? `采样点: ${item.numSamples}` : '采样点: 未知'}</TextX>
                             <TextX variant="description">
-                                {item.sampleRate ? `采样率: ${item.sampleRate} Hz` : '采样率: 未知'}
+                                录音时长: {item.durationMs !== null ? formatDuration(item.durationMs) : '未知'}
                             </TextX>
                             <TextX variant="description">
-                                {item.numSamples !== null ? `采样点: ${item.numSamples}` : '采样点: 未知'}
+                                录音日期: {item.recordedAtMs !== null ? formatDateTime(item.recordedAtMs) : '未知'}
                             </TextX>
+                            {item.sessionId ? <TextX variant="description">会话: {item.sessionId}</TextX> : null}
+                            {item.reason ? <TextX variant="description">恢复原因: {item.reason}</TextX> : null}
+                            <View className="mt-2 flex-row justify-end">
+                                <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    loading={deletingPath === item.path}
+                                    onPress={() => handleDeleteRecording(item.path)}>
+                                    删除
+                                </Button>
+                            </View>
                         </View>
                     ))}
                 </View>
