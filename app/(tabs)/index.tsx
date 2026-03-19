@@ -6,12 +6,12 @@ import { ScrollView, View } from 'react-native';
 import { DefaultLayout } from '~/components/DefaultLayout';
 import { Button } from '~/components/ui/button';
 import { TextX } from '~/components/ui/text';
+import { getDenoiseEnabled, getSpeakerDiarizationEnabled } from '~/db/mmkv/app-config';
+import { getCurrentModel } from '~/db/mmkv/model-selection';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
-import { getDenoiseEnabled, getSpeakerDiarizationEnabled } from '~/utils/app-config';
-import { getCurrentModel } from '~/utils/model-selection';
-import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/utils/tools';
+import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/scripts/utils';
 
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';

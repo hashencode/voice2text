@@ -7,16 +7,6 @@ import { SwitchX } from '~/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/text';
 import { View } from '~/components/ui/view';
-import { useColorScheme } from '~/hooks/useColorScheme';
-import {
-    ensureModelReady,
-    getInstalledModelVersion,
-    isModelDownloaded,
-    SHERPA_MODEL_PRESETS,
-    type DownloadModelProgress,
-    type SherpaModelId,
-} from '~/modules/sherpa';
-import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import {
     getDarkModeEnabled,
     getDenoiseEnabled,
@@ -27,8 +17,18 @@ import {
     setRecognitionProfile,
     setSpeakerDiarizationEnabled,
     type RecognitionProfileId,
-} from '~/utils/app-config';
-import { getCurrentModel, setCurrentModel } from '~/utils/model-selection';
+} from '~/db/mmkv/app-config';
+import { getCurrentModel, setCurrentModel } from '~/db/mmkv/model-selection';
+import { useColorScheme } from '~/hooks/useColorScheme';
+import {
+    ensureModelReady,
+    getInstalledModelVersion,
+    isModelDownloaded,
+    SHERPA_MODEL_PRESETS,
+    type DownloadModelProgress,
+    type SherpaModelId,
+} from '~/modules/sherpa';
+import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 
 type ModelItemState = {
     installed: boolean;

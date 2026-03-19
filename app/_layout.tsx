@@ -4,8 +4,8 @@ import '~/i18n/translation';
 
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import '~/scripts/interop';
 import { ThemeProvider } from '~/theme/theme-provider';
-import '~/utils/interop';
 
 export default function RootLayout() {
     return (
