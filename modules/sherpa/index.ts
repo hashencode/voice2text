@@ -96,6 +96,21 @@ export type RecoveredWavRecording = {
     reason: string;
 };
 
+export type RecoverableWavRecording = {
+    sessionId: string;
+    outputPath: string;
+    sampleRate: number;
+    numSamples: number;
+    numChunks: number;
+    state: string;
+    reason: string;
+    startedAtMs: number;
+};
+
+export type DiscardRecoverableWavRecordingsResult = {
+    deleted: number;
+};
+
 export type WavFileInfo = {
     sampleRate: number;
     numSamples: number;
@@ -108,6 +123,9 @@ type SherpaOnnxNative = {
     startWavRecording(options?: WavRecordingStartOptions): Promise<WavRecordingStartResult>;
     stopWavRecording(): Promise<WavRecordingStopResult>;
     recoverWavRecordings(): Promise<RecoveredWavRecording[]>;
+    listRecoverableWavRecordings(): Promise<RecoverableWavRecording[]>;
+    recoverWavRecordingSession(sessionId: string): Promise<RecoveredWavRecording | null>;
+    discardRecoverableWavRecordings(sessionIds?: string[]): Promise<DiscardRecoverableWavRecordingsResult>;
     getWavInfo(path: string): Promise<WavFileInfo>;
     transcribeWav(path: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     transcribeAssetWav(assetPath: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
@@ -874,6 +892,9 @@ const SherpaOnnx = {
     startWavRecording: NativeSherpaOnnx.startWavRecording,
     stopWavRecording: NativeSherpaOnnx.stopWavRecording,
     recoverWavRecordings: NativeSherpaOnnx.recoverWavRecordings,
+    listRecoverableWavRecordings: NativeSherpaOnnx.listRecoverableWavRecordings,
+    recoverWavRecordingSession: NativeSherpaOnnx.recoverWavRecordingSession,
+    discardRecoverableWavRecordings: NativeSherpaOnnx.discardRecoverableWavRecordings,
     getWavInfo: NativeSherpaOnnx.getWavInfo,
     transcribeWav: NativeSherpaOnnx.transcribeWav,
     transcribeAssetWav: NativeSherpaOnnx.transcribeAssetWav,

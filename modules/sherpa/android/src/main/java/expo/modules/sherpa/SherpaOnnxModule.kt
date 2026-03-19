@@ -136,6 +136,19 @@ class SherpaOnnxModule : Module() {
     val durationMs: Long,
   )
 
+  private data class RecoverableWavSession(
+    val sessionDir: File,
+    val metaFile: File,
+    val sessionId: String,
+    val outputPath: String,
+    val sampleRate: Int,
+    val chunkDurationMs: Int,
+    val startedAtMs: Long,
+    val state: String,
+    val reason: String,
+    val chunks: List<WavChunkMeta>,
+  )
+
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
 
@@ -260,6 +273,42 @@ class SherpaOnnxModule : Module() {
           promise.resolve(sessions)
         } catch (e: Exception) {
           promise.reject("ERR_WAV_RECORDING_RECOVER", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("listRecoverableWavRecordings") { promise: Promise ->
+      executor.execute {
+        try {
+          promise.resolve(listRecoverableWavSessions())
+        } catch (e: Exception) {
+          promise.reject("ERR_WAV_RECORDING_LIST_RECOVERABLE", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("recoverWavRecordingSession") { sessionId: String, promise: Promise ->
+      executor.execute {
+        try {
+          val recovered = recoverInterruptedWavSessionById(sessionId)
+          promise.resolve(recovered)
+        } catch (e: Exception) {
+          promise.reject("ERR_WAV_RECORDING_RECOVER_SESSION", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("discardRecoverableWavRecordings") { sessionIds: List<String>?, promise: Promise ->
+      executor.execute {
+        try {
+          val deletedCount = discardRecoverableWavSessions(sessionIds)
+          promise.resolve(
+            mapOf(
+              "deleted" to deletedCount,
+            ),
+          )
+        } catch (e: Exception) {
+          promise.reject("ERR_WAV_RECORDING_DISCARD", e.message, e)
         }
       }
     }
@@ -597,6 +646,13 @@ class SherpaOnnxModule : Module() {
         persistCurrentWavSessionMeta()
       }
 
+      if (finalState != SESSION_STATE_INTERRUPTED) {
+        try {
+          cleanupWavSessionCache(sessionDir, outputFile.absolutePath)
+        } catch (_: Exception) {
+        }
+      }
+
       abandonWavAudioFocus()
       wavAudioRecord = null
       wavRecordingRunning = false
@@ -877,13 +933,13 @@ class SherpaOnnxModule : Module() {
     }
   }
 
-  private fun recoverInterruptedWavSessions(): List<Map<String, Any?>> {
+  private fun collectRecoverableWavSessions(): List<RecoverableWavSession> {
     val root = resolveWavRecordingSessionsRoot()
     if (!root.exists() || !root.isDirectory) {
       return emptyList()
     }
 
-    val recovered = mutableListOf<Map<String, Any?>>()
+    val candidates = mutableListOf<RecoverableWavSession>()
     val sessionDirs = root.listFiles { file -> file.isDirectory }?.sortedByDescending { it.name } ?: emptyList()
     for (sessionDir in sessionDirs) {
       val metaFile = File(sessionDir, DEFAULT_WAV_SESSION_META_FILE)
@@ -922,40 +978,134 @@ class SherpaOnnxModule : Module() {
         continue
       }
 
-      val outFile = File(outputPath)
-      val mergedBytes =
-        try {
-          mergeChunksToWav(outFile, chunks, sampleRate)
-        } catch (_: Exception) {
-          continue
-        }
-
-      writeWavSessionMetaFile(
-        metaFile = metaFile,
-        sessionId = sessionId,
-        state = SESSION_STATE_COMPLETED,
-        reason = STOP_REASON_RECOVERED_AFTER_RESTART,
-        outputPath = outFile.absolutePath,
-        sampleRate = sampleRate,
-        chunkDurationMs = chunkDurationMs,
-        startedAtMs = startedAtMs,
-        totalPcmBytes = mergedBytes,
-        interruptedBySystem = true,
-        chunks = chunks,
-      )
-
-      recovered.add(
-        mapOf(
-          "sessionId" to sessionId,
-          "path" to outFile.absolutePath,
-          "sampleRate" to sampleRate,
-          "numSamples" to (mergedBytes / 2L).toDouble(),
-          "state" to SESSION_STATE_INTERRUPTED,
-          "reason" to STOP_REASON_RECOVERED_AFTER_RESTART,
+      candidates.add(
+        RecoverableWavSession(
+          sessionDir = sessionDir,
+          metaFile = metaFile,
+          sessionId = sessionId,
+          outputPath = outputPath,
+          sampleRate = sampleRate,
+          chunkDurationMs = chunkDurationMs,
+          startedAtMs = startedAtMs,
+          state = state,
+          reason = reason,
+          chunks = chunks,
         ),
       )
     }
+    return candidates
+  }
+
+  private fun listRecoverableWavSessions(): List<Map<String, Any?>> {
+    return collectRecoverableWavSessions().map { session ->
+      val totalPcmBytes = session.chunks.sumOf { it.bytes }
+      mapOf(
+        "sessionId" to session.sessionId,
+        "outputPath" to session.outputPath,
+        "sampleRate" to session.sampleRate,
+        "numSamples" to (totalPcmBytes / 2L).toDouble(),
+        "numChunks" to session.chunks.size,
+        "state" to session.state,
+        "reason" to session.reason,
+        "startedAtMs" to session.startedAtMs.toDouble(),
+      )
+    }
+  }
+
+  private fun recoverSession(session: RecoverableWavSession): Map<String, Any?>? {
+    val outFile = File(session.outputPath)
+    val mergedBytes =
+      try {
+        mergeChunksToWav(outFile, session.chunks, session.sampleRate)
+      } catch (_: Exception) {
+        return null
+      }
+
+    writeWavSessionMetaFile(
+      metaFile = session.metaFile,
+      sessionId = session.sessionId,
+      state = SESSION_STATE_COMPLETED,
+      reason = STOP_REASON_RECOVERED_AFTER_RESTART,
+      outputPath = outFile.absolutePath,
+      sampleRate = session.sampleRate,
+      chunkDurationMs = session.chunkDurationMs,
+      startedAtMs = session.startedAtMs,
+      totalPcmBytes = mergedBytes,
+      interruptedBySystem = true,
+      chunks = session.chunks,
+    )
+
+    try {
+      cleanupWavSessionCache(session.sessionDir, outFile.absolutePath)
+    } catch (_: Exception) {
+    }
+
+    return mapOf(
+      "sessionId" to session.sessionId,
+      "path" to outFile.absolutePath,
+      "sampleRate" to session.sampleRate,
+      "numSamples" to (mergedBytes / 2L).toDouble(),
+      "state" to SESSION_STATE_INTERRUPTED,
+      "reason" to STOP_REASON_RECOVERED_AFTER_RESTART,
+    )
+  }
+
+  private fun recoverInterruptedWavSessionById(sessionId: String): Map<String, Any?>? {
+    if (sessionId.isBlank()) {
+      return null
+    }
+    val target = collectRecoverableWavSessions().firstOrNull { it.sessionId == sessionId } ?: return null
+    return recoverSession(target)
+  }
+
+  private fun recoverInterruptedWavSessions(): List<Map<String, Any?>> {
+    val recovered = mutableListOf<Map<String, Any?>>()
+    for (session in collectRecoverableWavSessions()) {
+      val result = recoverSession(session) ?: continue
+      recovered.add(result)
+    }
     return recovered
+  }
+
+  private fun discardRecoverableWavSessions(sessionIds: List<String>?): Int {
+    val targets =
+      if (sessionIds.isNullOrEmpty()) {
+        collectRecoverableWavSessions()
+      } else {
+        val targetIdSet = sessionIds.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        collectRecoverableWavSessions().filter { targetIdSet.contains(it.sessionId) }
+      }
+
+    var deleted = 0
+    targets.forEach { session ->
+      if (session.sessionDir.deleteRecursively()) {
+        deleted += 1
+      }
+    }
+    return deleted
+  }
+
+  private fun cleanupWavSessionCache(sessionDir: File, keepPath: String?) {
+    if (!sessionDir.exists() || !sessionDir.isDirectory) {
+      return
+    }
+
+    val keepAbsolutePath = keepPath?.let { File(it).absolutePath }
+    sessionDir.listFiles()?.forEach { child ->
+      if (keepAbsolutePath != null && child.absolutePath == keepAbsolutePath) {
+        return@forEach
+      }
+      if (child.isDirectory) {
+        child.deleteRecursively()
+      } else {
+        child.delete()
+      }
+    }
+
+    val remaining = sessionDir.listFiles() ?: return
+    if (remaining.isEmpty()) {
+      sessionDir.delete()
+    }
   }
 
   private fun requestWavAudioFocus() {
