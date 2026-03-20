@@ -1,10 +1,14 @@
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { listRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import FileListItem from '~/components/home/FileListItem';
 import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
+import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
+import { useColor } from '~/hooks/useColor';
 
 type HomeRecordingItem = {
     path: string;
@@ -51,9 +55,18 @@ function extractFileName(path: string): string {
 export default function FileList() {
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [refreshing, setRefreshing] = React.useState(false);
+    const refreshColor = useColor('primary');
+    const refreshBackgroundColor = useColor('card');
+    const refreshIconRotation = useSharedValue(0);
+    const pullProgress = useSharedValue(0);
 
-    const refreshList = React.useCallback(async () => {
-        setLoading(true);
+    const refreshList = React.useCallback(async (mode: 'focus' | 'pull' = 'focus') => {
+        if (mode === 'pull') {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
         try {
             const rows = await listRecordingMeta();
             setItems(
@@ -63,52 +76,101 @@ export default function FileList() {
                     recordedAtMs: item.recordedAtMs,
                 })),
             );
+        } catch {
+            setItems([]);
         } finally {
+            if (mode === 'pull') {
+                setRefreshing(false);
+                return;
+            }
             setLoading(false);
         }
     }, []);
 
     useFocusEffect(
         React.useCallback(() => {
-            refreshList().catch(() => {
+            refreshList('focus').catch(() => {
                 setItems([]);
                 setLoading(false);
             });
         }, [refreshList]),
     );
 
-    if (loading) {
-        return (
-            <View className="px-5 pt-2">
-                <TextX variant="description">加载中...</TextX>
-            </View>
-        );
-    }
+    const onPullRefresh = React.useCallback(() => {
+        refreshList('pull').catch(() => {
+            setRefreshing(false);
+        });
+    }, [refreshList]);
 
-    if (items.length === 0) {
-        return (
-            <View className="px-5 pt-2">
-                <TextX variant="description">暂无录音文件</TextX>
-            </View>
-        );
-    }
+    React.useEffect(() => {
+        if (refreshing) {
+            refreshIconRotation.value = 0;
+            refreshIconRotation.value = withRepeat(
+                withTiming(360, {
+                    duration: 900,
+                    easing: Easing.linear,
+                }),
+                -1,
+                false,
+            );
+            return;
+        }
+        refreshIconRotation.value = 0;
+    }, [refreshIconRotation, refreshing]);
+
+    const refreshIconStyle = useAnimatedStyle(() => {
+        const degree = refreshing ? refreshIconRotation.value : pullProgress.value * 360;
+        const opacity = refreshing ? 1 : 0.4 + pullProgress.value * 0.6;
+        return {
+            opacity,
+            transform: [{ rotate: `${degree}deg` }],
+        };
+    });
 
     return (
-        <ScrollView className="px-5">
-            {items.map((item, index) => (
-                <React.Fragment key={item.path}>
-                    <FileListItem
-                        name={extractFileName(item.path)}
-                        durationText={formatDuration(item.durationMs)}
-                        createdAtText={formatDate(item.recordedAtMs)}
-                    />
-                    {index < items.length - 1 ? (
-                        <View className="my-4">
-                            <Separator />
-                        </View>
-                    ) : null}
-                </React.Fragment>
-            ))}
-        </ScrollView>
+        <PullToRefreshScrollView
+            refreshing={refreshing}
+            onRefresh={onPullRefresh}
+            maxPullHeight={96}
+            refreshBackgroundColor={refreshBackgroundColor}
+            containerBackgroundColor="transparent"
+            contentContainerStyle={{ paddingBottom: 16 }}
+            onPullProgress={progress => {
+                pullProgress.value = progress;
+            }}
+            renderPullView={
+                <Animated.View style={refreshIconStyle}>
+                    <Ionicons name="refresh" size={22} color={refreshColor} />
+                </Animated.View>
+            }
+            style={{ flex: 1 }}
+            className="px-5">
+            {loading ? (
+                <View className="pt-2">
+                    <TextX variant="description">加载中...</TextX>
+                </View>
+            ) : null}
+            {!loading && items.length === 0 ? (
+                <View className="pt-2">
+                    <TextX variant="description">暂无录音文件</TextX>
+                </View>
+            ) : null}
+            {!loading
+                ? items.map((item, index) => (
+                      <React.Fragment key={item.path}>
+                          <FileListItem
+                              name={extractFileName(item.path)}
+                              durationText={formatDuration(item.durationMs)}
+                              createdAtText={formatDate(item.recordedAtMs)}
+                          />
+                          {index < items.length - 1 ? (
+                              <View className="my-4">
+                                  <Separator />
+                              </View>
+                          ) : null}
+                      </React.Fragment>
+                  ))
+                : null}
+        </PullToRefreshScrollView>
     );
 }
