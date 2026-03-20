@@ -1,12 +1,13 @@
-import { AudioModule, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Stack } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
 import { deleteRecordingMeta, listRecordingMeta, upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
+import { useWavRecording } from '~/hooks/useWavRecording';
 import SherpaOnnx from '~/modules/sherpa';
 
 type SavedRecordingItem = {
@@ -62,14 +63,10 @@ function formatDateTime(ms: number): string {
 }
 
 export default function RecordPage() {
-    const [recordingActionLoading, setRecordingActionLoading] = useState(false);
-    const [isRecordingByButton, setIsRecordingByButton] = useState(false);
     const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
     const [savedRecordings, setSavedRecordings] = useState<SavedRecordingItem[]>([]);
-    const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
     const [deletingPath, setDeletingPath] = useState<string | null>(null);
     const [playingPath, setPlayingPath] = useState<string | null>(null);
-    const recordingStartAtRef = useRef<number | null>(null);
     const recordingPlayer = useAudioPlayer(null, { updateInterval: 200 });
     const recordingPlayerStatus = useAudioPlayerStatus(recordingPlayer);
 
@@ -127,101 +124,21 @@ export default function RecordPage() {
         }
     }, [readWavMeta]);
 
-    const startRecordingTimer = useCallback(() => {
-        recordingStartAtRef.current = Date.now();
-        setRecordingElapsedMs(0);
-    }, []);
-
-    const stopRecordingTimer = useCallback(() => {
-        recordingStartAtRef.current = null;
-        setRecordingElapsedMs(0);
-    }, []);
-
-    useEffect(() => {
-        if (!isRecordingByButton) {
-            return;
-        }
-        const timer = setInterval(() => {
-            const startAt = recordingStartAtRef.current;
-            if (!startAt) {
-                return;
-            }
-            setRecordingElapsedMs(Date.now() - startAt);
-        }, 200);
-        return () => clearInterval(timer);
-    }, [isRecordingByButton]);
-
-    const handleDeleteRecording = useCallback(
-        async (path: string) => {
-            if (isRecordingByButton || deletingPath) {
-                return;
-            }
-            setDeletingPath(path);
-            try {
-                await FileSystem.deleteAsync(path, { idempotent: true });
-                await deleteRecordingMeta(path);
-                setSavedRecordings(prev => prev.filter(item => item.path !== path));
-                setRecordingStatusText('录音已删除');
-            } catch (error) {
-                setRecordingStatusText(`删除失败: ${(error as Error).message}`);
-            } finally {
-                setDeletingPath(null);
-            }
+    const { isRecording, actionLoading: recordingActionLoading, elapsedText, buttonText, toggleRecord } = useWavRecording({
+        sampleRate: 16000,
+        createTargetPath: async () => {
+            const directory = getRecordingsDir();
+            await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+            return createRecordingPath();
         },
-        [deletingPath, isRecordingByButton],
-    );
-
-    const togglePlayRecording = useCallback(
-        (path: string) => {
-            try {
-                if (playingPath === path) {
-                    if (recordingPlayerStatus.playing) {
-                        recordingPlayer.pause();
-                    } else {
-                        recordingPlayer.play();
-                    }
-                    return;
-                }
-
-                recordingPlayer.replace(path);
-                recordingPlayer.play();
-                setPlayingPath(path);
-            } catch (error) {
-                setRecordingStatusText(`播放失败: ${(error as Error).message}`);
-            }
+        onStart: () => {
+            setRecordingStatusText('录音中，再次点击停止并保存');
         },
-        [playingPath, recordingPlayer, recordingPlayerStatus.playing],
-    );
-
-    const toggleRecordAndSave = useCallback(async () => {
-        if (recordingActionLoading) {
-            return;
-        }
-
-        setRecordingActionLoading(true);
-        try {
-            if (!isRecordingByButton) {
-                const permission = await AudioModule.requestRecordingPermissionsAsync();
-                if (!permission.granted) {
-                    setRecordingStatusText('未获得麦克风权限');
-                    return;
-                }
-
-                const directory = getRecordingsDir();
-                await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
-                const targetPath = createRecordingPath();
-                await SherpaOnnx.startWavRecording({ sampleRate: 16000, path: targetPath });
-                startRecordingTimer();
-                setIsRecordingByButton(true);
-                setRecordingStatusText('录音中，再次点击停止并保存');
-                return;
-            }
-
-            const wavResult = await SherpaOnnx.stopWavRecording();
-            setIsRecordingByButton(false);
-            stopRecordingTimer();
+        onPermissionDenied: () => {
+            setRecordingStatusText('未获得麦克风权限');
+        },
+        onStop: async wavResult => {
             const sessionId = wavResult.sessionId?.trim() || undefined;
-
             if (!wavResult.path) {
                 setRecordingStatusText('停止录音失败，未拿到音频文件');
                 return;
@@ -253,14 +170,53 @@ export default function RecordPage() {
                 console.error('[record-page] upsertRecordingMeta failed', dbError);
                 setRecordingStatusText('录音已保存，索引写入失败');
             }
-        } catch (error) {
-            setIsRecordingByButton(false);
-            stopRecordingTimer();
-            setRecordingStatusText(`录音/保存失败: ${(error as Error).message}`);
-        } finally {
-            setRecordingActionLoading(false);
-        }
-    }, [isRecordingByButton, recordingActionLoading, startRecordingTimer, stopRecordingTimer]);
+        },
+        onError: error => {
+            setRecordingStatusText(`录音/保存失败: ${error.message}`);
+        },
+    });
+
+    const handleDeleteRecording = useCallback(
+        async (path: string) => {
+            if (isRecording || deletingPath) {
+                return;
+            }
+            setDeletingPath(path);
+            try {
+                await FileSystem.deleteAsync(path, { idempotent: true });
+                await deleteRecordingMeta(path);
+                setSavedRecordings(prev => prev.filter(item => item.path !== path));
+                setRecordingStatusText('录音已删除');
+            } catch (error) {
+                setRecordingStatusText(`删除失败: ${(error as Error).message}`);
+            } finally {
+                setDeletingPath(null);
+            }
+        },
+        [deletingPath, isRecording],
+    );
+
+    const togglePlayRecording = useCallback(
+        (path: string) => {
+            try {
+                if (playingPath === path) {
+                    if (recordingPlayerStatus.playing) {
+                        recordingPlayer.pause();
+                    } else {
+                        recordingPlayer.play();
+                    }
+                    return;
+                }
+
+                recordingPlayer.replace(path);
+                recordingPlayer.play();
+                setPlayingPath(path);
+            } catch (error) {
+                setRecordingStatusText(`播放失败: ${(error as Error).message}`);
+            }
+        },
+        [playingPath, recordingPlayer, recordingPlayerStatus.playing],
+    );
 
     useEffect(() => {
         (async () => {
@@ -274,31 +230,24 @@ export default function RecordPage() {
 
     useEffect(() => {
         return () => {
-            stopRecordingTimer();
             try {
                 recordingPlayer.pause();
             } catch (error) {
                 // During hot-reload the shared native player may already be released.
                 console.warn('[record-page] ignore player pause on cleanup', error);
             }
-            if (!SherpaOnnx.isWavRecording()) {
-                return;
-            }
-            SherpaOnnx.stopWavRecording().catch(error => {
-                console.error('[record-page] stop recording on unmount failed', error);
-            });
         };
-    }, [recordingPlayer, stopRecordingTimer]);
+    }, [recordingPlayer]);
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-6">
-                <ButtonX loading={recordingActionLoading} onPress={toggleRecordAndSave}>
-                    {isRecordingByButton ? '停止录音并保存' : '开始录音'}
+                <ButtonX loading={recordingActionLoading} onPress={toggleRecord}>
+                    {buttonText}
                 </ButtonX>
                 <TextX>录音状态：{recordingStatusText}</TextX>
-                <TextX>当前录音时长：{formatDuration(recordingElapsedMs)}</TextX>
+                <TextX>{elapsedText}</TextX>
 
                 <View className="gap-2">
                     <TextX variant="description">已保存录音：{savedRecordings.length}</TextX>
