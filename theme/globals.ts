@@ -4,6 +4,8 @@
 export const FONT_SIZE = 16;
 export const FONT_SIZE_SM = 14;
 export const FONT_SIZE_LG = 18;
+export const FONT_SIZE_XL = 20;
+export const FONT_SIZE_XXL = 22;
 
 /**
  * Basic
@@ -12,7 +14,7 @@ export const BORDER_RADIUS = 26;
 export const CORNERS = 999;
 
 /**
- * Button
+ * ButtonX
  */
 export const BUTTON_HEIGHT = 40;
 export const BUTTON_HEIGHT_SM = 30;

@@ -3,9 +3,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { DefaultLayout } from '~/components/DefaultLayout';
-import { Button } from '~/components/ui/button';
-import { TextX } from '~/components/ui/text';
+import { DefaultLayout } from '~/components/layout/DefaultLayout';
+import { ButtonX } from '~/components/ui/buttonx';
+import { TextX } from '~/components/ui/textx';
 import { deleteRecordingMeta, listRecordingMeta, upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import SherpaOnnx from '~/modules/sherpa';
 
@@ -294,9 +294,9 @@ export default function RecordPage() {
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-6">
-                <Button loading={recordingActionLoading} onPress={toggleRecordAndSave}>
+                <ButtonX loading={recordingActionLoading} onPress={toggleRecordAndSave}>
                     {isRecordingByButton ? '停止录音并保存' : '开始录音'}
-                </Button>
+                </ButtonX>
                 <TextX>录音状态：{recordingStatusText}</TextX>
                 <TextX>当前录音时长：{formatDuration(recordingElapsedMs)}</TextX>
 
@@ -318,16 +318,16 @@ export default function RecordPage() {
                             {item.sessionId ? <TextX variant="description">会话: {item.sessionId}</TextX> : null}
                             {item.reason ? <TextX variant="description">恢复原因: {item.reason}</TextX> : null}
                             <View className="mt-2 flex-row justify-end">
-                                <Button size="sm" variant="outline" onPress={() => togglePlayRecording(item.path)}>
+                                <ButtonX size="sm" variant="outline" onPress={() => togglePlayRecording(item.path)}>
                                     {playingPath === item.path && recordingPlayerStatus.playing ? '暂停' : '播放'}
-                                </Button>
-                                <Button
+                                </ButtonX>
+                                <ButtonX
                                     size="sm"
                                     variant="destructive"
                                     loading={deletingPath === item.path}
                                     onPress={() => handleDeleteRecording(item.path)}>
                                     删除
-                                </Button>
+                                </ButtonX>
                             </View>
                         </View>
                     ))}

@@ -1,11 +1,11 @@
 import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Appearance, RefreshControl, ScrollView } from 'react-native';
-import { DefaultLayout } from '~/components/DefaultLayout';
-import { Button } from '~/components/ui/button';
+import { DefaultLayout } from '~/components/layout/DefaultLayout';
+import { ButtonX } from '~/components/ui/buttonx';
 import { SwitchX } from '~/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { TextX } from '~/components/ui/text';
+import { TextX } from '~/components/ui/textx';
 import { View } from '~/components/ui/view';
 import {
     getDarkModeEnabled,
@@ -237,16 +237,16 @@ export default function Setting() {
                         <TextX variant="title">{modelId}</TextX>
                         <View className="flex flex-row items-center gap-x-2">
                             {item.installed ? (
-                                <Button
+                                <ButtonX
                                     variant={isCurrent ? 'primary' : 'secondary'}
                                     onPress={() => handleSetCurrentModel(modelId)}
                                     loading={selectingModelId === modelId}>
                                     {isCurrent ? '已应用' : '应用'}
-                                </Button>
+                                </ButtonX>
                             ) : (
-                                <Button onPress={() => handleInstall(modelId)} loading={item.busy}>
+                                <ButtonX onPress={() => handleInstall(modelId)} loading={item.busy}>
                                     安装
-                                </Button>
+                                </ButtonX>
                             )}
                         </View>
                     </View>
