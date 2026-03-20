@@ -358,12 +358,12 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                     {loading ? (
                         <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
                     ) : typeof children === 'string' ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                             {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
                             <TextX style={[finalTextStyle, textStyle]}>{children}</TextX>
                         </View>
                     ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                             {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
                             {children}
                         </View>
