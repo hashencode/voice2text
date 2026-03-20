@@ -1,11 +1,17 @@
 /**
  * Font
  */
-export const FONT_SIZE = 16;
 export const FONT_SIZE_SM = 13;
+export const FONT_SIZE = 16;
 export const FONT_SIZE_LG = 18;
 export const FONT_SIZE_XL = 20;
 export const FONT_SIZE_XXL = 22;
+
+export const LINE_HEIGHT_SIZE_SM = 20;
+export const LINE_HEIGHT = 24;
+export const LINE_HEIGHT_SIZE_LG = 26;
+export const LINE_HEIGHT_SIZE_XL = 28;
+export const LINE_HEIGHT_SIZE_XXL = 30;
 
 /**
  * Basic

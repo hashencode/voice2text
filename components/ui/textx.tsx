@@ -1,5 +1,16 @@
 import { useColor } from '@/hooks/useColor';
-import { FONT_SIZE, FONT_SIZE_LG, FONT_SIZE_SM, FONT_SIZE_XL, FONT_SIZE_XXL } from '@/theme/globals';
+import {
+    FONT_SIZE,
+    FONT_SIZE_LG,
+    FONT_SIZE_SM,
+    FONT_SIZE_XL,
+    FONT_SIZE_XXL,
+    LINE_HEIGHT,
+    LINE_HEIGHT_SIZE_LG,
+    LINE_HEIGHT_SIZE_SM,
+    LINE_HEIGHT_SIZE_XL,
+    LINE_HEIGHT_SIZE_XXL,
+} from '@/theme/globals';
 import { isNil } from 'lodash';
 import React, { forwardRef } from 'react';
 import { Text as RNText, TextProps as RNTextProps, TextStyle } from 'react-native';
@@ -32,19 +43,19 @@ export const TextX = forwardRef<RNText, TextProps>(
 
             switch (variant) {
                 case 'heading':
-                    return { ...baseStyle, fontSize: FONT_SIZE_XXL, lineHeight: 32, fontWeight: '600' };
+                    return { ...baseStyle, fontSize: FONT_SIZE_XXL, lineHeight: LINE_HEIGHT_SIZE_XXL, fontWeight: '600' };
 
                 case 'title':
-                    return { ...baseStyle, fontSize: FONT_SIZE_XL, lineHeight: 28, fontWeight: '600' };
+                    return { ...baseStyle, fontSize: FONT_SIZE_XL, lineHeight: LINE_HEIGHT_SIZE_XL, fontWeight: '600' };
 
                 case 'subtitle':
-                    return { ...baseStyle, fontSize: FONT_SIZE_LG, lineHeight: 28, fontWeight: '500' };
+                    return { ...baseStyle, fontSize: FONT_SIZE_LG, lineHeight: LINE_HEIGHT_SIZE_LG, fontWeight: '500' };
 
                 case 'description':
-                    return { ...baseStyle, fontSize: FONT_SIZE_SM, lineHeight: 20 };
+                    return { ...baseStyle, fontSize: FONT_SIZE_SM, lineHeight: LINE_HEIGHT_SIZE_SM };
 
                 default:
-                    return { ...baseStyle, fontSize: FONT_SIZE, lineHeight: 24 };
+                    return { ...baseStyle, fontSize: FONT_SIZE, lineHeight: LINE_HEIGHT };
             }
         };
 
