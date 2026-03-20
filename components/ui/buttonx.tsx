@@ -1,6 +1,5 @@
 import { Icon } from '@/components/ui/icon';
 import { ButtonSpinner, SpinnerVariant } from '@/components/ui/spinner';
-import { TextX } from '@/components/ui/text';
 import { useColor } from '@/hooks/useColor';
 import {
     BUTTON_HEIGHT,
@@ -22,6 +21,7 @@ import { LucideProps } from 'lucide-react-native';
 import { forwardRef } from 'react';
 import { Pressable, TextStyle, TouchableOpacity, TouchableOpacityProps, View, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { TextX } from '~/components/ui/textx';
 
 export type ButtonVariant = 'default' | 'primary' | 'destructive' | 'success' | 'outline' | 'secondary' | 'ghost' | 'link';
 
@@ -43,7 +43,7 @@ export interface ButtonProps extends Omit<TouchableOpacityProps, 'style'> {
     textStyle?: TextStyle;
 }
 
-export const Button = forwardRef<View, ButtonProps>(
+export const ButtonX = forwardRef<View, ButtonProps>(
     (
         {
             children,
@@ -394,4 +394,4 @@ export const Button = forwardRef<View, ButtonProps>(
 );
 
 // Add display name for better debugging
-Button.displayName = 'Button';
+ButtonX.displayName = 'ButtonX';

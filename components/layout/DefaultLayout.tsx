@@ -3,7 +3,7 @@ import { isString } from 'lodash';
 import { PropsWithChildren, ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView, SafeAreaViewProps, useSafeAreaInsets } from 'react-native-safe-area-context';
-import LayoutHead from '~/components/LayoutHead';
+import LayoutHead from '~/components/layout/LayoutHead';
 import { useColor } from '~/hooks/useColor';
 
 interface IDefaultLayoutProps extends PropsWithChildren {

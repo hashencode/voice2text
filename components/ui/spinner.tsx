@@ -1,4 +1,3 @@
-import { TextX } from '@/components/ui/text';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { Loader2 } from 'lucide-react-native';
@@ -14,6 +13,7 @@ import Animated, {
     withSequence,
     withTiming,
 } from 'react-native-reanimated';
+import { TextX } from '~/components/ui/textx';
 
 // Types
 type SpinnerSize = 'default' | 'sm' | 'lg' | 'icon';
@@ -299,7 +299,7 @@ export function InlineLoader({ size = 'sm', variant = 'default', color }: Omit<S
     return <Spinner size={size} variant={variant} color={color} style={styles.inlineLoader} />;
 }
 
-// Button Spinner Component - optimized for button usage
+// ButtonX Spinner Component - optimized for button usage
 export function ButtonSpinner({ size = 'sm', variant = 'default', color }: Omit<SpinnerProps, 'label' | 'showLabel'>) {
     const primaryForegroundColor = useColor('primaryForeground');
 

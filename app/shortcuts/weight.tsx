@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-import { DefaultLayout } from '~/components/DefaultLayout';
+import { DefaultLayout } from '~/components/layout/DefaultLayout';
 
 export default function Weight() {
     return (

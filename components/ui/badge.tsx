@@ -1,8 +1,8 @@
-import { TextX } from '@/components/ui/text';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
 import { CORNERS } from '@/theme/globals';
 import { TextStyle, ViewStyle } from 'react-native';
+import { TextX } from '~/components/ui/textx';
 
 type BadgeVariant = 'default' | 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost' | 'success';
 

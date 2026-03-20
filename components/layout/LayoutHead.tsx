@@ -4,7 +4,7 @@ import classNames from 'classnames';
 import { ArrowLeft } from 'lucide-react-native';
 import { ReactNode } from 'react';
 import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
-import { TextX } from '~/components/ui/text';
+import { TextX } from '~/components/ui/textx';
 
 export interface IHeadProps {
     backIcon?: ReactNode; // 返回按钮图标

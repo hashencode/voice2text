@@ -1,10 +1,10 @@
-import { TextX } from '@/components/ui/text';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS, FONT_SIZE } from '@/theme/globals';
 import classNames from 'classnames';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ScrollView, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { TextX } from '~/components/ui/textx';
 
 // Types
 interface TabsContextType {
