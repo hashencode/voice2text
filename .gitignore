@@ -28,3 +28,9 @@ expo-env.d.ts
 
 # config plugin
 /modules/sherpa/android/build/
+
+# Local AI/agent skill artifacts
+.agents/
+.claude/
+.kiro/
+skills-lock.json
