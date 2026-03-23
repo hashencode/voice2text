@@ -15,7 +15,7 @@ import {
 } from '@/theme/globals';
 import { ChevronDown, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { Modal, Pressable, ScrollView, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
 
 export interface PickerOption {
     label: string;
@@ -58,6 +58,7 @@ interface PickerProps {
     triggerActiveOpacity?: number;
     optionActiveOpacity?: number;
     onOpenChange?: (open: boolean) => void;
+    okText?: string;
 }
 
 export function Picker({
@@ -80,14 +81,15 @@ export function Picker({
     labelStyle,
     errorStyle,
     modalTitle,
-    modalMaxHeightRatio = 0.7,
-    optionsHeight = 300,
+    optionsHeight,
     triggerActiveOpacity = 0.8,
     optionActiveOpacity = 0.8,
     onOpenChange,
+    okText = 'OK',
 }: PickerProps) {
     const [isOpen, setIsOpen] = useState(false);
     const lockReleaseRef = React.useRef<(() => void) | null>(null);
+    const { height: screenHeight } = useWindowDimensions();
 
     // Move ALL theme color hooks to the top level
     const borderColor = useColor('border');
@@ -103,6 +105,8 @@ export function Picker({
     const normalizedSections: PickerSection[] = sections.length > 0 ? sections : [{ options }];
 
     const filteredSections = normalizedSections;
+    const totalOptionsCount = filteredSections.reduce((count, section) => count + section.options.length, 0);
+    const resolvedOptionsHeight = optionsHeight ?? (totalOptionsCount <= 4 ? 300 : Math.round(screenHeight * 0.5));
 
     // Get selected options for display
     const getSelectedOptions = () => {
@@ -245,7 +249,6 @@ export function Picker({
                     <TextX
                         style={[
                             {
-                                fontSize: FONT_SIZE,
                                 color: selectedOptions.length > 0 ? text : disabled ? muted : error ? danger : muted,
                             },
                             inputStyle,
@@ -289,7 +292,6 @@ export function Picker({
                         className="w-full overflow-hidden pb-8"
                         style={{
                             backgroundColor: cardColor,
-                            maxHeight: `${Math.round(modalMaxHeightRatio * 100)}%`,
                             borderTopStartRadius: BORDER_RADIUS,
                             borderTopEndRadius: BORDER_RADIUS,
                         }}>
@@ -310,7 +312,7 @@ export function Picker({
                                                 color: primary,
                                                 fontWeight: '500',
                                             }}>
-                                            Done
+                                            {okText}
                                         </TextX>
                                     </TouchableOpacity>
                                 )}
@@ -318,7 +320,7 @@ export function Picker({
                         )}
 
                         {/* Options - Updated to match date-picker styling */}
-                        <View style={{ height: optionsHeight }}>
+                        <View style={{ height: resolvedOptionsHeight }}>
                             <ScrollView
                                 showsVerticalScrollIndicator={false}
                                 contentContainerStyle={{ padding: BUTTON_PADDING_HORIZON }}
@@ -329,7 +331,7 @@ export function Picker({
                                 {filteredSections.map((section, sectionIndex) => (
                                     <View key={sectionIndex}>
                                         {section.title && (
-                                            <View className="p-1">
+                                            <View className="mb-1 p-1">
                                                 <TextX variant="description">{section.title}</TextX>
                                             </View>
                                         )}
