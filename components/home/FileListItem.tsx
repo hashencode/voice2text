@@ -15,7 +15,7 @@ export default function FileListItem({ name, durationText, createdAtText }: File
     const descriptionColor = useColor('textMuted');
 
     return (
-        <View className="w-full flex-row items-center justify-between">
+        <View className="w-full flex-row items-center justify-between py-4">
             <View className="flex-1 gap-y-2.5 pr-4">
                 <TextX className="!font-semibold" numberOfLines={1}>
                     {name}

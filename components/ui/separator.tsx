@@ -9,7 +9,7 @@ interface SeparatorProps {
 }
 
 export function Separator({ orientation = 'horizontal', style }: SeparatorProps) {
-    const borderColor = useColor('border');
+    const borderColor = useColor('muted');
 
     return (
         <View
