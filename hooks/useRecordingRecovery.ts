@@ -12,6 +12,12 @@ type WavFileMeta = {
     recordedAtMs: number | null;
 };
 
+const MAX_RECOVERY_ATTEMPTS = 3;
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function readWavMeta(path: string): Promise<WavFileMeta> {
     const fileInfo = await FileSystem.getInfoAsync(path);
     const info = await SherpaOnnx.getWavInfo(path);
@@ -43,13 +49,39 @@ function askRecoveryConfirm(sessionCount: number): Promise<'recover' | 'discard'
     });
 }
 
-async function recoverSessions(sessions: RecoverableWavRecording[]): Promise<{ recoveredCount: number; importedCount: number }> {
+async function recoverSessions(
+    sessions: RecoverableWavRecording[],
+): Promise<{ recoveredCount: number; importedCount: number; failedCount: number }> {
     let recoveredCount = 0;
     let importedCount = 0;
+    let failedCount = 0;
 
     for (const session of sessions) {
-        const recovered = await SherpaOnnx.recoverWavRecordingSession(session.sessionId);
+        let recovered: Awaited<ReturnType<typeof SherpaOnnx.recoverWavRecordingSession>> = null;
+        let attemptNo = 0;
+
+        for (let attempt = 1; attempt <= MAX_RECOVERY_ATTEMPTS; attempt += 1) {
+            attemptNo = attempt;
+            try {
+                recovered = await SherpaOnnx.recoverWavRecordingSession(session.sessionId);
+                if (recovered?.path) {
+                    break;
+                }
+            } catch (error) {
+                console.warn('[recording-recovery] recover attempt failed', {
+                    sessionId: session.sessionId,
+                    attemptNo: attempt,
+                    message: (error as Error).message,
+                });
+            }
+
+            if (attempt < MAX_RECOVERY_ATTEMPTS) {
+                await sleep(250);
+            }
+        }
+
         if (!recovered?.path) {
+            failedCount += 1;
             continue;
         }
         recoveredCount += 1;
@@ -69,7 +101,7 @@ async function recoverSessions(sessions: RecoverableWavRecording[]): Promise<{ r
         importedCount += 1;
     }
 
-    return { recoveredCount, importedCount };
+    return { recoveredCount, importedCount, failedCount };
 }
 
 export function useRecordingRecovery(): void {
@@ -95,8 +127,8 @@ export function useRecordingRecovery(): void {
                     return;
                 }
 
-                const { recoveredCount, importedCount } = await recoverSessions(recoverableSessions);
-                Alert.alert('恢复完成', `已恢复 ${recoveredCount} 条异常录音，成功入库 ${importedCount} 条。`);
+                const { recoveredCount, importedCount, failedCount } = await recoverSessions(recoverableSessions);
+                Alert.alert('恢复完成', `已恢复 ${recoveredCount} 条异常录音，成功入库 ${importedCount} 条，失败 ${failedCount} 条。`);
             } catch (error) {
                 Alert.alert('恢复失败', (error as Error).message ?? '未知错误');
             }

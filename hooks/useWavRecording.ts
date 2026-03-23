@@ -12,6 +12,8 @@ type UseWavRecordingOptions = {
     onError?: (error: Error) => void;
 };
 
+type RecordingPhase = 'idle' | 'starting' | 'recording' | 'stopping' | 'error';
+
 function formatRecordingElapsed(ms: number): string {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
     const hours = Math.floor(totalSeconds / 3600);
@@ -31,10 +33,10 @@ export function useWavRecording({
     onPermissionDenied,
     onError,
 }: UseWavRecordingOptions) {
-    const [isRecording, setIsRecording] = useState(false);
-    const [actionLoading, setActionLoading] = useState(false);
+    const [phase, setPhase] = useState<RecordingPhase>('idle');
     const [elapsedMs, setElapsedMs] = useState(0);
     const recordingStartAtRef = useRef<number | null>(null);
+    const actionInFlightRef = useRef(false);
 
     const startTimer = useCallback(() => {
         recordingStartAtRef.current = Date.now();
@@ -47,7 +49,7 @@ export function useWavRecording({
     }, []);
 
     useEffect(() => {
-        if (!isRecording) {
+        if (phase !== 'recording') {
             return;
         }
         const timer = setInterval(() => {
@@ -58,18 +60,20 @@ export function useWavRecording({
             setElapsedMs(Date.now() - startAt);
         }, 200);
         return () => clearInterval(timer);
-    }, [isRecording]);
+    }, [phase]);
 
     const toggleRecord = useCallback(async () => {
-        if (actionLoading) {
+        if (actionInFlightRef.current) {
             return;
         }
 
-        setActionLoading(true);
+        actionInFlightRef.current = true;
         try {
-            if (!isRecording) {
+            if (phase === 'idle' || phase === 'error') {
+                setPhase('starting');
                 const permission = await AudioModule.requestRecordingPermissionsAsync();
                 if (!permission.granted) {
+                    setPhase('idle');
                     onPermissionDenied?.();
                     return;
                 }
@@ -77,23 +81,28 @@ export function useWavRecording({
                 const targetPath = await createTargetPath();
                 await SherpaOnnx.startWavRecording({ sampleRate, path: targetPath });
                 startTimer();
-                setIsRecording(true);
+                setPhase('recording');
                 onStart?.();
                 return;
             }
 
+            if (phase !== 'recording') {
+                return;
+            }
+
+            setPhase('stopping');
             const result = await SherpaOnnx.stopWavRecording();
-            setIsRecording(false);
             stopTimer();
+            setPhase('idle');
             await onStop?.(result);
         } catch (error) {
-            setIsRecording(false);
             stopTimer();
+            setPhase('error');
             onError?.(error as Error);
         } finally {
-            setActionLoading(false);
+            actionInFlightRef.current = false;
         }
-    }, [actionLoading, createTargetPath, isRecording, onError, onPermissionDenied, onStart, onStop, sampleRate, startTimer, stopTimer]);
+    }, [createTargetPath, onError, onPermissionDenied, onStart, onStop, phase, sampleRate, startTimer, stopTimer]);
 
     useEffect(() => {
         return () => {
@@ -105,12 +114,24 @@ export function useWavRecording({
         };
     }, [stopTimer]);
 
+    const isRecording = phase === 'recording' || phase === 'stopping';
+    const actionLoading = phase === 'starting' || phase === 'stopping';
+    const buttonText =
+        phase === 'starting'
+            ? '正在启动录音...'
+            : phase === 'stopping'
+              ? '正在停止录音并保存...'
+              : phase === 'recording'
+                ? '停止录音并保存'
+                : '开始录音';
+
     return {
+        phase,
         isRecording,
         actionLoading,
         elapsedMs,
         elapsedText: formatRecordingElapsed(elapsedMs),
-        buttonText: isRecording ? '停止录音并保存' : '开始录音',
+        buttonText,
         toggleRecord,
     };
 }
