@@ -1,13 +1,13 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { Filter, Search, SquareCheckBig } from 'lucide-react-native';
 import React from 'react';
-import { View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { listRecordingMeta } from '~/db/sqlite/services/recordings.service';
+import { Pressable, View } from 'react-native';
 import FileListItem from '~/components/home/FileListItem';
+import { Picker } from '~/components/ui/picker';
+import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
 import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
-import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
+import { listRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 
 type HomeRecordingItem = {
@@ -15,6 +15,8 @@ type HomeRecordingItem = {
     durationMs: number | null;
     recordedAtMs: number | null;
 };
+
+const ALL_FOLDERS_KEY = '__all_folders__';
 
 function formatDuration(ms: number | null): string {
     if (ms === null || ms < 0) {
@@ -52,19 +54,25 @@ function extractFileName(path: string): string {
     return name.slice(0, dotIndex);
 }
 
+function extractFolder(path: string): string {
+    const normalizedPath = path.replace(/\\/g, '/');
+    const parts = normalizedPath.split('/').filter(Boolean);
+    if (parts.length <= 1) {
+        return '根目录';
+    }
+    return parts[parts.length - 2] ?? '根目录';
+}
+
 export default function FileList() {
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
     const [loading, setLoading] = React.useState(true);
-    const [refreshing, setRefreshing] = React.useState(false);
-    const refreshColor = useColor('primary');
+    const [selectedFolder, setSelectedFolder] = React.useState<string>(ALL_FOLDERS_KEY);
     const refreshBackgroundColor = useColor('card');
-    const refreshIconRotation = useSharedValue(0);
-    const pullProgress = useSharedValue(0);
+    const textColor = useColor('text');
+    const secondaryColor = useColor('secondary');
 
     const refreshList = React.useCallback(async (mode: 'focus' | 'pull' = 'focus') => {
-        if (mode === 'pull') {
-            setRefreshing(true);
-        } else {
+        if (mode === 'focus') {
             setLoading(true);
         }
         try {
@@ -76,14 +84,15 @@ export default function FileList() {
                     recordedAtMs: item.recordedAtMs,
                 })),
             );
-        } catch {
+        } catch (error) {
             setItems([]);
-        } finally {
             if (mode === 'pull') {
-                setRefreshing(false);
-                return;
+                throw error;
             }
-            setLoading(false);
+        } finally {
+            if (mode === 'focus') {
+                setLoading(false);
+            }
         }
     }, []);
 
@@ -96,81 +105,114 @@ export default function FileList() {
         }, [refreshList]),
     );
 
-    const onPullRefresh = React.useCallback(() => {
-        refreshList('pull').catch(() => {
-            setRefreshing(false);
+    const onPullRefresh = React.useCallback(() => refreshList('pull'), [refreshList]);
+    const folderOptions = React.useMemo(() => {
+        const folderSet = new Set<string>();
+        items.forEach(item => {
+            folderSet.add(extractFolder(item.path));
         });
-    }, [refreshList]);
+        return [
+            { label: '全部文件夹', value: ALL_FOLDERS_KEY },
+            ...Array.from(folderSet)
+                .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+                .map(folder => ({ label: folder, value: folder })),
+        ];
+    }, [items]);
 
-    React.useEffect(() => {
-        if (refreshing) {
-            refreshIconRotation.value = 0;
-            refreshIconRotation.value = withRepeat(
-                withTiming(360, {
-                    duration: 900,
-                    easing: Easing.linear,
-                }),
-                -1,
-                false,
-            );
-            return;
+    const filteredItems = React.useMemo(() => {
+        if (selectedFolder === ALL_FOLDERS_KEY) {
+            return items;
         }
-        refreshIconRotation.value = 0;
-    }, [refreshIconRotation, refreshing]);
-
-    const refreshIconStyle = useAnimatedStyle(() => {
-        const degree = refreshing ? refreshIconRotation.value : pullProgress.value * 360;
-        const opacity = refreshing ? 1 : 0.4 + pullProgress.value * 0.6;
-        return {
-            opacity,
-            transform: [{ rotate: `${degree}deg` }],
-        };
-    });
+        return items.filter(item => extractFolder(item.path) === selectedFolder);
+    }, [items, selectedFolder]);
 
     return (
-        <PullToRefreshScrollView
-            refreshing={refreshing}
-            onRefresh={onPullRefresh}
-            maxPullHeight={96}
-            refreshBackgroundColor={refreshBackgroundColor}
-            containerBackgroundColor="transparent"
-            contentContainerStyle={{ paddingBottom: 16 }}
-            onPullProgress={progress => {
-                pullProgress.value = progress;
-            }}
-            renderPullView={
-                <Animated.View style={refreshIconStyle}>
-                    <Ionicons name="refresh" size={22} color={refreshColor} />
-                </Animated.View>
-            }
-            style={{ flex: 1 }}
-            className="px-5">
-            {loading ? (
-                <View className="pt-2">
-                    <TextX variant="description">加载中...</TextX>
+        <View className="flex-1">
+            <PullToRefreshScrollView
+                onRefresh={onPullRefresh}
+                maxPullHeight={100}
+                refreshBackgroundColor={refreshBackgroundColor}
+                containerBackgroundColor="transparent"
+                contentContainerStyle={{ paddingBottom: 16 }}
+                style={{ flex: 1 }}
+                className="px-5">
+                <View className="mb-4 mt-2 flex-row items-center justify-between">
+                    <View className="w-[56%]">
+                        <Picker
+                            // options={folderOptions}
+                            sections={[
+                                {
+                                    title: 'Fruits',
+                                    options: [
+                                        { label: 'Apple', value: 'apple' },
+                                        { label: 'Banana', value: 'banana' },
+                                        { label: 'Orange', value: 'orange' },
+                                    ],
+                                },
+                                {
+                                    title: 'Vegetables',
+                                    options: [
+                                        { label: 'Carrot', value: 'carrot' },
+                                        { label: 'Broccoli', value: 'broccoli' },
+                                        { label: 'Spinach', value: 'spinach' },
+                                    ],
+                                },
+                            ]}
+                            value={selectedFolder}
+                            onValueChange={value => {
+                                setSelectedFolder(value);
+                            }}
+                            variant="outline"
+                            modalTitle="选择文件夹"
+                            placeholder="全部文件夹"
+                        />
+                    </View>
+                    <View className="flex-row items-center gap-x-2">
+                        <Pressable
+                            className="h-9 w-9 items-center justify-center rounded-xl"
+                            style={{ backgroundColor: secondaryColor }}
+                            onPress={() => {}}>
+                            <Filter size={16} color={textColor} />
+                        </Pressable>
+                        <Pressable
+                            className="h-9 w-9 items-center justify-center rounded-xl"
+                            style={{ backgroundColor: secondaryColor }}
+                            onPress={() => {}}>
+                            <Search size={16} color={textColor} />
+                        </Pressable>
+                        <Pressable
+                            className="h-9 w-9 items-center justify-center rounded-xl"
+                            style={{ backgroundColor: secondaryColor }}
+                            onPress={() => {}}>
+                            <SquareCheckBig size={16} color={textColor} />
+                        </Pressable>
+                    </View>
                 </View>
-            ) : null}
-            {!loading && items.length === 0 ? (
-                <View className="pt-2">
-                    <TextX variant="description">暂无录音文件</TextX>
-                </View>
-            ) : null}
-            {!loading
-                ? items.map((item, index) => (
-                      <React.Fragment key={item.path}>
-                          <FileListItem
-                              name={extractFileName(item.path)}
-                              durationText={formatDuration(item.durationMs)}
-                              createdAtText={formatDate(item.recordedAtMs)}
-                          />
-                          {index < items.length - 1 ? (
-                              <View className="my-4">
-                                  <Separator />
-                              </View>
-                          ) : null}
-                      </React.Fragment>
-                  ))
-                : null}
-        </PullToRefreshScrollView>
+                {loading ? (
+                    <View className="pt-2">
+                        <TextX variant="description">加载中...</TextX>
+                    </View>
+                ) : null}
+                {!loading && filteredItems.length === 0 ? (
+                    <View className="pt-2">
+                        <TextX variant="description">
+                            {selectedFolder === ALL_FOLDERS_KEY ? '暂无录音文件' : '当前文件夹暂无录音文件'}
+                        </TextX>
+                    </View>
+                ) : null}
+                {!loading
+                    ? filteredItems.map((item, index) => (
+                          <React.Fragment key={item.path}>
+                              <FileListItem
+                                  name={extractFileName(item.path)}
+                                  durationText={formatDuration(item.durationMs)}
+                                  createdAtText={formatDate(item.recordedAtMs)}
+                              />
+                              {index < filteredItems.length - 1 ? <Separator /> : null}
+                          </React.Fragment>
+                      ))
+                    : null}
+            </PullToRefreshScrollView>
+        </View>
     );
 }
