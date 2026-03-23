@@ -1,0 +1,358 @@
+import { Icon } from '@/components/ui/icon';
+import { TextX } from '@/components/ui/textx';
+import { View } from '@/components/ui/view';
+import { acquireOverlayInteractionLock } from '@/hooks/use-overlay-interaction-lock';
+import { useColor } from '@/hooks/useColor';
+import {
+    BORDER_RADIUS,
+    BUTTON_HEIGHT,
+    BUTTON_ICON,
+    BUTTON_PADDING_HORIZON,
+    BUTTON_PADDING_HORIZON_LG,
+    BUTTON_PADDING_HORIZON_SM,
+    FONT_SIZE,
+    FONT_SIZE_SM,
+} from '@/theme/globals';
+import { ChevronDown, LucideProps } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Modal, Pressable, ScrollView, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+
+export interface PickerOption {
+    label: string;
+    value: string;
+    description?: string;
+    disabled?: boolean;
+}
+
+export interface PickerSection {
+    title?: string;
+    options: PickerOption[];
+}
+
+interface PickerProps {
+    options?: PickerOption[];
+    sections?: PickerSection[];
+    value?: string;
+    placeholder?: string;
+    error?: string;
+    variant?: 'outline' | 'filled' | 'group';
+    onValueChange?: (value: string) => void;
+    disabled?: boolean;
+    style?: ViewStyle;
+    multiple?: boolean;
+    values?: string[];
+    onValuesChange?: (values: string[]) => void;
+
+    // Styling props
+    label?: string;
+    icon?: React.ComponentType<LucideProps>;
+    rightComponent?: React.ReactNode | (() => React.ReactNode);
+    inputStyle?: TextStyle;
+    labelStyle?: TextStyle;
+    errorStyle?: TextStyle;
+
+    // Modal props
+    modalTitle?: string;
+    modalMaxHeightRatio?: number;
+    optionsHeight?: number;
+    triggerActiveOpacity?: number;
+    optionActiveOpacity?: number;
+    onOpenChange?: (open: boolean) => void;
+}
+
+export function Picker({
+    options = [],
+    sections = [],
+    value,
+    values = [],
+    error,
+    variant = 'filled',
+    placeholder = 'Select an option...',
+    onValueChange,
+    onValuesChange,
+    disabled = false,
+    style,
+    multiple = false,
+    label,
+    icon,
+    rightComponent,
+    inputStyle,
+    labelStyle,
+    errorStyle,
+    modalTitle,
+    modalMaxHeightRatio = 0.7,
+    optionsHeight = 300,
+    triggerActiveOpacity = 0.8,
+    optionActiveOpacity = 0.8,
+    onOpenChange,
+}: PickerProps) {
+    const [isOpen, setIsOpen] = useState(false);
+    const lockReleaseRef = React.useRef<(() => void) | null>(null);
+
+    // Move ALL theme color hooks to the top level
+    const borderColor = useColor('border');
+    const text = useColor('text');
+    const muted = useColor('mutedForeground');
+    const cardColor = useColor('card');
+    const danger = useColor('red');
+    const primary = useColor('primary');
+    const primaryForeground = useColor('primaryForeground');
+    const textMutedColor = useColor('textMuted');
+
+    // Normalize data structure - convert options to sections format
+    const normalizedSections: PickerSection[] = sections.length > 0 ? sections : [{ options }];
+
+    const filteredSections = normalizedSections;
+
+    // Get selected options for display
+    const getSelectedOptions = () => {
+        const allOptions = normalizedSections.flatMap(section => section.options);
+
+        if (multiple) {
+            return allOptions.filter(option => values.includes(option.value));
+        } else {
+            return allOptions.filter(option => option.value === value);
+        }
+    };
+
+    const selectedOptions = getSelectedOptions();
+
+    const setOpen = (open: boolean) => {
+        if (open) {
+            if (!lockReleaseRef.current) {
+                lockReleaseRef.current = acquireOverlayInteractionLock();
+            }
+        } else if (lockReleaseRef.current) {
+            lockReleaseRef.current();
+            lockReleaseRef.current = null;
+        }
+        setIsOpen(open);
+        onOpenChange?.(open);
+    };
+
+    React.useEffect(() => {
+        return () => {
+            if (lockReleaseRef.current) {
+                lockReleaseRef.current();
+                lockReleaseRef.current = null;
+            }
+        };
+    }, []);
+
+    const handleSelect = (optionValue: string) => {
+        if (multiple) {
+            const newValues = values.includes(optionValue) ? values.filter(v => v !== optionValue) : [...values, optionValue];
+            onValuesChange?.(newValues);
+        } else {
+            onValueChange?.(optionValue);
+            setOpen(false);
+        }
+    };
+
+    const getDisplayText = () => {
+        if (selectedOptions.length === 0) return placeholder;
+
+        if (multiple) {
+            if (selectedOptions.length === 1) {
+                return selectedOptions[0].label;
+            }
+            return `${selectedOptions.length} selected`;
+        }
+
+        return selectedOptions[0]?.label || placeholder;
+    };
+
+    const triggerStyle: ViewStyle = {
+        paddingHorizontal: variant === 'group' ? 0 : BUTTON_PADDING_HORIZON,
+        borderWidth: variant === 'group' ? 0 : 1,
+        borderColor: variant === 'outline' ? borderColor : cardColor,
+        backgroundColor: variant === 'filled' ? cardColor : 'transparent',
+        minHeight: variant === 'group' ? 'auto' : BUTTON_HEIGHT,
+        opacity: disabled ? 0.5 : 1,
+    };
+
+    const renderOption = (option: PickerOption, sectionIndex: number, optionIndex: number) => {
+        const isSelected = multiple ? values.includes(option.value) : value === option.value;
+
+        return (
+            <TouchableOpacity
+                key={`${sectionIndex}-${option.value}`}
+                onPress={() => !option.disabled && handleSelect(option.value)}
+                className="my-0.5 items-center rounded-full"
+                style={{
+                    paddingVertical: BUTTON_PADDING_HORIZON_SM,
+                    paddingHorizontal: BUTTON_PADDING_HORIZON_LG,
+                    backgroundColor: isSelected ? primary : 'transparent',
+                    opacity: option.disabled ? 0.3 : 1,
+                }}
+                disabled={option.disabled}
+                activeOpacity={optionActiveOpacity}>
+                <View className="w-full items-center">
+                    <TextX
+                        className="text-center"
+                        style={{
+                            color: isSelected ? primaryForeground : text,
+                            fontWeight: isSelected ? '600' : '400',
+                            fontSize: FONT_SIZE,
+                        }}>
+                        {option.label}
+                    </TextX>
+                    {option.description && (
+                        <TextX
+                            variant="subtitle"
+                            className="mt-1 text-center"
+                            style={{
+                                fontSize: FONT_SIZE_SM,
+                                color: isSelected ? primaryForeground : textMutedColor,
+                            }}>
+                            {option.description}
+                        </TextX>
+                    )}
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    return (
+        <>
+            <TouchableOpacity
+                className="w-full flex-row items-center rounded-full"
+                style={[triggerStyle, style]}
+                onPress={() => !disabled && setOpen(true)}
+                disabled={disabled}
+                activeOpacity={triggerActiveOpacity}>
+                {/* Icon & Label */}
+                <View className="flex-row items-center gap-x-2" pointerEvents="none">
+                    {icon && <Icon name={icon} size={BUTTON_ICON} color={error ? danger : muted} />}
+                    {label && (
+                        <TextX
+                            variant="subtitle"
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                            style={[
+                                {
+                                    color: error ? danger : muted,
+                                },
+                                labelStyle,
+                            ]}
+                            pointerEvents="none">
+                            {label}
+                        </TextX>
+                    )}
+                </View>
+
+                <View className="flex-1 flex-row items-center justify-between">
+                    <TextX
+                        style={[
+                            {
+                                fontSize: FONT_SIZE,
+                                color: selectedOptions.length > 0 ? text : disabled ? muted : error ? danger : muted,
+                            },
+                            inputStyle,
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail">
+                        {getDisplayText()}
+                    </TextX>
+
+                    {rightComponent ? (
+                        typeof rightComponent === 'function' ? (
+                            rightComponent()
+                        ) : (
+                            rightComponent
+                        )
+                    ) : (
+                        <ChevronDown size={BUTTON_ICON} color={error ? danger : muted} />
+                    )}
+                </View>
+            </TouchableOpacity>
+
+            {/* Error message */}
+            {error && (
+                <TextX
+                    variant="subtitle"
+                    className="mt-1"
+                    style={[
+                        {
+                            color: danger,
+                        },
+                        errorStyle,
+                    ]}>
+                    {error}
+                </TextX>
+            )}
+
+            <Modal visible={isOpen} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+                <View className="flex-1 justify-end">
+                    <Pressable className="absolute inset-0 bg-black/50" onPress={() => setOpen(false)} />
+                    <View
+                        className="w-full overflow-hidden pb-8"
+                        style={{
+                            backgroundColor: cardColor,
+                            maxHeight: `${Math.round(modalMaxHeightRatio * 100)}%`,
+                            borderTopStartRadius: BORDER_RADIUS,
+                            borderTopEndRadius: BORDER_RADIUS,
+                        }}>
+                        {/* Header */}
+                        {(modalTitle || multiple) && (
+                            <View
+                                className="flex-row items-center justify-between p-4 pt-5"
+                                style={{
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: borderColor,
+                                }}>
+                                <TextX variant="subtitle">{modalTitle || 'Select Options'}</TextX>
+
+                                {multiple && (
+                                    <TouchableOpacity onPress={() => setOpen(false)}>
+                                        <TextX
+                                            style={{
+                                                color: primary,
+                                                fontWeight: '500',
+                                            }}>
+                                            Done
+                                        </TextX>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Options - Updated to match date-picker styling */}
+                        <View style={{ height: optionsHeight }}>
+                            <ScrollView
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={{ padding: BUTTON_PADDING_HORIZON }}
+                                nestedScrollEnabled
+                                keyboardShouldPersistTaps="handled"
+                                directionalLockEnabled
+                                scrollEventThrottle={16}>
+                                {filteredSections.map((section, sectionIndex) => (
+                                    <View key={sectionIndex}>
+                                        {section.title && (
+                                            <View className="p-1">
+                                                <TextX variant="description">{section.title}</TextX>
+                                            </View>
+                                        )}
+                                        {section.options.map((option, optionIndex) => renderOption(option, sectionIndex, optionIndex))}
+                                    </View>
+                                ))}
+
+                                {filteredSections.every(section => section.options.length === 0) && (
+                                    <View className="items-center px-4 py-6">
+                                        <TextX
+                                            variant="subtitle"
+                                            style={{
+                                                color: textMutedColor,
+                                            }}>
+                                            No options available
+                                        </TextX>
+                                    </View>
+                                )}
+                            </ScrollView>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        </>
+    );
+}

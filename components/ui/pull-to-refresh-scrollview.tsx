@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { PanResponder, ScrollView, ScrollViewProps, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { CheckCircle, Refresh } from 'iconoir-react-native';
+import { useOverlayInteractionLocked } from '~/hooks/use-overlay-interaction-lock';
 
 type PullToRefreshScrollViewProps = ScrollViewProps & {
     // Backward compatibility: no longer required/used after internalized refresh state.
@@ -10,6 +11,7 @@ type PullToRefreshScrollViewProps = ScrollViewProps & {
     maxPullHeight?: number;
     // Larger means easier to pull further; smaller means stronger resistance.
     pullResistance?: number;
+    pullEnabled?: boolean;
     refreshBackgroundColor?: string;
     containerBackgroundColor?: string;
     containerStyle?: StyleProp<ViewStyle>;
@@ -36,6 +38,7 @@ export function PullToRefreshScrollView({
     onRefresh,
     maxPullHeight = 120,
     pullResistance = 2.5,
+    pullEnabled = true,
     refreshBackgroundColor = '#e6f4ff',
     containerBackgroundColor = 'transparent',
     containerStyle,
@@ -49,6 +52,8 @@ export function PullToRefreshScrollView({
     scrollEventThrottle = 16,
     ...scrollViewProps
 }: PullToRefreshScrollViewProps) {
+    const overlayInteractionLocked = useOverlayInteractionLocked();
+    const effectivePullEnabled = pullEnabled && !overlayInteractionLocked;
     const scrollOffsetYRef = useRef(0);
     const refreshingRef = useRef(false);
     const [refreshing, setRefreshing] = React.useState(false);
@@ -157,9 +162,12 @@ export function PullToRefreshScrollView({
                 onMoveShouldSetPanResponderCapture: (_, gestureState) => {
                     const isAtTop = scrollOffsetYRef.current <= 0;
                     const isPullingDown = gestureState.dy > 5;
-                    return !refreshingRef.current && isAtTop && isPullingDown;
+                    return effectivePullEnabled && !refreshingRef.current && isAtTop && isPullingDown;
                 },
                 onPanResponderMove: (_, gestureState) => {
+                    if (!effectivePullEnabled) {
+                        return;
+                    }
                     const nextPosition = applyPullResistance(gestureState.dy, maxPullHeight, pullResistance);
                     pullDownPosition.value = nextPosition;
                     pullProgress.value = Math.max(0, Math.min(1, nextPosition / restingPosition));
@@ -167,7 +175,7 @@ export function PullToRefreshScrollView({
                 onPanResponderRelease: releasePull,
                 onPanResponderTerminate: releasePull,
             }),
-        [maxPullHeight, pullDownPosition, pullProgress, pullResistance, releasePull, restingPosition],
+        [effectivePullEnabled, maxPullHeight, pullDownPosition, pullProgress, pullResistance, releasePull, restingPosition],
     );
 
     const handleScroll: ScrollViewProps['onScroll'] = event => {
