@@ -197,7 +197,6 @@ export function Picker({
                         style={{
                             color: isSelected ? primaryForeground : text,
                             fontWeight: isSelected ? '600' : '400',
-                            fontSize: FONT_SIZE,
                         }}>
                         {option.label}
                     </TextX>

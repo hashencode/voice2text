@@ -149,7 +149,6 @@ export function TabsTrigger({ children, value, disabled = false, style, textStyl
     };
 
     const triggerTextStyle: TextStyle = {
-        fontSize: FONT_SIZE,
         fontWeight: '500',
         color: isActive ? primaryColor : mutedForegroundColor,
         textAlign: 'center',
