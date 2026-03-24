@@ -26,9 +26,9 @@ export const BUTTON_HEIGHT = 36;
 export const BUTTON_HEIGHT_SM = 30;
 export const BUTTON_HEIGHT_LG = 42;
 
-export const BUTTON_PADDING_HORIZON = 14;
+export const BUTTON_PADDING_HORIZON = 16;
 export const BUTTON_PADDING_HORIZON_SM = 12;
-export const BUTTON_PADDING_HORIZON_LG = 16;
+export const BUTTON_PADDING_HORIZON_LG = 20;
 
 export const BUTTON_ICON = 16;
 export const BUTTON_ICON_SM = 14;
