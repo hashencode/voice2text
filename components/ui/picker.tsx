@@ -285,9 +285,27 @@ export function Picker({
                 </TextX>
             )}
 
-            <Modal visible={isOpen} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-                <View className="flex-1 justify-end">
+            <Modal
+                visible={isOpen}
+                transparent
+                animationType="fade"
+                hardwareAccelerated
+                statusBarTranslucent
+                onRequestClose={() => setOpen(false)}>
+                <View className="flex-1">
                     <Pressable className="absolute inset-0 bg-black/50" onPress={() => setOpen(false)} />
+                </View>
+            </Modal>
+
+            <Modal
+                visible={isOpen}
+                transparent
+                animationType="slide"
+                hardwareAccelerated
+                statusBarTranslucent
+                onRequestClose={() => setOpen(false)}>
+                <View className="flex-1 justify-end">
+                    <Pressable className="absolute inset-0" onPress={() => setOpen(false)} />
                     <View
                         className="w-full overflow-hidden pb-8"
                         style={{
