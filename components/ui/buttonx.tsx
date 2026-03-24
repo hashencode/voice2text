@@ -23,7 +23,7 @@ import { Pressable, TextStyle, TouchableOpacity, TouchableOpacityProps, View, Vi
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { TextX } from '~/components/ui/textx';
 
-export type ButtonVariant = 'default' | 'primary' | 'destructive' | 'success' | 'outline' | 'secondary' | 'ghost' | 'link';
+export type ButtonVariant = 'default' | 'text' | 'primary' | 'destructive' | 'success' | 'outline' | 'secondary' | 'ghost' | 'link';
 
 export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
 
@@ -33,6 +33,7 @@ export interface ButtonProps extends Omit<TouchableOpacityProps, 'style'> {
     animation?: boolean;
     haptic?: boolean;
     icon?: React.ComponentType<LucideProps>;
+    iconProps?: LucideProps;
     onPress?: () => void;
     variant?: ButtonVariant;
     size?: ButtonSize;
@@ -48,6 +49,7 @@ export const ButtonX = forwardRef<View, ButtonProps>(
         {
             children,
             icon,
+            iconProps,
             onPress,
             variant = 'default',
             size = 'default',
@@ -62,7 +64,7 @@ export const ButtonX = forwardRef<View, ButtonProps>(
         },
         ref,
     ) => {
-        const defaultColor = useColor('background');
+        const defaultColor = useColor('card');
         const defaultTextColor = useColor('text');
         const primaryColor = useColor('primary');
         const primaryForegroundColor = useColor('primaryForeground');
@@ -108,6 +110,8 @@ export const ButtonX = forwardRef<View, ButtonProps>(
 
             // Variant styles
             switch (variant) {
+                case 'text':
+                    return { ...baseStyle, backgroundColor: 'transparent' };
                 case 'primary':
                     return { ...baseStyle, backgroundColor: primaryColor };
                 case 'destructive':
@@ -161,6 +165,8 @@ export const ButtonX = forwardRef<View, ButtonProps>(
             };
 
             switch (variant) {
+                case 'text':
+                    return { ...baseTextStyle, color: defaultTextColor };
                 case 'primary':
                     return { ...baseTextStyle, color: primaryForegroundColor };
                 case 'destructive':
@@ -186,6 +192,8 @@ export const ButtonX = forwardRef<View, ButtonProps>(
 
         const getColor = (): string => {
             switch (variant) {
+                case 'text':
+                    return defaultTextColor;
                 case 'primary':
                     return primaryForegroundColor;
                 case 'destructive':
@@ -359,12 +367,12 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                         <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
                     ) : typeof children === 'string' ? (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
+                            {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
                             <TextX style={[finalTextStyle, textStyle]}>{children}</TextX>
                         </View>
                     ) : (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
+                            {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
                             {children}
                         </View>
                     )}
@@ -382,7 +390,7 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                     <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
                 ) : typeof children === 'string' ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
+                        {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
                         <TextX style={[finalTextStyle, textStyle]}>{children}</TextX>
                     </View>
                 ) : (
