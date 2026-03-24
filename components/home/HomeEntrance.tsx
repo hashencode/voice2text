@@ -21,7 +21,9 @@ export default function HomeEntrance() {
                 return (
                     <Pressable className="flex items-center gap-y-1.5" key={label} onPress={onPress}>
                         {icon}
-                        <TextX variant="description">{label}</TextX>
+                        <TextX variant="description" className="font-medium">
+                            {label}
+                        </TextX>
                     </Pressable>
                 );
             })}

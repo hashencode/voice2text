@@ -228,7 +228,6 @@ export function Picker({
                     {icon && <Icon name={icon} size={BUTTON_ICON} color={error ? danger : muted} />}
                     {label && (
                         <TextX
-                            variant="subtitle"
                             numberOfLines={1}
                             ellipsizeMode="tail"
                             style={[
@@ -245,6 +244,7 @@ export function Picker({
 
                 <View className="flex-1 flex-row items-center justify-between">
                     <TextX
+                        className="flex-shrink flex-grow"
                         style={[
                             {
                                 color: selectedOptions.length > 0 ? text : disabled ? muted : error ? danger : muted,
@@ -256,15 +256,17 @@ export function Picker({
                         {getDisplayText()}
                     </TextX>
 
-                    {rightComponent ? (
-                        typeof rightComponent === 'function' ? (
-                            rightComponent()
+                    <View className="flex-shrink-0">
+                        {rightComponent ? (
+                            typeof rightComponent === 'function' ? (
+                                rightComponent()
+                            ) : (
+                                rightComponent
+                            )
                         ) : (
-                            rightComponent
-                        )
-                    ) : (
-                        <ChevronDown size={BUTTON_ICON} color={error ? danger : muted} />
-                    )}
+                            <ChevronDown size={BUTTON_ICON} color={error ? danger : muted} />
+                        )}
+                    </View>
                 </View>
             </TouchableOpacity>
 
