@@ -61,6 +61,9 @@ class SherpaOnnxModule : Module() {
   private var wavRecordingRunning = false
 
   @Volatile
+  private var wavRecordingPaused = false
+
+  @Volatile
   private var wavAudioRecord: AudioRecord? = null
 
   @Volatile
@@ -167,6 +170,10 @@ class SherpaOnnxModule : Module() {
       wavRecordingRunning
     }
 
+    Function("isWavRecordingPaused") {
+      wavRecordingPaused
+    }
+
     AsyncFunction("startWavRecording") { options: Map<String, Any?>?, promise: Promise ->
       synchronized(wavLock) {
         if (wavRecordingRunning) {
@@ -194,6 +201,7 @@ class SherpaOnnxModule : Module() {
           val audioRecord = createAudioRecord(sampleRate)
 
           wavRecordingRunning = true
+          wavRecordingPaused = false
           wavAudioRecord = audioRecord
           wavOutputFile = outFile
           wavSampleRate = sampleRate
@@ -263,6 +271,36 @@ class SherpaOnnxModule : Module() {
             "sessionId" to wavSessionId,
           ),
         )
+      }
+    }
+
+    AsyncFunction("pauseWavRecording") { promise: Promise ->
+      synchronized(wavLock) {
+        if (!wavRecordingRunning) {
+          promise.reject("ERR_WAV_RECORDING_NOT_RUNNING", "WAV recording is not running", null)
+          return@AsyncFunction
+        }
+        if (wavRecordingPaused) {
+          promise.resolve(mapOf("ok" to true, "paused" to true))
+          return@AsyncFunction
+        }
+        wavRecordingPaused = true
+        promise.resolve(mapOf("ok" to true, "paused" to true))
+      }
+    }
+
+    AsyncFunction("resumeWavRecording") { promise: Promise ->
+      synchronized(wavLock) {
+        if (!wavRecordingRunning) {
+          promise.reject("ERR_WAV_RECORDING_NOT_RUNNING", "WAV recording is not running", null)
+          return@AsyncFunction
+        }
+        if (!wavRecordingPaused) {
+          promise.resolve(mapOf("ok" to true, "paused" to false))
+          return@AsyncFunction
+        }
+        wavRecordingPaused = false
+        promise.resolve(mapOf("ok" to true, "paused" to false))
       }
     }
 
@@ -515,6 +553,7 @@ class SherpaOnnxModule : Module() {
     }
     wavStopReason = reason
     wavInterruptedBySystem = interruptedBySystem
+    wavRecordingPaused = false
     wavRecordingRunning = false
     try {
       wavAudioRecord?.stop()
@@ -578,6 +617,10 @@ class SherpaOnnxModule : Module() {
       while (wavRecordingRunning) {
         val read = audioRecord.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
         if (read <= 0) {
+          continue
+        }
+
+        if (wavRecordingPaused) {
           continue
         }
 
@@ -655,6 +698,7 @@ class SherpaOnnxModule : Module() {
 
       abandonWavAudioFocus()
       wavAudioRecord = null
+      wavRecordingPaused = false
       wavRecordingRunning = false
       wavStopLatch?.countDown()
     }
