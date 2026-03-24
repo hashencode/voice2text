@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS } from '@/theme/globals';
 import React, {
@@ -128,9 +128,9 @@ export function PopoverTrigger({
   }
 
   return (
-    <Button ref={triggerRef} style={style} onPress={handlePress}>
+    <ButtonX ref={triggerRef} style={style} onPress={handlePress}>
       {children}
-    </Button>
+    </ButtonX>
   );
 }
 

@@ -1,8 +1,8 @@
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { Progress } from '@/components/ui/progress';
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, FONT_SIZE } from '@/theme/globals';
+import { BORDER_RADIUS } from '@/theme/globals';
 import {
   CameraMode,
   CameraRatio,
@@ -418,9 +418,9 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
             We need access to your camera to take pictures and videos
           </TextX>
           <View style={{ width: '100%' }}>
-            <Button onPress={requestPermission} style={{ width: '100%' }}>
+            <ButtonX onPress={requestPermission} style={{ width: '100%' }}>
               Grant Permission
-            </Button>
+            </ButtonX>
           </View>
         </View>
       );

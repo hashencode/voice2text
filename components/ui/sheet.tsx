@@ -1,8 +1,8 @@
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, FONT_SIZE } from '@/theme/globals';
+import { BORDER_RADIUS } from '@/theme/globals';
 import { X } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import {
@@ -101,7 +101,7 @@ export function SheetTrigger({ children, asChild }: SheetTriggerProps) {
     });
   }
 
-  return <Button onPress={handlePress}>{children}</Button>;
+  return <ButtonX onPress={handlePress}>{children}</ButtonX>;
 }
 
 export function SheetContent({ children, style }: SheetContentProps) {

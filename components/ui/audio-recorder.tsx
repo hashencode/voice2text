@@ -1,6 +1,6 @@
 import { AudioPlayer } from '@/components/ui/audio-player';
 import { AudioWaveform } from '@/components/ui/audio-waveform';
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS } from '@/theme/globals';
@@ -316,23 +316,21 @@ export function AudioRecorder({
             autoPlay={false}
           />
           <View style={styles.playbackControls}>
-            <Button
-              variant='outline'
+            <ButtonX              variant='outline'
               size='icon'
               onPress={handleDeleteRecording}
               style={styles.controlButton}
             >
               <Trash2 size={20} color={redColor} />
-            </Button>
+            </ButtonX>
 
-            <Button
-              variant='default'
+            <ButtonX              variant='default'
               onPress={handleSaveRecording}
               style={[styles.saveButton, { backgroundColor: greenColor }]}
             >
               <Download size={20} color='white' />
               <TextX style={{ color: 'white', marginLeft: 8 }}>Save</TextX>
-            </Button>
+            </ButtonX>
           </View>
         </View>
       ) : (
@@ -392,26 +390,25 @@ export function AudioRecorder({
           <View style={styles.controlsContainer}>
             {!isRecording && !recordingUri && (
               <Animated.View style={animatedRecordButtonStyle}>
-                <Button
-                  variant='default'
+                <ButtonX                  variant='default'
                   size='lg'
                   onPress={handleStartRecording}
                   style={[styles.recordButton, { backgroundColor: redColor }]}
                 >
                   <Mic size={32} color='white' />
-                </Button>
+                </ButtonX>
               </Animated.View>
             )}
 
             {isRecording && (
-              <Button
+              <ButtonX
                 variant='default'
                 size='lg'
                 onPress={handleStopRecording}
                 style={[styles.stopButton, { backgroundColor: redColor }]}
               >
                 <Square size={32} fill='white' color='white' />
-              </Button>
+              </ButtonX>
             )}
           </View>
         </View>

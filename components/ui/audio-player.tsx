@@ -1,5 +1,5 @@
 import { AudioWaveform } from '@/components/ui/audio-waveform';
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { Progress } from '@/components/ui/progress';
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
@@ -201,18 +201,16 @@ export function AudioPlayer({
       {/* Controls */}
       {showControls && (
         <View style={styles.controlsContainer}>
-          <Button
-            variant='ghost'
+          <ButtonX            variant='ghost'
             size='icon'
             onPress={handleBackFiveSeconds}
             style={styles.controlButton}
             disabled={!player.isLoaded}
           >
             <RotateCcw size={18} color={textColor} />
-          </Button>
+          </ButtonX>
 
-          <Button
-            size='icon'
+          <ButtonX            size='icon'
             variant='destructive'
             onPress={handlePlayPause}
             disabled={!player.isLoaded}
@@ -223,17 +221,16 @@ export function AudioPlayer({
             ) : (
               <Play size={24} color='white' />
             )}
-          </Button>
+          </ButtonX>
 
-          <Button
-            variant='ghost'
+          <ButtonX            variant='ghost'
             size='icon'
             onPress={handleRestart}
             style={styles.controlButton}
             disabled={!player.isLoaded}
           >
             <Square fill={textColor} size={18} color={textColor} />
-          </Button>
+          </ButtonX>
         </View>
       )}
 

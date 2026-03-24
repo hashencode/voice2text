@@ -1,8 +1,8 @@
-import { Button, ButtonSize, ButtonVariant } from '@/components/ui/button';
+import { ButtonSize, ButtonVariant, ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { CORNERS, FONT_SIZE } from '@/theme/globals';
+import { CORNERS } from '@/theme/globals';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
@@ -345,11 +345,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
 
     return (
       <View ref={ref} style={style}>
-        {children ? (
-          children
-        ) : (
-          <Button
-            onPress={pickFromGallery}
+        <ButtonX
             disabled={disabled}
             variant={variant}
             size={size}
@@ -363,8 +359,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                   ? 'Images'
                   : 'Videos'
               }`}
-          </Button>
-        )}
+          </ButtonX>
 
         {showPreview && assets.length > 0 && (
           <FlatList
@@ -408,13 +403,12 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                     </TextX>
                   )}
 
-                  <Button
-                    size='sm'
+                  <ButtonX                    size='sm'
                     variant='success'
                     onPress={() => setIsGalleryVisible(false)}
                   >
                     Done
-                  </Button>
+                  </ButtonX>
                 </View>
               </View>
 

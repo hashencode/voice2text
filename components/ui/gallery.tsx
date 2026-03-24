@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS } from '@/theme/globals';
@@ -619,21 +619,17 @@ export function Gallery({
         {/* Top controls (share, download, close) */}
         <View style={[styles.topControls, { backgroundColor }]}>
           <View style={styles.topRightControls}>
-            {enableDownload && onDownload && (
-              <Button size='icon' variant='ghost' onPress={handleDownload}>
-                <Download size={24} color={primary} />
-              </Button>
-            )}
-            {enableShare && onShare && (
-              <Button size='icon' variant='ghost' onPress={handleShare}>
-                <Share size={24} color={primary} />
-              </Button>
-            )}
+            <ButtonX size='icon' variant='ghost' onPress={handleDownload}>
+              <Download size={24} color={primary} />
+            </ButtonX>
+            <ButtonX size='icon' variant='ghost' onPress={handleShare}>
+              <Share size={24} color={primary} />
+            </ButtonX>
           </View>
 
-          <Button size='icon' variant='ghost' onPress={closeFullscreen}>
+          <ButtonX size='icon' variant='ghost' onPress={closeFullscreen}>
             <X size={26} color={primary} />
-          </Button>
+          </ButtonX>
         </View>
 
         {/* Bottom controls (page, title, description, thumbnails) */}

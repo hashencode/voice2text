@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
@@ -323,8 +323,7 @@ export function Table<T = any>({
         </TextX>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Button
-            variant='outline'
+          <ButtonX            variant='outline'
             size='sm'
             onPress={() => handlePageChange(1)}
             disabled={currentPage === 1}
@@ -333,10 +332,9 @@ export function Table<T = any>({
               size={16}
               color={currentPage === 1 ? mutedColor : textColor}
             />
-          </Button>
+          </ButtonX>
 
-          <Button
-            variant='outline'
+          <ButtonX            variant='outline'
             size='sm'
             onPress={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
@@ -345,10 +343,9 @@ export function Table<T = any>({
               size={16}
               color={currentPage === 1 ? mutedColor : textColor}
             />
-          </Button>
+          </ButtonX>
 
-          <Button
-            variant='outline'
+          <ButtonX            variant='outline'
             size='sm'
             onPress={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -357,10 +354,9 @@ export function Table<T = any>({
               size={16}
               color={currentPage === totalPages ? mutedColor : textColor}
             />
-          </Button>
+          </ButtonX>
 
-          <Button
-            variant='outline'
+          <ButtonX            variant='outline'
             size='sm'
             onPress={() => handlePageChange(totalPages)}
             disabled={currentPage === totalPages}
@@ -369,7 +365,7 @@ export function Table<T = any>({
               size={16}
               color={currentPage === totalPages ? mutedColor : textColor}
             />
-          </Button>
+          </ButtonX>
         </View>
       </View>
     );

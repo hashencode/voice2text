@@ -2,7 +2,7 @@ import { Icon } from '@/components/ui/icon';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { CORNERS, FONT_SIZE, HEIGHT } from '@/theme/globals';
+import { CORNERS, HEIGHT } from '@/theme/globals';
 import { LucideProps } from 'lucide-react-native';
 import React from 'react';
 import { TextStyle, TouchableOpacity, ViewStyle } from 'react-native';

@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
 import React, { useRef, useState } from 'react';
@@ -218,30 +218,28 @@ export function Onboarding({
       {/* Progress Dots */}
       {renderProgressDots()}
 
-      {/* Skip Button */}
       {showSkip && !isLastStep && (
         <View style={styles.skipContainer}>
-          <Button variant='ghost' onPress={handleSkip}>
+          <ButtonX variant='ghost' onPress={handleSkip}>
             {skipButtonText}
-          </Button>
+          </ButtonX>
         </View>
       )}
 
       {/* Navigation Buttons */}
       <View style={styles.buttonContainer}>
         {!isFirstStep && (
-          <Button variant='outline' onPress={handleBack} style={{ flex: 1 }}>
+          <ButtonX variant='outline' onPress={handleBack} style={{ flex: 1 }}>
             {backButtonText}
-          </Button>
+          </ButtonX>
         )}
 
-        <Button
-          variant='default'
+        <ButtonX          variant='default'
           onPress={handleNext}
           style={[...(isFirstStep ? [styles.fullWidthButton] : [{ flex: 2 }])]}
         >
           {isLastStep ? primaryButtonText : nextButtonText}
-        </Button>
+        </ButtonX>
       </View>
     </View>
   );

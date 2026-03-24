@@ -1,7 +1,6 @@
-import { Button, ButtonVariant } from '@/components/ui/button';
+import { ButtonVariant, ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
-import { FONT_SIZE } from '@/theme/globals';
 import { Share as ShareIcon } from 'lucide-react-native';
 import React, { useCallback, useMemo } from 'react';
 import {
@@ -216,15 +215,14 @@ export function ShareButton({
   };
 
   return (
-    <Button
-      onPress={handleShare}
+    <ButtonX      onPress={handleShare}
       variant={variant}
       size={size}
       disabled={isButtonDisabled}
       loading={loading}
     >
       {buttonContent()}
-    </Button>
+    </ButtonX>
   );
 }
 

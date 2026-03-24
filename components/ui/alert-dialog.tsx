@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { useColor } from '@/hooks/useColor';
 import React, { useEffect } from 'react';
 import {
@@ -143,13 +143,13 @@ export function AlertDialog({
               {children ? <CardContent>{children}</CardContent> : null}
               <CardFooter>
                 {showCancelButton && (
-                  <Button variant='outline' onPress={handleCancel}>
+                  <ButtonX variant='outline' onPress={handleCancel}>
                     {cancelText}
-                  </Button>
+                  </ButtonX>
                 )}
-                <Button style={{ flex: 1 }} onPress={handleConfirm}>
+                <ButtonX style={{ flex: 1 }} onPress={handleConfirm}>
                   {confirmText}
-                </Button>
+                </ButtonX>
               </CardFooter>
             </Card>
           </Animated.View>

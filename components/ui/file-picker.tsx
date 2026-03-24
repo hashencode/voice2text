@@ -1,8 +1,8 @@
-import { Button, ButtonVariant } from '@/components/ui/button';
+import { ButtonVariant, ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { CORNERS, FONT_SIZE } from '@/theme/globals';
+import { CORNERS } from '@/theme/globals';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Image, X } from 'lucide-react-native';
 import React, { forwardRef, useCallback, useMemo, useState } from 'react';
@@ -212,9 +212,7 @@ export const FilePicker = forwardRef<FilePickerMethods, FilePickerProps>(
 
     return (
       <View style={[styles.container]}>
-        {/* File Picker Button */}
-        <Button
-          variant={variant}
+        <ButtonX          variant={variant}
           onPress={handlePickerPress}
           disabled={disabled}
           style={[styles.pickerButton, style]}
@@ -245,7 +243,7 @@ export const FilePicker = forwardRef<FilePickerMethods, FilePickerProps>(
                 : placeholder}
             </TextX>
           </View>
-        </Button>
+        </ButtonX>
 
         {/* Selected Files Preview */}
         {selectedFiles.length > 0 && (

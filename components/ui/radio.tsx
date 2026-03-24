@@ -1,6 +1,6 @@
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, CORNERS, FONT_SIZE } from '@/theme/globals';
+import { BORDER_RADIUS, CORNERS } from '@/theme/globals';
 import React from 'react';
 import { TextStyle, TouchableOpacity, View, ViewStyle } from 'react-native';
 

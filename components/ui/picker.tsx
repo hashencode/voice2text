@@ -10,7 +10,6 @@ import {
     BUTTON_PADDING_HORIZON,
     BUTTON_PADDING_HORIZON_LG,
     BUTTON_PADDING_HORIZON_SM,
-    FONT_SIZE,
     FONT_SIZE_SM,
 } from '@/theme/globals';
 import { ChevronDown, LucideProps } from 'lucide-react-native';

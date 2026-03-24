@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { Camera, CaptureSuccess } from '@/components/ui/camera';
 import { Image } from '@/components/ui/image';
 import { TextX } from '@/components/ui/textx';
@@ -245,14 +245,13 @@ export function CameraPreview() {
         </TextX>
 
         <View style={styles.buttonContainer}>
-          <Button
-            variant='default'
+          <ButtonX            variant='default'
             size='lg'
             onPress={handleOpenCamera}
             style={styles.button}
           >
             Open Camera
-          </Button>
+          </ButtonX>
         </View>
       </View>
     </SafeAreaView>

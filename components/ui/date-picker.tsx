@@ -1,11 +1,11 @@
 import { BottomSheet, useBottomSheet } from '@/components/ui/bottom-sheet';
-import { Button } from '@/components/ui/button';
+import { ButtonX } from '@/components/ui/buttonx';
 import { Icon } from '@/components/ui/icon';
 import { ScrollView } from '@/components/ui/scroll-view';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, CORNERS, FONT_SIZE, HEIGHT } from '@/theme/globals';
+import { BORDER_RADIUS, CORNERS, HEIGHT } from '@/theme/globals';
 import {
   Calendar,
   CalendarClock,
@@ -1095,12 +1095,11 @@ export function DatePicker(props: DatePickerProps) {
                 gap: 8,
               }}
             >
-              <Button variant='outline' onPress={resetToToday}>
+              <ButtonX variant='outline' onPress={resetToToday}>
                 Today
-              </Button>
+              </ButtonX>
 
-              <Button
-                variant='outline'
+              <ButtonX                variant='outline'
                 onPress={() => {
                   close();
                   setShowMonthPicker(false);
@@ -1109,17 +1108,17 @@ export function DatePicker(props: DatePickerProps) {
                 }}
               >
                 {mode === 'range' ? 'Clear' : 'Cancel'}
-              </Button>
+              </ButtonX>
             </View>
 
             {mode === 'datetime' && viewMode === 'date' ? (
-              <Button onPress={() => setViewMode('time')} style={{ flex: 1 }}>
+              <ButtonX onPress={() => setViewMode('time')} style={{ flex: 1 }}>
                 Next
-              </Button>
+              </ButtonX>
             ) : (
-              <Button onPress={handleConfirm} style={{ flex: 1 }}>
+              <ButtonX onPress={handleConfirm} style={{ flex: 1 }}>
                 Done
-              </Button>
+              </ButtonX>
             )}
           </View>
         </View>

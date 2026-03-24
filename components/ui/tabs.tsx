@@ -1,6 +1,6 @@
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS, FONT_SIZE } from '@/theme/globals';
+import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import classNames from 'classnames';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ScrollView, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';

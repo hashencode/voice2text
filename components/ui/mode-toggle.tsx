@@ -1,4 +1,4 @@
-import { Button, ButtonSize, ButtonVariant } from '@/components/ui/button';
+import { ButtonSize, ButtonVariant, ButtonX } from '@/components/ui/buttonx';
 import { Icon } from '@/components/ui/icon';
 import { useModeToggle } from '@/hooks/useModeToggle';
 import { Moon, Sun } from 'lucide-react-native';
@@ -46,10 +46,10 @@ export const ModeToggle = ({ variant = 'outline', size = 'icon' }: Props) => {
   });
 
   return (
-    <Button variant={variant} size={size} onPress={toggleMode}>
+    <ButtonX variant={variant} size={size} onPress={toggleMode}>
       <Animated.View style={animatedStyle}>
         <Icon name={showIcon === 'moon' ? Moon : Sun} size={24} />
       </Animated.View>
-    </Button>
+    </ButtonX>
   );
 };
