@@ -39,8 +39,7 @@ export default function RecordPage() {
                 return;
             }
 
-            const durationMs =
-                wavResult.sampleRate > 0 ? Math.round((wavResult.numSamples / wavResult.sampleRate) * 1000) : null;
+            const durationMs = wavResult.sampleRate > 0 ? Math.round((wavResult.numSamples / wavResult.sampleRate) * 1000) : null;
             const sessionId = wavResult.sessionId?.trim() || undefined;
 
             try {
@@ -67,7 +66,7 @@ export default function RecordPage() {
     });
 
     return (
-        <DefaultLayout head="录音" safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
+        <DefaultLayout headTitle="录音" safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="flex-1 items-center justify-center gap-6 px-6">
                 <ButtonX loading={actionLoading} onPress={toggleRecord}>
