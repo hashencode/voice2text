@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { Mic, Pause, Play, Square } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { Easing, FadeIn, FadeOut, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';
 import { AudioWaveform } from '~/components/ui/audio-waveform';
 import { TextX } from '~/components/ui/textx';
@@ -74,6 +74,50 @@ export default function RecordPage() {
 
     const isRecordingOrPaused = phase === 'recording' || phase === 'paused' || phase === 'stopping';
     const isStopping = phase === 'stopping';
+    const canStop = phase === 'recording' || phase === 'paused';
+    const isIdleLike = phase === 'idle' || phase === 'error';
+    const isMicVisualState = isIdleLike || isStopping;
+    const leftVisualState = isMicVisualState ? 0 : isPaused ? 1 : 2;
+    const leftStateProgress = useSharedValue(leftVisualState);
+
+    const handleLeftAction = () => {
+        if (isStopping || actionLoading) {
+            return;
+        }
+        if (isIdleLike) {
+            startRecord();
+            return;
+        }
+        if (isPaused) {
+            resumeRecord();
+            return;
+        }
+        pauseRecord();
+    };
+
+    useEffect(() => {
+        leftStateProgress.value = withTiming(leftVisualState, {
+            duration: 220,
+            easing: Easing.out(Easing.cubic),
+        });
+    }, [leftStateProgress, leftVisualState]);
+
+    const leftActionAnimatedStyle = useAnimatedStyle(() => {
+        const backgroundColor =
+            leftStateProgress.value <= 1
+                ? interpolateColor(leftStateProgress.value, [0, 1], [primaryColor, bgColor])
+                : interpolateColor(leftStateProgress.value, [1, 2], [bgColor, bgColor]);
+        const scale = leftStateProgress.value >= 1.5 ? 1.03 : 1;
+        return {
+            backgroundColor,
+            transform: [{ scale }],
+            opacity: isStopping ? 0.5 : 1,
+        };
+    }, [bgColor, isStopping, primaryColor]);
+
+    const LeftIcon = isMicVisualState ? Mic : isPaused ? Play : Pause;
+    const leftIconColor = isMicVisualState ? iconColor : textColor;
+    const leftIconKey = isMicVisualState ? 'mic' : isPaused ? 'play' : 'pause';
 
     useEffect(() => {
         if (phase !== 'recording') {
@@ -106,17 +150,19 @@ export default function RecordPage() {
                 </View>
 
                 <View className="flex-shrink-0 px-6 py-3">
-                    {isRecordingOrPaused ? (
-                        <View className="flex-row items-center gap-3 rounded-full p-2 shadow" style={{ backgroundColor: cardColor }}>
-                            <Pressable onPress={isPaused ? resumeRecord : pauseRecord} disabled={actionLoading || isStopping}>
-                                <View
-                                    className="items-center justify-center rounded-full"
-                                    style={{ width: 48, height: 48, backgroundColor: bgColor, opacity: isStopping ? 0.5 : 1 }}>
-                                    {isPaused ? <Play size={22} color={textColor} /> : <Pause size={22} color={textColor} />}
-                                </View>
-                            </Pressable>
+                    <View className="flex-row items-center gap-3 rounded-full p-2 shadow" style={{ backgroundColor: cardColor }}>
+                        <Pressable onPress={handleLeftAction} disabled={actionLoading || isStopping}>
+                            <Animated.View
+                                className="items-center justify-center rounded-full"
+                                style={[{ width: 48, height: 48 }, leftActionAnimatedStyle]}>
+                                <Animated.View key={leftIconKey} entering={FadeIn.duration(120)} exiting={FadeOut.duration(120)}>
+                                    <LeftIcon size={22} color={leftIconColor} />
+                                </Animated.View>
+                            </Animated.View>
+                        </Pressable>
 
-                            <View className="flex-1 items-center justify-center">
+                        <View className="flex-1 items-center justify-center">
+                            {isRecordingOrPaused ? (
                                 <AudioWaveform
                                     data={waveformData}
                                     isPlaying={phase === 'recording' && !isPaused}
@@ -130,27 +176,25 @@ export default function RecordPage() {
                                     activeColor={destructiveColor}
                                     inactiveColor={mutedTextColor}
                                 />
-                            </View>
+                            ) : (
+                                <TextX variant="description" style={{ color: mutedTextColor }}>
+                                    点击左侧开始录音
+                                </TextX>
+                            )}
+                        </View>
 
+                        {canStop ? (
                             <Pressable onPress={stopRecord} disabled={isStopping}>
                                 <View
                                     className="items-center justify-center rounded-full"
-                                    style={{ width: 48, height: 48, backgroundColor: destructiveColor, opacity: isStopping ? 0.5 : 1 }}>
+                                    style={{ width: 48, height: 48, backgroundColor: destructiveColor, opacity: isStopping ? 0.35 : 1 }}>
                                     <Square size={20} color={cardColor} />
                                 </View>
                             </Pressable>
-                        </View>
-                    ) : (
-                        <View className="flex flex-row justify-center">
-                            <Pressable
-                                className="flex items-center justify-center rounded-full"
-                                style={{ width: 80, height: 80, backgroundColor: primaryColor }}
-                                onPress={startRecord}
-                                disabled={actionLoading}>
-                                <Mic size={50} color={iconColor} />
-                            </Pressable>
-                        </View>
-                    )}
+                        ) : (
+                            <View style={{ width: 48, height: 48 }} />
+                        )}
+                    </View>
                 </View>
             </View>
         </DefaultLayout>
