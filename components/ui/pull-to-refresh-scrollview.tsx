@@ -2,6 +2,7 @@ import { CheckCircle, Refresh } from 'iconoir-react-native';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { PanResponder, ScrollView, ScrollViewProps, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { TextX } from '~/components/ui/textx';
 import { useOverlayInteractionLocked } from '~/hooks/use-overlay-interaction-lock';
 import { useColor } from '~/hooks/useColor';
 
@@ -17,6 +18,10 @@ type PullToRefreshScrollViewProps = ScrollViewProps & {
     reboundDurationMs?: number;
     idleIconOpacity?: number;
     indicatorSize?: number;
+    isEmpty?: boolean;
+    emptyText?: string;
+    isLoadedAll?: boolean;
+    loadedAllText?: string;
 };
 
 const RESTING_RATIO = 0.85;
@@ -43,6 +48,10 @@ export function PullToRefreshScrollView({
     reboundDurationMs = 280,
     idleIconOpacity = 0.65,
     indicatorSize = 26,
+    isEmpty = false,
+    emptyText = '没有数据',
+    isLoadedAll = false,
+    loadedAllText = '已加载全部',
     children,
     onScroll,
     scrollEventThrottle = 16,
@@ -59,7 +68,9 @@ export function PullToRefreshScrollView({
     const refreshIconRotation = useSharedValue(0);
     const restingPosition = MAX_PULL_HEIGHT * RESTING_RATIO;
     const iconColor = useColor('text');
+    const footerTextColor = useColor('textMuted');
     const refreshBackgroundColor = useColor('card');
+    const footerText = isEmpty ? emptyText : isLoadedAll ? loadedAllText : null;
 
     useEffect(() => {
         refreshingRef.current = refreshing;
@@ -184,6 +195,13 @@ export function PullToRefreshScrollView({
                     scrollEventThrottle={scrollEventThrottle}
                     onScroll={handleScroll}>
                     {children}
+                    {footerText ? (
+                        <View style={styles.footer}>
+                            <TextX variant="description" style={{ color: footerTextColor }}>
+                                {footerText}
+                            </TextX>
+                        </View>
+                    ) : null}
                 </ScrollView>
             </Animated.View>
         </View>
@@ -206,5 +224,10 @@ const styles = StyleSheet.create({
     },
     scroll: {
         flex: 1,
+    },
+    footer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
     },
 });
