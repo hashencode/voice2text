@@ -21,7 +21,7 @@ const lightColors = {
 
     // Muted colors
     muted: 'rgba(0,0,0,0.04)',
-    mutedForeground: 'rgba(0,0,0,0.65)',
+    mutedForeground: 'rgba(0,0,0,0.55)',
 
     // Accent colors
     accent: '#e6f4ff',
@@ -38,12 +38,12 @@ const lightColors = {
 
     // Text colors
     text: 'rgba(0,0,0,0.88)',
-    textMuted: 'rgba(0,0,0,0.65)',
+    textMuted: 'rgba(0,0,0,0.55)',
 
     // Legacy support for existing components
     tint: '#1677ff',
-    icon: 'rgba(0,0,0,0.65)',
-    tabIconDefault: 'rgba(0,0,0,0.65)',
+    icon: 'rgba(0,0,0,0.55)',
+    tabIconDefault: 'rgba(0,0,0,0.55)',
     tabIconSelected: '#1677ff',
 
     // Default buttons, links, Send button, selected tabs
@@ -97,7 +97,7 @@ const darkColors = {
 
     // Muted colors
     muted: 'rgba(255,255,255,0.08)',
-    mutedForeground: 'rgba(255,255,255,0.65)',
+    mutedForeground: 'rgba(255,255,255,0.55)',
 
     // Accent colors
     accent: '#15325b',
@@ -114,12 +114,12 @@ const darkColors = {
 
     // Text colors
     text: 'rgba(255,255,255,0.85)',
-    textMuted: 'rgba(255,255,255,0.65)',
+    textMuted: 'rgba(255,255,255,0.55)',
 
     // Legacy support for existing components
     tint: '#1668dc',
-    icon: 'rgba(255,255,255,0.65)',
-    tabIconDefault: 'rgba(255,255,255,0.65)',
+    icon: 'rgba(255,255,255,0.55)',
+    tabIconDefault: 'rgba(255,255,255,0.55)',
     tabIconSelected: '#1668dc',
 
     // Default buttons, links, Send button, selected tabs
