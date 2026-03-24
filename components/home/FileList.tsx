@@ -6,10 +6,10 @@ import FileListItem from '~/components/home/FileListItem';
 import { Picker } from '~/components/ui/picker';
 import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
 import { Separator } from '~/components/ui/separator';
-import { TextX } from '~/components/ui/textx';
 import { listRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 import { BORDER_RADIUS } from '~/theme/globals';
+import { formatDate, formatDuration } from '~/utils/format';
 
 type HomeRecordingItem = {
     path: string;
@@ -18,33 +18,6 @@ type HomeRecordingItem = {
 };
 
 const ALL_FOLDERS_KEY = '__all_folders__';
-
-function formatDuration(ms: number | null): string {
-    if (ms === null || ms < 0) {
-        return '未知时长';
-    }
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    if (hours > 0) {
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function formatDate(ms: number | null): string {
-    if (ms === null || ms <= 0) {
-        return '未知日期';
-    }
-    const date = new Date(ms);
-    const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, '0');
-    const day = `${date.getDate()}`.padStart(2, '0');
-    const hour = `${date.getHours()}`.padStart(2, '0');
-    const minute = `${date.getMinutes()}`.padStart(2, '0');
-    return `${year}-${month}-${day} ${hour}:${minute}`;
-}
 
 function extractFileName(path: string): string {
     const name = path.split('/').pop() ?? path;
@@ -165,31 +138,22 @@ export default function FileList() {
                     </Pressable>
                 </View>
             </View>
-            <PullToRefreshScrollView onRefresh={onPullRefresh}>
-                {loading ? (
-                    <View className="pt-2">
-                        <TextX variant="description">加载中...</TextX>
-                    </View>
-                ) : null}
-                {!loading && filteredItems.length === 0 ? (
-                    <View className="pt-2">
-                        <TextX variant="description">
-                            {selectedFolder === ALL_FOLDERS_KEY ? '暂无录音文件' : '当前文件夹暂无录音文件'}
-                        </TextX>
-                    </View>
-                ) : null}
-                {!loading
-                    ? filteredItems.map((item, index) => (
-                          <React.Fragment key={item.path}>
-                              <FileListItem
-                                  name={extractFileName(item.path)}
-                                  durationText={formatDuration(item.durationMs)}
-                                  createdAtText={formatDate(item.recordedAtMs)}
-                              />
-                              {index < filteredItems.length - 1 ? <Separator /> : null}
-                          </React.Fragment>
-                      ))
-                    : null}
+            <PullToRefreshScrollView
+                onRefresh={onPullRefresh}
+                isEmpty={!loading && filteredItems.length === 0}
+                emptyText="暂无录音文件"
+                isLoadedAll={!loading && filteredItems.length > 0}
+                loadedAllText="已加载全部录音">
+                {filteredItems?.map((item, index) => (
+                    <React.Fragment key={item.path}>
+                        <FileListItem
+                            name={extractFileName(item.path)}
+                            durationText={formatDuration(item.durationMs)}
+                            createdAtText={formatDate(item.recordedAtMs)}
+                        />
+                        {index < filteredItems.length - 1 ? <Separator /> : null}
+                    </React.Fragment>
+                ))}
             </PullToRefreshScrollView>
         </View>
     );
