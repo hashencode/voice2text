@@ -5,7 +5,7 @@ import { Pressable, View } from 'react-native';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
 
-export default function HeadTab() {
+export default function HomeEntrance() {
     const router = useRouter();
     const iconColor = useColor('text');
     const headTab = [
