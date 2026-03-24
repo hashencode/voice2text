@@ -1,16 +1,18 @@
-import { DesignPencil, Microphone, MultiBubble, MusicDoubleNotePlus } from 'iconoir-react-native';
 import { useRouter } from 'expo-router';
+import { DesignPencil, Microphone, MultiBubble, MusicDoubleNotePlus } from 'iconoir-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { TextX } from '~/components/ui/textx';
+import { useColor } from '~/hooks/useColor';
 
 export default function HeadTab() {
     const router = useRouter();
+    const iconColor = useColor('text');
     const headTab = [
-        { icon: <Microphone width={36} height={36} />, label: '录音', onPress: () => router.push('/record') },
-        { icon: <DesignPencil width={36} height={36} />, label: '灵感速记' },
-        { icon: <MultiBubble width={36} height={36} />, label: '会议记录' },
-        { icon: <MusicDoubleNotePlus width={36} height={36} />, label: '导入音频' },
+        { icon: <Microphone width={36} height={36} color={iconColor} />, label: '录音', onPress: () => router.push('/record') },
+        { icon: <DesignPencil width={36} height={36} color={iconColor} />, label: '灵感速记' },
+        { icon: <MultiBubble width={36} height={36} color={iconColor} />, label: '会议记录' },
+        { icon: <MusicDoubleNotePlus width={36} height={36} color={iconColor} />, label: '导入音频' },
     ];
 
     return (

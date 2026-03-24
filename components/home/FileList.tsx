@@ -9,6 +9,7 @@ import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
 import { listRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
+import { BORDER_RADIUS } from '~/theme/globals';
 
 type HomeRecordingItem = {
     path: string;
@@ -67,9 +68,9 @@ export default function FileList() {
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [selectedFolder, setSelectedFolder] = React.useState<string>(ALL_FOLDERS_KEY);
-    const refreshBackgroundColor = useColor('card');
     const textColor = useColor('text');
     const secondaryColor = useColor('secondary');
+    const cardColor = useColor('card');
 
     const refreshList = React.useCallback(async (mode: 'focus' | 'pull' = 'focus') => {
         if (mode === 'focus') {
@@ -128,66 +129,43 @@ export default function FileList() {
 
     return (
         <View className="flex-1">
-            <PullToRefreshScrollView
-                onRefresh={onPullRefresh}
-                maxPullHeight={100}
-                refreshBackgroundColor={refreshBackgroundColor}
-                containerBackgroundColor="transparent"
-                contentContainerStyle={{ paddingBottom: 16 }}
-                style={{ flex: 1 }}
-                className="px-5">
-                <View className="mb-4 mt-2 flex-row items-center justify-between">
-                    <View className="w-[56%]">
-                        <Picker
-                            // options={folderOptions}
-                            sections={[
-                                {
-                                    title: 'Fruits',
-                                    options: [
-                                        { label: 'Apple', value: 'apple' },
-                                        { label: 'Banana', value: 'banana' },
-                                        { label: 'Orange', value: 'orange' },
-                                    ],
-                                },
-                                {
-                                    title: 'Vegetables',
-                                    options: [
-                                        { label: 'Carrot', value: 'carrot' },
-                                        { label: 'Broccoli', value: 'broccoli' },
-                                        { label: 'Spinach', value: 'spinach' },
-                                    ],
-                                },
-                            ]}
-                            value={selectedFolder}
-                            onValueChange={value => {
-                                setSelectedFolder(value);
-                            }}
-                            variant="outline"
-                            modalTitle="选择文件夹"
-                            placeholder="全部文件夹"
-                        />
-                    </View>
-                    <View className="flex-row items-center gap-x-2">
-                        <Pressable
-                            className="h-9 w-9 items-center justify-center rounded-xl"
-                            style={{ backgroundColor: secondaryColor }}
-                            onPress={() => {}}>
-                            <Filter size={16} color={textColor} />
-                        </Pressable>
-                        <Pressable
-                            className="h-9 w-9 items-center justify-center rounded-xl"
-                            style={{ backgroundColor: secondaryColor }}
-                            onPress={() => {}}>
-                            <Search size={16} color={textColor} />
-                        </Pressable>
-                        <Pressable
-                            className="h-9 w-9 items-center justify-center rounded-xl"
-                            style={{ backgroundColor: secondaryColor }}
-                            onPress={() => {}}>
-                            <SquareCheckBig size={16} color={textColor} />
-                        </Pressable>
-                    </View>
+            <View
+                className="flex-row items-center justify-between px-4 pb-1 pt-3"
+                style={{ backgroundColor: cardColor, borderTopStartRadius: BORDER_RADIUS, borderTopEndRadius: BORDER_RADIUS }}>
+                <View className="w-1/2">
+                    <Picker
+                        options={folderOptions}
+                        value={selectedFolder}
+                        onValueChange={value => {
+                            setSelectedFolder(value);
+                        }}
+                        variant="outline"
+                        modalTitle="选择文件夹"
+                        placeholder="全部文件夹"
+                    />
                 </View>
+                <View className="flex-row items-center gap-x-2">
+                    <Pressable
+                        className="h-9 w-9 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: secondaryColor }}
+                        onPress={() => {}}>
+                        <Filter size={16} color={textColor} />
+                    </Pressable>
+                    <Pressable
+                        className="h-9 w-9 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: secondaryColor }}
+                        onPress={() => {}}>
+                        <Search size={16} color={textColor} />
+                    </Pressable>
+                    <Pressable
+                        className="h-9 w-9 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: secondaryColor }}
+                        onPress={() => {}}>
+                        <SquareCheckBig size={16} color={textColor} />
+                    </Pressable>
+                </View>
+            </View>
+            <PullToRefreshScrollView onRefresh={onPullRefresh}>
                 {loading ? (
                     <View className="pt-2">
                         <TextX variant="description">加载中...</TextX>
