@@ -110,3 +110,39 @@ cd .agents/skills/gstack
 git pull
 ./setup --host codex
 ```
+
+## self-improving-for-codex（手动模式）
+
+本项目已集成 `self-improving-for-codex`，并使用**项目内 memory**：
+
+- `.codex/memories/PROFILE.md`
+- `.codex/memories/ACTIVE.md`
+- `.codex/memories/LEARNINGS.md`
+- `.codex/memories/ERRORS.md`
+- `.codex/memories/FEATURE_REQUESTS.md`
+
+### 使用方式
+
+1. 开始任务前，先查看 `PROFILE.md` 和 `ACTIVE.md`。
+2. 过程中把可复用信息写入：
+   - 学习/结论 -> `LEARNINGS.md`
+   - 报错与排查 -> `ERRORS.md`
+   - 缺失能力诉求 -> `FEATURE_REQUESTS.md`
+3. 需要候选提升到 `ACTIVE.md` 的条目，在 `LEARNINGS.md` 或 `ERRORS.md` 的 `## Entries` 区域行尾加 `#promote`。
+4. 手动执行整理：
+
+```bash
+npm run memory:review
+```
+
+或
+
+```bash
+node scripts/memory-review.mjs
+```
+
+### 约束
+
+- 默认使用中文记录 memory。
+- 当前是**手动触发**，不自动调度。
+- memory 整理允许更新 memory 文件，但不会自动修改 `AGENTS.md`。

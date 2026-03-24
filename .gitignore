@@ -34,3 +34,11 @@ expo-env.d.ts
 .claude/
 .kiro/
 skills-lock.json
+
+# Keep only project-level self-improving skill in VCS
+!.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/self-improving-for-codex/
+!.agents/skills/self-improving-for-codex/**

@@ -26,3 +26,51 @@ When an Expo skill matches the task, use it first:
 
 `gstack-*` skills remain available for review/planning/release flow, but Expo-specific implementation and testing should prioritize Expo skills + Expo docs above.
 
+## Additional Skills
+
+- `self-improving-for-codex`: Use when setting up or maintaining Codex memory loop (`PROFILE.md`, `ACTIVE.md`, `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`) or when wiring memory flow rules through `AGENTS.md`.
+
+## Self-Improvement (Project Local)
+
+Use project-local memory directory:
+
+- `/Users/studio/Documents/GitHub/voice2text/.codex/memories`
+
+Before starting any task:
+
+1. Read `/Users/studio/Documents/GitHub/voice2text/.codex/memories/PROFILE.md`
+2. Read `/Users/studio/Documents/GitHub/voice2text/.codex/memories/ACTIVE.md`
+3. Apply them as persistent project memory before analyzing user request
+
+Log only when the result is reusable, non-obvious, or likely to recur.
+
+Evaluate whether to log memory when any of these happen:
+
+1. A command/tool call fails unexpectedly
+2. User corrects assumptions, behavior, or terminology
+3. Missing capability is requested repeatedly
+4. External dependency or runtime behavior differs from expectation
+5. A reusable workaround or debugging pattern is found
+
+Write entries by category:
+
+- `/Users/studio/Documents/GitHub/voice2text/.codex/memories/LEARNINGS.md`: reusable learnings and corrections
+- `/Users/studio/Documents/GitHub/voice2text/.codex/memories/ERRORS.md`: debugging notes and error patterns
+- `/Users/studio/Documents/GitHub/voice2text/.codex/memories/FEATURE_REQUESTS.md`: recurring missing capabilities
+
+Promotion rules:
+
+1. Promote to `/Users/studio/Documents/GitHub/voice2text/.codex/memories/ACTIVE.md` only if stable and useful across tasks
+2. Keep `ACTIVE.md` concise; remove stale rules during review
+3. Promote to this `AGENTS.md` only when a rule is stable at project policy level or user explicitly asks
+
+Behavior expectations:
+
+- Default to Chinese for memory entries unless user asks otherwise
+- Do not log trivial typos or one-off noise
+- Prefer concise, action-oriented entries
+
+Automation:
+
+- Run memory maintenance manually with `node scripts/memory-review.mjs`
+- Manual maintenance can update memory files, but must never edit `AGENTS.md` automatically
