@@ -1,18 +1,15 @@
+import { CheckCircle, Refresh } from 'iconoir-react-native';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { PanResponder, ScrollView, ScrollViewProps, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { CheckCircle, Refresh } from 'iconoir-react-native';
 import { useOverlayInteractionLocked } from '~/hooks/use-overlay-interaction-lock';
+import { useColor } from '~/hooks/useColor';
 
 type PullToRefreshScrollViewProps = ScrollViewProps & {
     // Backward compatibility: no longer required/used after internalized refresh state.
     refreshing?: boolean;
     onRefresh: () => Promise<void> | void;
-    maxPullHeight?: number;
-    // Larger means easier to pull further; smaller means stronger resistance.
-    pullResistance?: number;
     pullEnabled?: boolean;
-    refreshBackgroundColor?: string;
     containerBackgroundColor?: string;
     containerStyle?: StyleProp<ViewStyle>;
     minRefreshDurationMs?: number;
@@ -24,22 +21,21 @@ type PullToRefreshScrollViewProps = ScrollViewProps & {
 
 const RESTING_RATIO = 0.85;
 const REST_DURATION_MS = 180;
+const MAX_PULL_HEIGHT = 120;
+const PULL_RESISTANCE = 2.5; // Larger means easier to pull further; smaller means stronger resistance.
 
-function applyPullResistance(distance: number, maxPullHeight: number, pullResistance: number): number {
+function applyPullResistance(distance: number): number {
     if (distance <= 0) {
         return 0;
     }
-    const resistanceBase = Math.max(1, maxPullHeight * pullResistance);
+    const resistanceBase = Math.max(1, MAX_PULL_HEIGHT * PULL_RESISTANCE);
     const resistedDistance = distance / (1 + distance / resistanceBase);
-    return Math.min(maxPullHeight, resistedDistance);
+    return Math.min(MAX_PULL_HEIGHT, resistedDistance);
 }
 
 export function PullToRefreshScrollView({
     onRefresh,
-    maxPullHeight = 120,
-    pullResistance = 2.5,
     pullEnabled = true,
-    refreshBackgroundColor = '#e6f4ff',
     containerBackgroundColor = 'transparent',
     containerStyle,
     minRefreshDurationMs = 1500,
@@ -61,7 +57,9 @@ export function PullToRefreshScrollView({
     const pullDownPosition = useSharedValue(0);
     const pullProgress = useSharedValue(0);
     const refreshIconRotation = useSharedValue(0);
-    const restingPosition = maxPullHeight * RESTING_RATIO;
+    const restingPosition = MAX_PULL_HEIGHT * RESTING_RATIO;
+    const iconColor = useColor('text');
+    const refreshBackgroundColor = useColor('card');
 
     useEffect(() => {
         refreshingRef.current = refreshing;
@@ -93,17 +91,10 @@ export function PullToRefreshScrollView({
 
     const indicatorStyle = useAnimatedStyle(
         () => ({
-            opacity:
-                refreshing || showRefreshSuccess
-                    ? 1
-                    : idleIconOpacity + pullProgress.value * (1 - idleIconOpacity),
+            opacity: refreshing || showRefreshSuccess ? 1 : idleIconOpacity + pullProgress.value * (1 - idleIconOpacity),
             transform: [
                 {
-                    rotate: `${
-                        refreshing && !showRefreshSuccess
-                            ? refreshIconRotation.value
-                            : pullProgress.value * 360
-                    }deg`,
+                    rotate: `${refreshing && !showRefreshSuccess ? refreshIconRotation.value : pullProgress.value * 360}deg`,
                 },
             ],
         }),
@@ -136,15 +127,7 @@ export function PullToRefreshScrollView({
         } catch {
             // Keep refreshing state and pull position when refresh fails.
         }
-    }, [
-        minRefreshDurationMs,
-        onRefresh,
-        pullDownPosition,
-        pullProgress,
-        reboundDurationMs,
-        restingPosition,
-        successIconDurationMs,
-    ]);
+    }, [minRefreshDurationMs, onRefresh, pullDownPosition, pullProgress, reboundDurationMs, restingPosition, successIconDurationMs]);
 
     const releasePull = useCallback(() => {
         const shouldRefresh = pullDownPosition.value >= restingPosition;
@@ -168,14 +151,14 @@ export function PullToRefreshScrollView({
                     if (!effectivePullEnabled) {
                         return;
                     }
-                    const nextPosition = applyPullResistance(gestureState.dy, maxPullHeight, pullResistance);
+                    const nextPosition = applyPullResistance(gestureState.dy);
                     pullDownPosition.value = nextPosition;
                     pullProgress.value = Math.max(0, Math.min(1, nextPosition / restingPosition));
                 },
                 onPanResponderRelease: releasePull,
                 onPanResponderTerminate: releasePull,
             }),
-        [effectivePullEnabled, maxPullHeight, pullDownPosition, pullProgress, pullResistance, releasePull, restingPosition],
+        [effectivePullEnabled, pullDownPosition, pullProgress, releasePull, restingPosition],
     );
 
     const handleScroll: ScrollViewProps['onScroll'] = event => {
@@ -188,9 +171,9 @@ export function PullToRefreshScrollView({
             <Animated.View style={[styles.pullContainer, pullContainerStyle]}>
                 <Animated.View style={indicatorStyle}>
                     {showRefreshSuccess ? (
-                        <CheckCircle width={indicatorSize} height={indicatorSize} />
+                        <CheckCircle width={indicatorSize} height={indicatorSize} color={iconColor} />
                     ) : (
-                        <Refresh width={indicatorSize} height={indicatorSize} />
+                        <Refresh width={indicatorSize} height={indicatorSize} color={iconColor} />
                     )}
                 </Animated.View>
             </Animated.View>
