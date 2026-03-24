@@ -34,29 +34,38 @@ export const DefaultLayout = (props: IDefaultLayoutProps) => {
     );
 
     return (
-        <SafeAreaView style={styles.safeAreaView} {...safeAreaViewConfig}>
+        <SafeAreaView className="flex-1" style={styles.safeAreaView} {...safeAreaViewConfig}>
             {/*顶部安全区域*/}
             <View className="absolute left-0 top-0 w-full" style={[{ height: insets.top }, styles.safeTop]} />
 
-            <View className="flex flex-row justify-between px-4 py-2">
-                {isString(headTitle) ? (
-                    <ButtonX className="flex-shrink-0" onPress={handleGoBack} icon={ArrowLeft} iconProps={{ style: { marginLeft: -4 } }}>
-                        <TextX>{headTitle}</TextX>
-                    </ButtonX>
-                ) : (
-                    headTitle
-                )}
-                {headExtra}
-            </View>
+            {headTitle || headExtra ? (
+                <View className="flex flex-row justify-between px-4 py-2">
+                    {isString(headTitle) ? (
+                        <ButtonX
+                            className="flex-shrink-0"
+                            onPress={handleGoBack}
+                            icon={ArrowLeft}
+                            iconProps={{ style: { marginLeft: -4 } }}>
+                            <TextX>{headTitle}</TextX>
+                        </ButtonX>
+                    ) : (
+                        headTitle
+                    )}
+                    {headExtra}
+                </View>
+            ) : null}
 
             {/*主体内容*/}
-            <View className="h-full" style={styles.mainContent}>
+            <View className="flex-1" style={styles.mainContent}>
                 {scrollable ? (
-                    <ScrollView overScrollMode="never">{props.children}</ScrollView>
+                    <ScrollView overScrollMode="never" contentContainerStyle={{ flexGrow: 1 }}>
+                        {props.children}
+                    </ScrollView>
                 ) : (
                     <View className="flex-1">{props.children}</View>
                 )}
             </View>
+
             {/*底部安全区域*/}
             <View className="absolute bottom-0 left-0 w-full" style={[{ height: insets.bottom }, styles.safeBottom]} />
         </SafeAreaView>

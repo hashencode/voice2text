@@ -1,14 +1,15 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Stack } from 'expo-router';
-import React, { useState } from 'react';
+import { Mic, Pause, Play, Square } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';
-import { ButtonX } from '~/components/ui/buttonx';
+import { AudioWaveform } from '~/components/ui/audio-waveform';
 import { TextX } from '~/components/ui/textx';
 import { upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 import { useWavRecording } from '~/hooks/useWavRecording';
-import { Mic, Pause, Play, Square } from 'lucide-react-native';
 
 function getRecordingsDir(): string {
     if (!FileSystem.documentDirectory) {
@@ -23,11 +24,14 @@ function createRecordingPath(): string {
 }
 
 export default function RecordPage() {
-    const [recordingStatusText, setRecordingStatusText] = useState('未开始录音');
-    const [latestPath, setLatestPath] = useState<string | null>(null);
+    const [waveformData, setWaveformData] = useState<number[]>(() => Array.from({ length: 34 }, () => 0.15));
     const iconColor = useColor('card');
     const primaryColor = useColor('primary');
+    const textColor = useColor('text');
     const mutedTextColor = useColor('textMuted');
+    const destructiveColor = useColor('destructive');
+    const cardColor = useColor('card');
+    const bgColor = useColor('background');
 
     const { phase, isPaused, actionLoading, elapsedText, startRecord, pauseRecord, resumeRecord, stopRecord } = useWavRecording({
         sampleRate: 16000,
@@ -37,11 +41,10 @@ export default function RecordPage() {
             return createRecordingPath();
         },
         onStart: () => {
-            setRecordingStatusText('录音中，再次点击停止并保存');
+
         },
         onStop: async wavResult => {
             if (!wavResult.path) {
-                setRecordingStatusText('停止录音失败，未拿到音频文件');
                 return;
             }
 
@@ -57,65 +60,98 @@ export default function RecordPage() {
                     recordedAtMs: Date.now(),
                     sessionId,
                 });
-                setLatestPath(wavResult.path);
-                setRecordingStatusText('录音完成，音频已保存并入库');
             } catch (error) {
                 console.error('[record] upsertRecordingMeta failed', error);
-                setRecordingStatusText('录音已保存，但入库失败');
             }
         },
         onPermissionDenied: () => {
-            setRecordingStatusText('未获得麦克风权限');
+
         },
         onError: error => {
-            setRecordingStatusText(`录音/保存失败: ${error.message}`);
+
         },
     });
 
     const isRecordingOrPaused = phase === 'recording' || phase === 'paused' || phase === 'stopping';
+    const isStopping = phase === 'stopping';
+
+    useEffect(() => {
+        if (phase !== 'recording') {
+            setWaveformData(Array.from({ length: 34 }, () => 0.15));
+            return;
+        }
+
+        const timer = setInterval(() => {
+            setWaveformData(prev => {
+                const t = Date.now() / 250;
+                const base = 0.38 + Math.sin(t) * 0.15;
+                const noise = (Math.random() - 0.5) * 0.3;
+                const peak = Math.random() < 0.12 ? Math.random() * 0.35 : 0;
+                const nextLevel = Math.max(0.1, Math.min(0.95, base + noise + peak));
+                return [...prev.slice(1), nextLevel];
+            });
+        }, 90);
+
+        return () => {
+            clearInterval(timer);
+        };
+    }, [phase]);
 
     return (
-        <DefaultLayout headTitle="录音" safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
+        <DefaultLayout headTitle="录音" safeAreaViewConfig={{ edges: ['top', 'left', 'right', 'bottom'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View className="flex-1 items-center justify-center gap-6 px-6">
-                {!isRecordingOrPaused ? (
-                    <Pressable
-                        className="items-center justify-center rounded-full"
-                        style={{ width: 148, height: 148, backgroundColor: primaryColor }}
-                        onPress={startRecord}
-                        disabled={actionLoading}>
-                        <Mic size={56} color={iconColor} />
-                    </Pressable>
-                ) : (
-                    <View className="items-center gap-8">
-                        <TextX style={{ fontSize: 64, lineHeight: 72, fontVariant: ['tabular-nums'] }}>{elapsedText}</TextX>
-                        <View className="flex-row items-center gap-4">
-                            <ButtonX
-                                variant="secondary"
-                                style={{ minWidth: 112 }}
-                                icon={isPaused ? Play : Pause}
-                                disabled={actionLoading || phase === 'stopping'}
-                                onPress={isPaused ? resumeRecord : pauseRecord}>
-                                {isPaused ? '继续' : '暂停'}
-                            </ButtonX>
-                            <ButtonX
-                                variant="destructive"
-                                style={{ minWidth: 112 }}
-                                icon={Square}
-                                loading={phase === 'stopping'}
-                                disabled={phase === 'stopping'}
-                                onPress={stopRecord}>
-                                停止
-                            </ButtonX>
+            <View className="flex flex-1">
+                <View className="flex-grow items-center justify-center">
+                    <TextX style={{ fontSize: 64, lineHeight: 72, fontVariant: ['tabular-nums'] }}>{elapsedText}</TextX>
+                </View>
+
+                <View className="flex-shrink-0 px-6 py-3">
+                    {isRecordingOrPaused ? (
+                        <View className="flex-row items-center gap-3 rounded-full p-2 shadow" style={{ backgroundColor: cardColor }}>
+                            <Pressable onPress={isPaused ? resumeRecord : pauseRecord} disabled={actionLoading || isStopping}>
+                                <View
+                                    className="items-center justify-center rounded-full"
+                                    style={{ width: 48, height: 48, backgroundColor: bgColor, opacity: isStopping ? 0.5 : 1 }}>
+                                    {isPaused ? <Play size={22} color={textColor} /> : <Pause size={22} color={textColor} />}
+                                </View>
+                            </Pressable>
+
+                            <View className="flex-1 items-center justify-center">
+                                <AudioWaveform
+                                    data={waveformData}
+                                    isPlaying={phase === 'recording' && !isPaused}
+                                    animated
+                                    interactive={false}
+                                    showProgress={false}
+                                    barCount={34}
+                                    barWidth={3}
+                                    barGap={2}
+                                    height={38}
+                                    activeColor={destructiveColor}
+                                    inactiveColor={mutedTextColor}
+                                />
+                            </View>
+
+                            <Pressable onPress={stopRecord} disabled={isStopping}>
+                                <View
+                                    className="items-center justify-center rounded-full"
+                                    style={{ width: 48, height: 48, backgroundColor: destructiveColor, opacity: isStopping ? 0.5 : 1 }}>
+                                    <Square size={20} color={cardColor} />
+                                </View>
+                            </Pressable>
                         </View>
-                    </View>
-                )}
-                <TextX>录音状态：{recordingStatusText}</TextX>
-                {latestPath ? (
-                    <TextX variant="description" style={{ color: mutedTextColor }} numberOfLines={2}>
-                        最近保存：{latestPath}
-                    </TextX>
-                ) : null}
+                    ) : (
+                        <View className="flex flex-row justify-center">
+                            <Pressable
+                                className="flex items-center justify-center rounded-full"
+                                style={{ width: 80, height: 80, backgroundColor: primaryColor }}
+                                onPress={startRecord}
+                                disabled={actionLoading}>
+                                <Mic size={50} color={iconColor} />
+                            </Pressable>
+                        </View>
+                    )}
+                </View>
             </View>
         </DefaultLayout>
     );
