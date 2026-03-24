@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Appearance, ColorSchemeName } from 'react-native';
 import { useColorScheme } from '~/hooks/useColorScheme';
 
@@ -13,26 +12,15 @@ interface UseModeToggleReturn {
 }
 
 export function useModeToggle(): UseModeToggleReturn {
-    const [mode, setModeState] = useState<Mode>('system');
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
+    const mode: Mode = colorScheme === 'dark' ? 'dark' : colorScheme === 'light' ? 'light' : 'system';
 
     const toggleMode = () => {
-        switch (mode) {
-            case 'light':
-                setMode('dark');
-                break;
-            case 'dark':
-                setMode('system');
-                break;
-            case 'system':
-                setMode('light');
-                break;
-        }
+        Appearance.setColorScheme(isDark ? 'light' : 'dark');
     };
 
     const setMode = (newMode: Mode) => {
-        setModeState(newMode);
         if (newMode === 'system') {
             Appearance.setColorScheme('unspecified'); // Reset to system default
         } else {

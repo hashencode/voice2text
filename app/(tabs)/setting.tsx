@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Appearance, RefreshControl, ScrollView } from 'react-native';
+import { RefreshControl, ScrollView } from 'react-native';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';
 import { ButtonX } from '~/components/ui/buttonx';
 import { SwitchX } from '~/components/ui/switch';
@@ -8,18 +8,15 @@ import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
 import { View } from '~/components/ui/view';
 import {
-    getDarkModeEnabled,
     getDenoiseEnabled,
     getRecognitionProfile,
     getSpeakerDiarizationEnabled,
-    setDarkModeEnabled,
     setDenoiseEnabled,
     setRecognitionProfile,
     setSpeakerDiarizationEnabled,
     type RecognitionProfileId,
 } from '~/db/mmkv/app-config';
 import { getCurrentModel, setCurrentModel } from '~/db/mmkv/model-selection';
-import { useColorScheme } from '~/hooks/useColorScheme';
 import {
     ensureModelReady,
     getInstalledModelVersion,
@@ -75,8 +72,6 @@ function phaseToText(progress: DownloadModelProgress): string {
 }
 
 export default function Setting() {
-    const colorScheme = useColorScheme();
-    const isDarkMode = colorScheme === 'dark';
     const modelIds = useMemo(() => Object.keys(SHERPA_MODEL_PRESETS) as SherpaModelId[], []);
     const [items, setItems] = useState<Record<string, ModelItemState>>({});
     const [refreshing, setRefreshing] = useState(false);
@@ -84,7 +79,6 @@ export default function Setting() {
     const [selectingModelId, setSelectingModelId] = useState<SherpaModelId | null>(null);
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabledState] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabledState] = useState(getDenoiseEnabled());
-    const [darkModeEnabled, setDarkModeEnabledState] = useState(getDarkModeEnabled());
     const [recognitionProfile, setRecognitionProfileState] = useState<RecognitionProfileId>(getRecognitionProfile());
 
     const setItem = useCallback((modelId: SherpaModelId, patch: Partial<ModelItemState>) => {
@@ -135,16 +129,6 @@ export default function Setting() {
             console.error('[setting] refresh models failed', error);
         });
     }, [refreshAll]);
-
-    useEffect(() => {
-        setDarkModeEnabledState(isDarkMode);
-    }, [isDarkMode]);
-
-    const handleToggleDarkMode = useCallback((value: boolean) => {
-        setDarkModeEnabled(value);
-        setDarkModeEnabledState(value);
-        Appearance.setColorScheme(value ? 'dark' : 'light');
-    }, []);
 
     const handleToggleSpeakerDiarization = useCallback((value: boolean) => {
         setSpeakerDiarizationEnabled(value);
@@ -272,10 +256,6 @@ export default function Setting() {
                         marginBottom: 12,
                     }}>
                     <TextX variant="subtitle">识别配置</TextX>
-                    <View className="flex flex-row items-center justify-between">
-                        <TextX>深色模式：{darkModeEnabled ? '开启' : '关闭'}</TextX>
-                        <SwitchX value={darkModeEnabled} onValueChange={handleToggleDarkMode} />
-                    </View>
                     <View className="flex flex-row items-center justify-between">
                         <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
                         <SwitchX value={speakerDiarizationEnabled} onValueChange={handleToggleSpeakerDiarization} />

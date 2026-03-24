@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { ReactNode } from 'react';
 import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import { TextX } from '~/components/ui/textx';
+import { useColor } from '~/hooks/useColor';
 
 export interface IHeadProps {
     backIcon?: ReactNode; // 返回按钮图标
@@ -28,6 +29,8 @@ export default function LayoutHead(props: IHeadProps) {
     const { backIcon, hideBack, title, subtitle, extra, styles, onBack } = props;
 
     const navigation = useNavigation();
+    const cardColor = useColor('card');
+    const iconColor = useColor('text');
 
     const { run: handleGoBack } = useThrottleFn(
         () => {
@@ -41,10 +44,10 @@ export default function LayoutHead(props: IHeadProps) {
     );
 
     return (
-        <View className={classNames('flex h-14 w-full flex-row items-center justify-between bg-white', styles?.root)}>
+        <View className={classNames('flex h-14 w-full flex-row items-center justify-between', styles?.root)} style={{ backgroundColor: cardColor }}>
             {!hideBack ? (
                 <Pressable className="absolute left-2 top-1/2 z-20 -translate-y-1/2" hitSlop={20} onPress={handleGoBack}>
-                    {backIcon || <ArrowLeft size={26} style={styles?.backIcon} />}
+                    {backIcon || <ArrowLeft size={26} color={iconColor} style={styles?.backIcon} />}
                 </Pressable>
             ) : null}
 
