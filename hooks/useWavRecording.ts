@@ -12,7 +12,7 @@ type UseWavRecordingOptions = {
     onError?: (error: Error) => void;
 };
 
-type RecordingPhase = 'idle' | 'starting' | 'recording' | 'stopping' | 'error';
+type RecordingPhase = 'idle' | 'starting' | 'recording' | 'paused' | 'stopping' | 'error';
 
 function formatRecordingElapsed(ms: number): string {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -36,15 +36,28 @@ export function useWavRecording({
     const [phase, setPhase] = useState<RecordingPhase>('idle');
     const [elapsedMs, setElapsedMs] = useState(0);
     const recordingStartAtRef = useRef<number | null>(null);
+    const elapsedBaseRef = useRef(0);
     const actionInFlightRef = useRef(false);
 
-    const startTimer = useCallback(() => {
+    const startTimer = useCallback((reset: boolean) => {
+        if (reset) {
+            elapsedBaseRef.current = 0;
+            setElapsedMs(0);
+        }
         recordingStartAtRef.current = Date.now();
-        setElapsedMs(0);
     }, []);
 
-    const stopTimer = useCallback(() => {
+    const pauseTimer = useCallback(() => {
+        if (recordingStartAtRef.current) {
+            elapsedBaseRef.current += Date.now() - recordingStartAtRef.current;
+        }
         recordingStartAtRef.current = null;
+        setElapsedMs(elapsedBaseRef.current);
+    }, []);
+
+    const resetTimer = useCallback(() => {
+        recordingStartAtRef.current = null;
+        elapsedBaseRef.current = 0;
         setElapsedMs(0);
     }, []);
 
@@ -57,81 +70,151 @@ export function useWavRecording({
             if (!startAt) {
                 return;
             }
-            setElapsedMs(Date.now() - startAt);
+            setElapsedMs(elapsedBaseRef.current + (Date.now() - startAt));
         }, 200);
         return () => clearInterval(timer);
     }, [phase]);
 
-    const toggleRecord = useCallback(async () => {
+    const startRecord = useCallback(async () => {
         if (actionInFlightRef.current) {
             return;
         }
 
         actionInFlightRef.current = true;
         try {
-            if (phase === 'idle' || phase === 'error') {
-                setPhase('starting');
-                const permission = await AudioModule.requestRecordingPermissionsAsync();
-                if (!permission.granted) {
-                    setPhase('idle');
-                    onPermissionDenied?.();
-                    return;
-                }
-
-                const targetPath = await createTargetPath();
-                await SherpaOnnx.startWavRecording({ sampleRate, path: targetPath });
-                startTimer();
-                setPhase('recording');
-                onStart?.();
+            if (phase !== 'idle' && phase !== 'error') {
                 return;
             }
 
-            if (phase !== 'recording') {
+            setPhase('starting');
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
+            if (!permission.granted) {
+                setPhase('idle');
+                onPermissionDenied?.();
                 return;
             }
 
-            setPhase('stopping');
-            const result = await SherpaOnnx.stopWavRecording();
-            stopTimer();
-            setPhase('idle');
-            await onStop?.(result);
+            const targetPath = await createTargetPath();
+            await SherpaOnnx.startWavRecording({ sampleRate, path: targetPath });
+            startTimer(true);
+            setPhase('recording');
+            onStart?.();
         } catch (error) {
-            stopTimer();
+            resetTimer();
             setPhase('error');
             onError?.(error as Error);
         } finally {
             actionInFlightRef.current = false;
         }
-    }, [createTargetPath, onError, onPermissionDenied, onStart, onStop, phase, sampleRate, startTimer, stopTimer]);
+    }, [createTargetPath, onError, onPermissionDenied, onStart, phase, sampleRate, startTimer, resetTimer]);
+
+    const pauseRecord = useCallback(async () => {
+        if (actionInFlightRef.current || phase !== 'recording') {
+            return;
+        }
+        actionInFlightRef.current = true;
+        try {
+            await SherpaOnnx.pauseWavRecording();
+            pauseTimer();
+            setPhase('paused');
+        } catch (error) {
+            setPhase('error');
+            onError?.(error as Error);
+        } finally {
+            actionInFlightRef.current = false;
+        }
+    }, [onError, phase, pauseTimer]);
+
+    const resumeRecord = useCallback(async () => {
+        if (actionInFlightRef.current || phase !== 'paused') {
+            return;
+        }
+        actionInFlightRef.current = true;
+        try {
+            await SherpaOnnx.resumeWavRecording();
+            startTimer(false);
+            setPhase('recording');
+        } catch (error) {
+            setPhase('error');
+            onError?.(error as Error);
+        } finally {
+            actionInFlightRef.current = false;
+        }
+    }, [onError, phase, startTimer]);
+
+    const stopRecord = useCallback(async () => {
+        if (actionInFlightRef.current) {
+            return;
+        }
+        if (phase !== 'recording' && phase !== 'paused') {
+            return;
+        }
+
+        actionInFlightRef.current = true;
+        try {
+            if (phase === 'recording') {
+                pauseTimer();
+            }
+            setPhase('stopping');
+            const result = await SherpaOnnx.stopWavRecording();
+            resetTimer();
+            setPhase('idle');
+            await onStop?.(result);
+        } catch (error) {
+            resetTimer();
+            setPhase('error');
+            onError?.(error as Error);
+        } finally {
+            actionInFlightRef.current = false;
+        }
+    }, [onError, onStop, phase, pauseTimer, resetTimer]);
+
+    const toggleRecord = useCallback(async () => {
+        if (phase === 'idle' || phase === 'error') {
+            await startRecord();
+            return;
+        }
+        if (phase === 'recording' || phase === 'paused') {
+            await stopRecord();
+        }
+    }, [phase, startRecord, stopRecord]);
 
     useEffect(() => {
         return () => {
-            stopTimer();
+            resetTimer();
             if (!SherpaOnnx.isWavRecording()) {
                 return;
             }
             SherpaOnnx.stopWavRecording().catch(() => {});
         };
-    }, [stopTimer]);
+    }, [resetTimer]);
 
     const isRecording = phase === 'recording' || phase === 'stopping';
+    const isPaused = phase === 'paused';
     const actionLoading = phase === 'starting' || phase === 'stopping';
     const buttonText =
         phase === 'starting'
             ? '正在启动录音...'
             : phase === 'stopping'
               ? '正在停止录音并保存...'
-              : phase === 'recording'
+              : phase === 'paused'
+                ? '继续录音'
+                : phase === 'recording'
                 ? '停止录音并保存'
                 : '开始录音';
 
     return {
         phase,
         isRecording,
+        isPaused,
         actionLoading,
         elapsedMs,
         elapsedText: formatRecordingElapsed(elapsedMs),
         buttonText,
+        startRecord,
+        pauseRecord,
+        resumeRecord,
+        stopRecord,
         toggleRecord,
     };
 }

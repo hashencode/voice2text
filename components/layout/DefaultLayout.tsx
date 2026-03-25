@@ -1,10 +1,9 @@
 import { useNavigation } from '@react-navigation/native';
 import { useThrottleFn } from 'ahooks';
-import classNames from 'classnames';
 import { isString } from 'lodash';
 import { ArrowLeft } from 'lucide-react-native';
 import { PropsWithChildren, ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, StyleProp, View, ViewStyle } from 'react-native';
 import { SafeAreaView, SafeAreaViewProps, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
@@ -15,10 +14,10 @@ interface IDefaultLayoutProps extends PropsWithChildren {
     headTitle?: ReactNode;
     headExtra?: ReactNode;
     styles?: {
-        safeAreaView?: string;
-        safeTop?: string;
-        safeBottom?: string;
-        mainContent?: string;
+        safeAreaView?: StyleProp<ViewStyle>;
+        safeTop?: StyleProp<ViewStyle>;
+        safeBottom?: StyleProp<ViewStyle>;
+        mainContent?: StyleProp<ViewStyle>;
     };
 }
 
@@ -35,31 +34,40 @@ export const DefaultLayout = (props: IDefaultLayoutProps) => {
     );
 
     return (
-        <SafeAreaView className={styles.safeAreaView} {...safeAreaViewConfig}>
+        <SafeAreaView className="flex-1" style={styles.safeAreaView} {...safeAreaViewConfig}>
             {/*顶部安全区域*/}
-            <View className={classNames('absolute left-0 top-0 w-full', styles.safeTop)} style={{ height: insets.top }} />
+            <View className="absolute left-0 top-0 w-full" style={[{ height: insets.top }, styles.safeTop]} />
 
-            <View className="flex flex-row justify-between px-4 py-2">
-                {isString(headTitle) ? (
-                    <ButtonX className="flex-shrink-0" onPress={handleGoBack} icon={ArrowLeft} iconProps={{ style: { marginLeft: -4 } }}>
-                        <TextX>{headTitle}</TextX>
-                    </ButtonX>
-                ) : (
-                    headTitle
-                )}
-                {headExtra}
-            </View>
+            {headTitle || headExtra ? (
+                <View className="flex flex-row justify-between px-4 py-2">
+                    {isString(headTitle) ? (
+                        <ButtonX
+                            className="flex-shrink-0"
+                            onPress={handleGoBack}
+                            icon={ArrowLeft}
+                            iconProps={{ style: { marginLeft: -4 } }}>
+                            <TextX>{headTitle}</TextX>
+                        </ButtonX>
+                    ) : (
+                        headTitle
+                    )}
+                    {headExtra}
+                </View>
+            ) : null}
 
             {/*主体内容*/}
-            <View className={classNames('h-full', styles.mainContent)}>
+            <View className="flex-1" style={styles.mainContent}>
                 {scrollable ? (
-                    <ScrollView overScrollMode="never">{props.children}</ScrollView>
+                    <ScrollView overScrollMode="never" contentContainerStyle={{ flexGrow: 1 }}>
+                        {props.children}
+                    </ScrollView>
                 ) : (
                     <View className="flex-1">{props.children}</View>
                 )}
             </View>
+
             {/*底部安全区域*/}
-            <View className={classNames('absolute bottom-0 left-0 w-full', styles.safeBottom)} style={{ height: insets.bottom }} />
+            <View className="absolute bottom-0 left-0 w-full" style={[{ height: insets.bottom }, styles.safeBottom]} />
         </SafeAreaView>
     );
 };

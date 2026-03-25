@@ -120,8 +120,11 @@ export type WavFileInfo = {
 type SherpaOnnxNative = {
     hello(): string;
     isWavRecording(): boolean;
+    isWavRecordingPaused(): boolean;
     startWavRecording(options?: WavRecordingStartOptions): Promise<WavRecordingStartResult>;
     stopWavRecording(): Promise<WavRecordingStopResult>;
+    pauseWavRecording(): Promise<{ ok: boolean; paused: boolean }>;
+    resumeWavRecording(): Promise<{ ok: boolean; paused: boolean }>;
     recoverWavRecordings(): Promise<RecoveredWavRecording[]>;
     listRecoverableWavRecordings(): Promise<RecoverableWavRecording[]>;
     recoverWavRecordingSession(sessionId: string): Promise<RecoveredWavRecording | null>;
@@ -889,8 +892,11 @@ const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
 const SherpaOnnx = {
     hello: NativeSherpaOnnx.hello,
     isWavRecording: NativeSherpaOnnx.isWavRecording,
+    isWavRecordingPaused: NativeSherpaOnnx.isWavRecordingPaused,
     startWavRecording: NativeSherpaOnnx.startWavRecording,
     stopWavRecording: NativeSherpaOnnx.stopWavRecording,
+    pauseWavRecording: NativeSherpaOnnx.pauseWavRecording,
+    resumeWavRecording: NativeSherpaOnnx.resumeWavRecording,
     recoverWavRecordings: NativeSherpaOnnx.recoverWavRecordings,
     listRecoverableWavRecordings: NativeSherpaOnnx.listRecoverableWavRecordings,
     recoverWavRecordingSession: NativeSherpaOnnx.recoverWavRecordingSession,
