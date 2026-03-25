@@ -3,11 +3,11 @@ import { Stack } from 'expo-router';
 import { Mic, Pause, Play, Square } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
-import Animated from 'react-native-reanimated';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';
-import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { AudioWaveform } from '~/components/ui/audio-waveform';
+import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { TextX } from '~/components/ui/textx';
+import { useToast } from '~/components/ui/toast';
 import { upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 import { useWavRecording } from '~/hooks/useWavRecording';
@@ -27,17 +27,20 @@ function createRecordingPath(): string {
 
 export default function RecordPage() {
     const [waveformData, setWaveformData] = useState<number[]>(() => Array.from({ length: 34 }, () => 0.15));
-    const iconColor = useColor('card');
+    const { toast } = useToast();
     const primaryColor = useColor('primary');
-    const textColor = useColor('text');
     const mutedTextColor = useColor('textMuted');
     const destructiveColor = useColor('destructive');
     const cardColor = useColor('card');
-    const bgColor = useColor('background');
-    const pausePlayBgColor = useColor('background', { light: bgColor, dark: Colors.light.background });
-    const micIconColor = useColor('primaryForeground', { light: iconColor, dark: Colors.dark.text });
-    const playPauseIconColor = useColor('text', { light: textColor, dark: Colors.light.text });
-    const stopIconColor = useColor('destructiveForeground', { light: cardColor, dark: Colors.dark.text });
+
+    const showRecordError = (description: string) => {
+        toast({
+            title: '录音失败',
+            description,
+            variant: 'error',
+            duration: 8000,
+        });
+    };
 
     const { phase, isPaused, actionLoading, elapsedText, startRecord, pauseRecord, resumeRecord, stopRecord } = useWavRecording({
         sampleRate: 16000,
@@ -46,11 +49,10 @@ export default function RecordPage() {
             await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
             return createRecordingPath();
         },
-        onStart: () => {
-
-        },
+        onStart: () => {},
         onStop: async wavResult => {
             if (!wavResult.path) {
+                showRecordError('未能获取录音文件，请重试');
                 return;
             }
 
@@ -66,15 +68,23 @@ export default function RecordPage() {
                     recordedAtMs: Date.now(),
                     sessionId,
                 });
+
+                toast({
+                    title: '录音已保存',
+                    variant: 'success',
+                    duration: 3000,
+                });
             } catch (error) {
                 console.error('[record] upsertRecordingMeta failed', error);
+                showRecordError('录音已生成，但保存元数据失败');
             }
         },
         onPermissionDenied: () => {
-
+            showRecordError('麦克风权限被拒绝');
         },
         onError: error => {
-
+            console.error('[record] recording error', error);
+            showRecordError(error.message || '录音过程中发生错误');
         },
     });
 
@@ -116,7 +126,6 @@ export default function RecordPage() {
     };
 
     const LeftIcon = isMicVisualState ? Mic : isPaused ? Play : Pause;
-    const leftIconColor = isMicVisualState ? micIconColor : playPauseIconColor;
 
     useEffect(() => {
         if (phase !== 'recording') {
@@ -148,14 +157,19 @@ export default function RecordPage() {
                     <TextX style={{ fontSize: 64, lineHeight: 72, fontVariant: ['tabular-nums'] }}>{elapsedText}</TextX>
                 </View>
 
-                <View className="flex-shrink-0 px-6 py-3">
+                <View className="flex-shrink-0 p-4">
                     <View className="flex-row items-center gap-3 rounded-full p-2 shadow" style={{ backgroundColor: cardColor }}>
                         <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
-                            <Animated.View
+                            <View
                                 className="items-center justify-center rounded-full"
-                                style={{ width: 48, height: 48, backgroundColor: isMicVisualState ? primaryColor : pausePlayBgColor, opacity: isStopping ? 0.5 : 1 }}>
-                                <LeftIcon size={22} color={leftIconColor} />
-                            </Animated.View>
+                                style={{
+                                    width: 48,
+                                    height: 48,
+                                    backgroundColor: isMicVisualState ? primaryColor : Colors.light.background,
+                                    opacity: isStopping ? 0.5 : 1,
+                                }}>
+                                <LeftIcon size={22} color={isMicVisualState ? Colors.light.card : Colors.light.text} />
+                            </View>
                         </BouncyPressable>
 
                         <View className="flex-1 items-center justify-center">
@@ -174,9 +188,7 @@ export default function RecordPage() {
                                     inactiveColor={mutedTextColor}
                                 />
                             ) : (
-                                <TextX variant="description" style={{ color: mutedTextColor }}>
-                                    点击左侧开始录音
-                                </TextX>
+                                <TextX style={{ color: mutedTextColor }}>点击左侧开始录音</TextX>
                             )}
                         </View>
 
@@ -184,8 +196,8 @@ export default function RecordPage() {
                             <Pressable onPress={handleConfirmStop} disabled={isStopping}>
                                 <View
                                     className="items-center justify-center rounded-full"
-                                    style={{ width: 48, height: 48, backgroundColor: destructiveColor, opacity: isStopping ? 0.35 : 1 }}>
-                                    <Square size={20} color={stopIconColor} />
+                                    style={{ width: 48, height: 48, backgroundColor: destructiveColor, opacity: isStopping ? 0.5 : 1 }}>
+                                    <Square size={20} color={Colors.light.card} />
                                 </View>
                             </Pressable>
                         ) : (

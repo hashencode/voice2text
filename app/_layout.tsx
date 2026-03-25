@@ -14,7 +14,7 @@ export default function RootLayout() {
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
-            <ToastProvider>
+            <ToastProvider maxToasts={3}>
                 <ThemeProvider>
                     <Stack>
                         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
