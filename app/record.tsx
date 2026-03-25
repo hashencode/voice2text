@@ -26,7 +26,7 @@ function createRecordingPath(): string {
 }
 
 export default function RecordPage() {
-    const [waveformData, setWaveformData] = useState<number[]>(() => Array.from({ length: 34 }, () => 0.15));
+    const [waveformData, setWaveformData] = useState<number[]>(() => Array.from({ length: 52 }, () => 0.15));
     const { toast } = useToast();
     const primaryColor = useColor('primary');
     const mutedTextColor = useColor('textMuted');
@@ -129,7 +129,7 @@ export default function RecordPage() {
 
     useEffect(() => {
         if (phase !== 'recording') {
-            setWaveformData(Array.from({ length: 34 }, () => 0.15));
+            setWaveformData(Array.from({ length: 52 }, () => 0.15));
             return;
         }
 
@@ -154,7 +154,7 @@ export default function RecordPage() {
             <Stack.Screen options={{ headerShown: false }} />
             <View className="flex flex-1">
                 <View className="flex-grow items-center justify-center">
-                    <TextX style={{ fontSize: 64, lineHeight: 72, fontVariant: ['tabular-nums'] }}>{elapsedText}</TextX>
+                    <TextX style={{ fontSize: 56, lineHeight: 60, includeFontPadding: false, fontVariant: ['tabular-nums'] }}>{elapsedText}</TextX>
                 </View>
 
                 <View className="flex-shrink-0 p-4">
@@ -180,10 +180,7 @@ export default function RecordPage() {
                                     animated
                                     interactive={false}
                                     showProgress={false}
-                                    barCount={34}
-                                    barWidth={3}
-                                    barGap={2}
-                                    height={38}
+                                    height={34}
                                     activeColor={destructiveColor}
                                     inactiveColor={mutedTextColor}
                                 />

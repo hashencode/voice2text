@@ -30,6 +30,7 @@ export interface AudioWaveformProps {
   animated?: boolean;
   showProgress?: boolean;
   interactive?: boolean;
+  sensitivity?: number;
 }
 
 // FIX: The Bar component now manages its own animation state.
@@ -65,7 +66,7 @@ const Bar = React.memo(
         height: interpolate(
           animatedValue.value,
           [0, 1],
-          [4, height * 0.9],
+          [2, height * 0.96],
           'clamp'
         ),
       };
@@ -107,6 +108,7 @@ const Bar = React.memo(
           styles.bar,
           {
             width,
+            borderRadius: Math.max(1, width / 2),
             backgroundColor:
               isActive || !showProgress ? activeColor : inactiveColor,
             opacity,
@@ -127,14 +129,15 @@ export function AudioWaveform({
   onSeekEnd,
   style,
   height = 60,
-  barCount = 50,
-  barWidth = 3,
-  barGap = 2,
+  barCount = 52,
+  barWidth = 2,
+  barGap = 1.5,
   activeColor,
   inactiveColor,
   animated = true,
   showProgress = false,
   interactive = false,
+  sensitivity = 1.15,
 }: AudioWaveformProps) {
   const primaryColor = useColor('destructive');
   const mutedColor = useColor('textMuted');
@@ -188,6 +191,8 @@ export function AudioWaveform({
         <View style={[styles.waveform, { width: totalWidth }]}>
           {/* FIX: We now map over the data array and pass the value to each Bar */}
           {waveformData.map((value, index) => {
+            const clampedValue = Math.max(0, Math.min(1, value));
+            const responsiveValue = Math.min(1, Math.pow(clampedValue, 0.72) * sensitivity);
             const progressRatio = progress / 100;
             const barProgress = (index + 0.5) / barCount;
             const isActive = showProgress
@@ -212,7 +217,7 @@ export function AudioWaveform({
                 ]}
               >
                 <Bar
-                  value={value}
+                  value={responsiveValue}
                   height={height}
                   width={barWidth}
                   isActive={isActive}
@@ -273,13 +278,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   barContainer: {
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     height: '100%',
   },
   bar: {
-    borderRadius: 1.5,
-    minHeight: 4,
+    minHeight: 2,
   },
   progressLine: {
     position: 'absolute',

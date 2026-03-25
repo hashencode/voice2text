@@ -14,15 +14,23 @@ type UseWavRecordingOptions = {
 
 type RecordingPhase = 'idle' | 'starting' | 'recording' | 'paused' | 'stopping' | 'error';
 
-function formatRecordingElapsed(ms: number): string {
+function formatRecordingElapsed(ms: number, includeMilliseconds = false, fractionDigits = 3): string {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const milliseconds = Math.max(0, ms % 1000);
+    const safeFractionDigits = Math.max(1, Math.min(3, fractionDigits));
+    const fractionBase = 10 ** (3 - safeFractionDigits);
+    const fraction = Math.floor(milliseconds / fractionBase)
+        .toString()
+        .padStart(safeFractionDigits, '0');
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
     if (hours > 0) {
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        const hhmmss = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        return includeMilliseconds ? `${hhmmss}.${fraction}` : hhmmss;
     }
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const mmss = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return includeMilliseconds ? `${mmss}.${fraction}` : mmss;
 }
 
 export function useWavRecording({
@@ -38,6 +46,7 @@ export function useWavRecording({
     const recordingStartAtRef = useRef<number | null>(null);
     const elapsedBaseRef = useRef(0);
     const actionInFlightRef = useRef(false);
+    const rafIdRef = useRef<number | null>(null);
 
     const startTimer = useCallback((reset: boolean) => {
         if (reset) {
@@ -65,14 +74,22 @@ export function useWavRecording({
         if (phase !== 'recording') {
             return;
         }
-        const timer = setInterval(() => {
+        const tick = () => {
             const startAt = recordingStartAtRef.current;
             if (!startAt) {
                 return;
             }
             setElapsedMs(elapsedBaseRef.current + (Date.now() - startAt));
-        }, 200);
-        return () => clearInterval(timer);
+            rafIdRef.current = requestAnimationFrame(tick);
+        };
+
+        rafIdRef.current = requestAnimationFrame(tick);
+        return () => {
+            if (rafIdRef.current !== null) {
+                cancelAnimationFrame(rafIdRef.current);
+                rafIdRef.current = null;
+            }
+        };
     }, [phase]);
 
     const startRecord = useCallback(async () => {
@@ -210,6 +227,7 @@ export function useWavRecording({
         actionLoading,
         elapsedMs,
         elapsedText: formatRecordingElapsed(elapsedMs),
+        elapsedPreciseText: formatRecordingElapsed(elapsedMs, true, 2),
         buttonText,
         startRecord,
         pauseRecord,
