@@ -6,6 +6,7 @@ import { Pressable, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
+import { ModeToggle } from '~/components/ui/mode-toggle';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
 import { upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
@@ -173,7 +174,11 @@ export default function RecordPage() {
     }, [navigation, canStop, isStopping, stopRecord]);
 
     return (
-        <DefaultLayout headTitle="录音" safeAreaViewConfig={{ edges: ['top', 'left', 'right', 'bottom'] }} scrollable={false}>
+        <DefaultLayout
+            headTitle="录音"
+            headExtra={<ModeToggle />}
+            safeAreaViewConfig={{ edges: ['top', 'left', 'right', 'bottom'] }}
+            scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="flex flex-1">
                 <View className="flex-grow" />
