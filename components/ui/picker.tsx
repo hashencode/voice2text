@@ -12,6 +12,7 @@ import {
     BUTTON_PADDING_HORIZON_SM,
     FONT_SIZE_SM,
 } from '@/theme/globals';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
@@ -97,6 +98,7 @@ export function Picker({
     const cardColor = useColor('card');
     const danger = useColor('red');
     const primary = useColor('primary');
+    const indigo = useColor('indigo');
     const primaryForeground = useColor('primaryForeground');
     const textMutedColor = useColor('textMuted');
 
@@ -181,36 +183,65 @@ export function Picker({
             <TouchableOpacity
                 key={`${sectionIndex}-${option.value}`}
                 onPress={() => !option.disabled && handleSelect(option.value)}
-                className="my-0.5 items-center rounded-full"
+                className="my-0.5 overflow-hidden rounded-full"
                 style={{
-                    paddingVertical: BUTTON_PADDING_HORIZON_SM,
-                    paddingHorizontal: BUTTON_PADDING_HORIZON_LG,
-                    backgroundColor: isSelected ? primary : 'transparent',
                     opacity: option.disabled ? 0.3 : 1,
                 }}
                 disabled={option.disabled}
                 activeOpacity={optionActiveOpacity}>
-                <View className="w-full items-center">
-                    <TextX
-                        className="text-center"
-                        style={{
-                            color: isSelected ? primaryForeground : text,
-                            fontWeight: isSelected ? '600' : '400',
-                        }}>
-                        {option.label}
-                    </TextX>
-                    {option.description && (
-                        <TextX
-                            variant="subtitle"
-                            className="mt-1 text-center"
-                            style={{
-                                fontSize: FONT_SIZE_SM,
-                                color: isSelected ? primaryForeground : textMutedColor,
-                            }}>
-                            {option.description}
-                        </TextX>
-                    )}
-                </View>
+                {isSelected ? (
+                    <LinearGradient
+                        colors={[primary, indigo]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{ paddingVertical: BUTTON_PADDING_HORIZON_SM, paddingHorizontal: BUTTON_PADDING_HORIZON_LG }}>
+                        <View className="w-full items-center">
+                            <TextX
+                                className="text-center"
+                                style={{
+                                    color: primaryForeground,
+                                    fontWeight: '600',
+                                }}>
+                                {option.label}
+                            </TextX>
+                            {option.description && (
+                                <TextX
+                                    variant="subtitle"
+                                    className="mt-1 text-center"
+                                    style={{
+                                        fontSize: FONT_SIZE_SM,
+                                        color: primaryForeground,
+                                    }}>
+                                    {option.description}
+                                </TextX>
+                            )}
+                        </View>
+                    </LinearGradient>
+                ) : (
+                    <View style={{ paddingVertical: BUTTON_PADDING_HORIZON_SM, paddingHorizontal: BUTTON_PADDING_HORIZON_LG }}>
+                        <View className="w-full items-center">
+                            <TextX
+                                className="text-center"
+                                style={{
+                                    color: text,
+                                    fontWeight: '400',
+                                }}>
+                                {option.label}
+                            </TextX>
+                            {option.description && (
+                                <TextX
+                                    variant="subtitle"
+                                    className="mt-1 text-center"
+                                    style={{
+                                        fontSize: FONT_SIZE_SM,
+                                        color: textMutedColor,
+                                    }}>
+                                    {option.description}
+                                </TextX>
+                            )}
+                        </View>
+                    </View>
+                )}
             </TouchableOpacity>
         );
     };
