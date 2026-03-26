@@ -1,4 +1,4 @@
-import { CalendarDays, CircleArrowRight, Clock } from 'lucide-react-native';
+import { ArrowRight, CalendarDays, Clock } from 'lucide-react-native';
 import React from 'react';
 import { View } from 'react-native';
 import { ButtonX } from '~/components/ui/buttonx';
@@ -34,9 +34,7 @@ export default function FileListItem({ name, durationText, createdAtText }: File
             </View>
 
             <View className="shrink-0">
-                <ButtonX size="sm" variant="secondary" icon={CircleArrowRight}>
-                    转文字
-                </ButtonX>
+                <ButtonX size="icon" variant="secondary" icon={ArrowRight} />
             </View>
         </View>
     );

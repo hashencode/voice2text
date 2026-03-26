@@ -1,10 +1,10 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { Stack } from 'expo-router';
+import { Stack, useNavigation } from 'expo-router';
 import { Mic, Pause, Play, Square } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { Pressable, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';
-import { AudioWaveform } from '~/components/ui/audio-waveform';
+import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
@@ -26,11 +26,24 @@ function createRecordingPath(): string {
 }
 
 export default function RecordPage() {
-    const [waveformData, setWaveformData] = useState<number[]>(() => Array.from({ length: 52 }, () => 0.15));
+    const [confirmDialogState, setConfirmDialogState] = React.useState<{
+        isVisible: boolean;
+        title: string;
+        description: string;
+        confirmText: string;
+        onConfirm?: () => void;
+    }>({
+        isVisible: false,
+        title: '',
+        description: '',
+        confirmText: '确定',
+    });
+
+    const navigation = useNavigation();
     const { toast } = useToast();
     const primaryColor = useColor('primary');
-    const mutedTextColor = useColor('textMuted');
     const destructiveColor = useColor('destructive');
+    const mutedTextColor = useColor('textMuted');
     const cardColor = useColor('card');
 
     const showRecordError = (description: string) => {
@@ -113,49 +126,52 @@ export default function RecordPage() {
         if (!canStop || isStopping) {
             return;
         }
-        Alert.alert('结束录音', '确认结束并保存当前录音吗？', [
-            { text: '取消', style: 'cancel' },
-            {
-                text: '结束',
-                style: 'destructive',
-                onPress: () => {
-                    stopRecord();
-                },
+        setConfirmDialogState({
+            isVisible: true,
+            title: '结束录音',
+            description: '确认结束并保存当前录音吗？',
+            confirmText: '结束',
+            onConfirm: () => {
+                void stopRecord();
             },
-        ]);
+        });
     };
 
     const LeftIcon = isMicVisualState ? Mic : isPaused ? Play : Pause;
 
     useEffect(() => {
-        if (phase !== 'recording') {
-            setWaveformData(Array.from({ length: 52 }, () => 0.15));
-            return;
-        }
+        const unsubscribe = navigation.addListener('beforeRemove', event => {
+            if (!canStop || isStopping) {
+                return;
+            }
 
-        const timer = setInterval(() => {
-            setWaveformData(prev => {
-                const t = Date.now() / 250;
-                const base = 0.38 + Math.sin(t) * 0.15;
-                const noise = (Math.random() - 0.5) * 0.3;
-                const peak = Math.random() < 0.12 ? Math.random() * 0.35 : 0;
-                const nextLevel = Math.max(0.1, Math.min(0.95, base + noise + peak));
-                return [...prev.slice(1), nextLevel];
+            event.preventDefault();
+            setConfirmDialogState({
+                isVisible: true,
+                title: '结束录音',
+                description: '当前正在录音，是否结束并返回？',
+                confirmText: '结束并返回',
+                onConfirm: () => {
+                    void (async () => {
+                        try {
+                            await stopRecord();
+                            navigation.dispatch(event.data.action);
+                        } catch {
+                            // stopRecord already reports errors via toast
+                        }
+                    })();
+                },
             });
-        }, 90);
+        });
 
-        return () => {
-            clearInterval(timer);
-        };
-    }, [phase]);
+        return unsubscribe;
+    }, [navigation, canStop, isStopping, stopRecord]);
 
     return (
         <DefaultLayout headTitle="录音" safeAreaViewConfig={{ edges: ['top', 'left', 'right', 'bottom'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="flex flex-1">
-                <View className="flex-grow items-center justify-center">
-                    <TextX style={{ fontSize: 56, lineHeight: 60, includeFontPadding: false, fontVariant: ['tabular-nums'] }}>{elapsedText}</TextX>
-                </View>
+                <View className="flex-grow" />
 
                 <View className="flex-shrink-0 p-4">
                     <View className="flex-row items-center gap-3 rounded-full p-2 shadow" style={{ backgroundColor: cardColor }}>
@@ -174,16 +190,7 @@ export default function RecordPage() {
 
                         <View className="flex-1 items-center justify-center">
                             {isRecordingOrPaused ? (
-                                <AudioWaveform
-                                    data={waveformData}
-                                    isPlaying={phase === 'recording' && !isPaused}
-                                    animated
-                                    interactive={false}
-                                    showProgress={false}
-                                    height={34}
-                                    activeColor={destructiveColor}
-                                    inactiveColor={mutedTextColor}
-                                />
+                                <TextX style={{ fontVariant: ['tabular-nums'], fontWeight: 'regular', fontSize: 24 }}>{elapsedText}</TextX>
                             ) : (
                                 <TextX style={{ color: mutedTextColor }}>点击左侧开始录音</TextX>
                             )}
@@ -203,6 +210,20 @@ export default function RecordPage() {
                     </View>
                 </View>
             </View>
+            <AlertDialog
+                isVisible={confirmDialogState.isVisible}
+                title={confirmDialogState.title}
+                description={confirmDialogState.description}
+                confirmText={confirmDialogState.confirmText}
+                cancelText="取消"
+                onConfirm={confirmDialogState.onConfirm}
+                onClose={() => {
+                    setConfirmDialogState(prev => ({ ...prev, isVisible: false }));
+                }}
+                onCancel={() => {
+                    setConfirmDialogState(prev => ({ ...prev, isVisible: false }));
+                }}
+            />
         </DefaultLayout>
     );
 }
