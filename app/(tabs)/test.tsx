@@ -1,6 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { Stack, useFocusEffect } from 'expo-router';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/DefaultLayout';

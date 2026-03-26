@@ -1,4 +1,4 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { Filter, Search, SquareCheckBig } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';

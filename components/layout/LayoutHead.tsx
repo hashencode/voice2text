@@ -1,4 +1,4 @@
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from 'expo-router';
 import { useThrottleFn } from 'ahooks';
 import { ArrowLeft } from 'lucide-react-native';
 import { ReactNode } from 'react';
