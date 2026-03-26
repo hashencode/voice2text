@@ -1,6 +1,6 @@
 import { ArrowRight, CalendarDays, Clock } from 'lucide-react-native';
 import React from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
@@ -9,13 +9,31 @@ type FileListItemProps = {
     name: string;
     durationText: string;
     createdAtText: string;
+    onPress?: () => void;
+    onLongPress?: () => void;
+    longPressDelayMs?: number;
+    showArrow?: boolean;
+    rightSlot?: React.ReactNode;
 };
 
-export default function FileListItem({ name, durationText, createdAtText }: FileListItemProps) {
+export default function FileListItem({
+    name,
+    durationText,
+    createdAtText,
+    onPress,
+    onLongPress,
+    longPressDelayMs = 800,
+    showArrow = true,
+    rightSlot,
+}: FileListItemProps) {
     const descriptionColor = useColor('textMuted');
 
     return (
-        <View className="w-full flex-row items-center justify-between p-4">
+        <Pressable
+            className="w-full flex-row items-center justify-between p-4"
+            onPress={onPress}
+            onLongPress={onLongPress}
+            delayLongPress={longPressDelayMs}>
             <View className="flex-1 gap-y-2.5 pr-4">
                 <TextX className="!font-semibold" numberOfLines={1}>
                     {name}
@@ -34,8 +52,8 @@ export default function FileListItem({ name, durationText, createdAtText }: File
             </View>
 
             <View className="shrink-0">
-                <ButtonX size="icon" variant="secondary" icon={ArrowRight} />
+                {rightSlot ?? (showArrow ? <ButtonX size="icon" variant="secondary" icon={ArrowRight} /> : null)}
             </View>
-        </View>
+        </Pressable>
     );
 }

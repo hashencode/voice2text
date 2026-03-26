@@ -1,5 +1,5 @@
-import { ButtonX } from '@/components/ui/buttonx';
 import type { ButtonProps } from '@/components/ui/buttonx';
+import { ButtonX } from '@/components/ui/buttonx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useColor } from '@/hooks/useColor';
 import React, { useEffect } from 'react';
@@ -128,12 +128,7 @@ export function AlertDialog({
                                         {cancelText}
                                     </ButtonX>
                                 )}
-                                <ButtonX
-                                    variant="primary"
-                                    className="flex-grow"
-                                    size="lg"
-                                    onPress={handleConfirm}
-                                    {...confirmButtonProps}>
+                                <ButtonX variant="primary" className="flex-grow" size="lg" onPress={handleConfirm} {...confirmButtonProps}>
                                     {confirmText}
                                 </ButtonX>
                             </CardFooter>
