@@ -1,7 +1,7 @@
 import { ButtonX } from '@/components/ui/buttonx';
+import type { ButtonProps } from '@/components/ui/buttonx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useColor } from '@/hooks/useColor';
-import { BlurView } from 'expo-blur';
 import React, { useEffect } from 'react';
 import { Modal, StyleSheet, TouchableWithoutFeedback, View, ViewStyle } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -14,6 +14,8 @@ export type AlertDialogProps = {
     children?: React.ReactNode;
     confirmText?: string;
     cancelText?: string;
+    confirmButtonProps?: Omit<ButtonProps, 'onPress' | 'children'>;
+    cancelButtonProps?: Omit<ButtonProps, 'onPress' | 'children'>;
     onConfirm?: () => void;
     onCancel?: () => void;
     dismissible?: boolean;
@@ -30,6 +32,8 @@ export function AlertDialog({
     children,
     confirmText = 'OK',
     cancelText = 'Cancel',
+    confirmButtonProps,
+    cancelButtonProps,
     onConfirm,
     onCancel,
     dismissible = true,
@@ -96,9 +100,7 @@ export function AlertDialog({
         <Modal visible={modalVisible} transparent statusBarTranslucent animationType="none">
             <Animated.View style={[styles.backdrop, rBackdropStyle]}>
                 <TouchableWithoutFeedback onPress={handleBackdropPress}>
-                    <BlurView intensity={100}>
-                        <Animated.View style={styles.backdropTouchableArea} />
-                    </BlurView>
+                    <Animated.View style={styles.backdropTouchableArea} />
                 </TouchableWithoutFeedback>
 
                 {/* Non-animated outer wrapper: handles rounded corners and clipping */}
@@ -117,11 +119,21 @@ export function AlertDialog({
                             {children ? <CardContent>{children}</CardContent> : null}
                             <CardFooter>
                                 {showCancelButton && (
-                                    <ButtonX variant="secondary" className="flex-grow" size="lg" onPress={handleCancel}>
+                                    <ButtonX
+                                        variant="secondary"
+                                        className="flex-grow"
+                                        size="lg"
+                                        onPress={handleCancel}
+                                        {...cancelButtonProps}>
                                         {cancelText}
                                     </ButtonX>
                                 )}
-                                <ButtonX variant="primary" className="flex-grow" size="lg" onPress={handleConfirm}>
+                                <ButtonX
+                                    variant="primary"
+                                    className="flex-grow"
+                                    size="lg"
+                                    onPress={handleConfirm}
+                                    {...confirmButtonProps}>
                                     {confirmText}
                                 </ButtonX>
                             </CardFooter>

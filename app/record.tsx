@@ -31,7 +31,9 @@ export default function RecordPage() {
         title: string;
         description: string;
         confirmText: string;
+        confirmButtonProps?: { variant?: 'primary' | 'destructive' };
         onConfirm?: () => void;
+        onCancel?: () => void;
     }>({
         isVisible: false,
         title: '',
@@ -126,11 +128,13 @@ export default function RecordPage() {
         if (!canStop || isStopping) {
             return;
         }
+
         setConfirmDialogState({
             isVisible: true,
             title: '结束录音',
             description: '确认结束并保存当前录音吗？',
             confirmText: '结束',
+            confirmButtonProps: { variant: 'destructive' },
             onConfirm: () => {
                 void stopRecord();
             },
@@ -151,6 +155,7 @@ export default function RecordPage() {
                 title: '结束录音',
                 description: '当前正在录音，是否结束并返回？',
                 confirmText: '结束并返回',
+                confirmButtonProps: { variant: 'destructive' },
                 onConfirm: () => {
                     void (async () => {
                         try {
@@ -215,13 +220,15 @@ export default function RecordPage() {
                 title={confirmDialogState.title}
                 description={confirmDialogState.description}
                 confirmText={confirmDialogState.confirmText}
+                confirmButtonProps={confirmDialogState.confirmButtonProps}
                 cancelText="取消"
                 onConfirm={confirmDialogState.onConfirm}
                 onClose={() => {
-                    setConfirmDialogState(prev => ({ ...prev, isVisible: false }));
+                    setConfirmDialogState(prev => ({ ...prev, isVisible: false, onCancel: undefined }));
                 }}
                 onCancel={() => {
-                    setConfirmDialogState(prev => ({ ...prev, isVisible: false }));
+                    confirmDialogState.onCancel?.();
+                    setConfirmDialogState(prev => ({ ...prev, isVisible: false, onCancel: undefined }));
                 }}
             />
         </DefaultLayout>
