@@ -5,6 +5,7 @@ let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 const initSql = `
 CREATE TABLE IF NOT EXISTS recordings (
   path TEXT PRIMARY KEY NOT NULL,
+  display_name TEXT,
   sample_rate INTEGER,
   num_samples INTEGER,
   duration_ms INTEGER,
@@ -20,6 +21,11 @@ CREATE INDEX IF NOT EXISTS idx_recordings_session_id ON recordings(session_id);
 
 async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync(initSql);
+    const tableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(recordings)');
+    const hasDisplayNameColumn = tableInfo.some(column => column.name === 'display_name');
+    if (!hasDisplayNameColumn) {
+        await db.execAsync('ALTER TABLE recordings ADD COLUMN display_name TEXT;');
+    }
 }
 
 export async function getSqliteDb(): Promise<SQLite.SQLiteDatabase> {

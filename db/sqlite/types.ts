@@ -1,5 +1,6 @@
 export type RecordingMeta = {
     path: string;
+    displayName?: string | null;
     sampleRate: number | null;
     numSamples: number | null;
     durationMs: number | null;
@@ -10,6 +11,7 @@ export type RecordingMeta = {
 
 export type RecordingMetaRow = {
     path: string;
+    display_name: string | null;
     sample_rate: number | null;
     num_samples: number | null;
     duration_ms: number | null;
