@@ -2,8 +2,9 @@ import type { ButtonProps } from '@/components/ui/buttonx';
 import { ButtonX } from '@/components/ui/buttonx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useColor } from '@/hooks/useColor';
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import React, { useEffect } from 'react';
-import { Modal, StyleSheet, TouchableWithoutFeedback, View, ViewStyle } from 'react-native';
+import { LayoutChangeEvent, Modal, StyleSheet, TouchableWithoutFeedback, useWindowDimensions, ViewStyle } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 export type AlertDialogProps = {
@@ -41,10 +42,14 @@ export function AlertDialog({
     style,
 }: AlertDialogProps) {
     const cardColor = useColor('card');
+    const { height: windowHeight } = useWindowDimensions();
+    const { keyboardHeight, isKeyboardVisible, keyboardAnimationDuration } = useKeyboardHeight();
 
     const [modalVisible, setModalVisible] = React.useState(false);
+    const [dialogLayout, setDialogLayout] = React.useState<{ y: number; height: number } | null>(null);
     const backdropOpacity = useSharedValue(0);
     const cardOpacity = useSharedValue(0);
+    const cardTranslateY = useSharedValue(0);
 
     useEffect(() => {
         if (isVisible) {
@@ -52,6 +57,7 @@ export function AlertDialog({
             backdropOpacity.value = withTiming(1, { duration: 250 });
             cardOpacity.value = withTiming(1, { duration: 200 });
         } else {
+            cardTranslateY.value = withTiming(0, { duration: 200 });
             backdropOpacity.value = withTiming(0, { duration: 250 }, finished => {
                 if (finished) {
                     runOnJS(setModalVisible)(false);
@@ -61,12 +67,41 @@ export function AlertDialog({
         }
     }, [isVisible]);
 
+    useEffect(() => {
+        if (!isVisible || !modalVisible || !dialogLayout) {
+            cardTranslateY.value = withTiming(0, { duration: 180 });
+            return;
+        }
+
+        const keyboardTop = windowHeight - keyboardHeight;
+        const dialogBottom = dialogLayout.y + dialogLayout.height;
+        const safeGap = 16;
+        const overlap = dialogBottom + safeGap - keyboardTop;
+        const targetTranslateY = isKeyboardVisible && overlap > 0 ? -overlap : 0;
+        const duration = keyboardAnimationDuration > 0 ? keyboardAnimationDuration : 220;
+
+        cardTranslateY.value = withTiming(targetTranslateY, { duration });
+    }, [
+        cardTranslateY,
+        dialogLayout,
+        isKeyboardVisible,
+        isVisible,
+        keyboardAnimationDuration,
+        keyboardHeight,
+        modalVisible,
+        windowHeight,
+    ]);
+
     const rBackdropStyle = useAnimatedStyle(() => ({
         opacity: backdropOpacity.value,
     }));
 
     const rCardFadeStyle = useAnimatedStyle(() => ({
         opacity: cardOpacity.value,
+    }));
+
+    const rCardWrapperStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: cardTranslateY.value }],
     }));
 
     const animateClose = () => {
@@ -96,6 +131,16 @@ export function AlertDialog({
         animateClose();
     };
 
+    const handleDialogLayout = (event: LayoutChangeEvent) => {
+        const { y, height } = event.nativeEvent.layout;
+        setDialogLayout(prev => {
+            if (prev && prev.y === y && prev.height === height) {
+                return prev;
+            }
+            return { y, height };
+        });
+    };
+
     return (
         <Modal visible={modalVisible} transparent statusBarTranslucent animationType="none">
             <Animated.View style={[styles.backdrop, rBackdropStyle]}>
@@ -104,7 +149,7 @@ export function AlertDialog({
                 </TouchableWithoutFeedback>
 
                 {/* Non-animated outer wrapper: handles rounded corners and clipping */}
-                <View style={[styles.roundedWrapper, { backgroundColor: cardColor }, style]}>
+                <Animated.View onLayout={handleDialogLayout} style={[styles.roundedWrapper, rCardWrapperStyle, { backgroundColor: cardColor }, style]}>
                     {/* Only fade the inner content */}
                     <Animated.View style={[styles.innerContent, rCardFadeStyle]}>
                         <Card
@@ -134,7 +179,7 @@ export function AlertDialog({
                             </CardFooter>
                         </Card>
                     </Animated.View>
-                </View>
+                </Animated.View>
             </Animated.View>
         </Modal>
     );
