@@ -9,3 +9,4 @@
 ## Entries
 
 - 2026-03-25: [TypeScript 全量检查失败] `npx tsc --noEmit` 在当前仓库存在多处历史类型错误（如 `theme/globals` 的 `HEIGHT` 导出缺失、若干 `Timeout` 类型不匹配）-> 非本次改动引入 -> 变更验证优先用目标文件 `eslint` 或局部检查，避免把全量 `tsc` 作为单次改动阻塞项。 #promote
+- 2026-03-27: [命令不可用] `pnpm` 在本仓库环境报 `command not found` -> 项目实际使用 `bun.lock` 与 `bun run` 工作流 -> 执行校验/脚本优先用 `bun run <script>`，避免默认使用 `pnpm`。
