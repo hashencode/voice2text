@@ -22,7 +22,7 @@ export default function FileListItem({
     createdAtText,
     onPress,
     onLongPress,
-    longPressDelayMs = 800,
+    longPressDelayMs = 500,
     showArrow = true,
     rightSlot,
 }: FileListItemProps) {
@@ -35,7 +35,7 @@ export default function FileListItem({
             onLongPress={onLongPress}
             delayLongPress={longPressDelayMs}>
             <View className="flex-1 gap-y-2.5 pr-4">
-                <TextX className="!font-semibold" numberOfLines={1}>
+                <TextX variant="subtitle" numberOfLines={1}>
                     {name}
                 </TextX>
 

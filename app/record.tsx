@@ -54,7 +54,7 @@ export default function RecordPage() {
             title: '录音失败',
             description,
             variant: 'error',
-            duration: 8000,
+            duration: 5000,
         });
     };
 
