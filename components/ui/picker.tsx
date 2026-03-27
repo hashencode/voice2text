@@ -255,19 +255,10 @@ export function Picker({
                 disabled={disabled}
                 activeOpacity={triggerActiveOpacity}>
                 {/* Icon & Label */}
-                <View className="flex-row items-center gap-x-2" pointerEvents="none">
-                    {icon && <Icon name={icon} size={BUTTON_ICON} color={error ? danger : muted} />}
+                <View className="mr-1.5 flex-row items-center gap-x-1" pointerEvents="none">
+                    {icon && <Icon name={icon} size={BUTTON_ICON} />}
                     {label && (
-                        <TextX
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                            style={[
-                                {
-                                    color: error ? danger : muted,
-                                },
-                                labelStyle,
-                            ]}
-                            pointerEvents="none">
+                        <TextX numberOfLines={1} ellipsizeMode="tail" style={labelStyle} pointerEvents="none">
                             {label}
                         </TextX>
                     )}
