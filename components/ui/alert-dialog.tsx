@@ -1,11 +1,12 @@
 import type { ButtonProps } from '@/components/ui/buttonx';
 import { ButtonX } from '@/components/ui/buttonx';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useColor } from '@/hooks/useColor';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import React, { useEffect } from 'react';
 import { LayoutChangeEvent, Modal, StyleSheet, TouchableWithoutFeedback, useWindowDimensions, ViewStyle } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { TextX } from '~/components/ui/textx';
 
 export type AlertDialogProps = {
     isVisible: boolean;
@@ -17,7 +18,7 @@ export type AlertDialogProps = {
     cancelText?: string;
     confirmButtonProps?: Omit<ButtonProps, 'onPress' | 'children'>;
     cancelButtonProps?: Omit<ButtonProps, 'onPress' | 'children'>;
-    onConfirm?: () => void;
+    onConfirm?: () => boolean | void | Promise<boolean | void>;
     onCancel?: () => void;
     dismissible?: boolean;
     showCancelButton?: boolean;
@@ -81,16 +82,7 @@ export function AlertDialog({
         const duration = keyboardAnimationDuration > 0 ? keyboardAnimationDuration : 220;
 
         cardTranslateY.value = withTiming(targetTranslateY, { duration });
-    }, [
-        cardTranslateY,
-        dialogLayout,
-        isKeyboardVisible,
-        isVisible,
-        keyboardAnimationDuration,
-        keyboardHeight,
-        modalVisible,
-        windowHeight,
-    ]);
+    }, [cardTranslateY, dialogLayout, isKeyboardVisible, isVisible, keyboardAnimationDuration, keyboardHeight, modalVisible, windowHeight]);
 
     const rBackdropStyle = useAnimatedStyle(() => ({
         opacity: backdropOpacity.value,
@@ -126,9 +118,21 @@ export function AlertDialog({
         animateClose();
     };
 
-    const handleConfirm = () => {
-        if (onConfirm) onConfirm();
-        animateClose();
+    const handleConfirm = async () => {
+        if (!onConfirm) {
+            animateClose();
+            return;
+        }
+
+        try {
+            const shouldClose = await onConfirm();
+            if (shouldClose === false) {
+                return;
+            }
+            animateClose();
+        } catch {
+            // Keep dialog open when confirm action fails.
+        }
     };
 
     const handleDialogLayout = (event: LayoutChangeEvent) => {
@@ -149,7 +153,9 @@ export function AlertDialog({
                 </TouchableWithoutFeedback>
 
                 {/* Non-animated outer wrapper: handles rounded corners and clipping */}
-                <Animated.View onLayout={handleDialogLayout} style={[styles.roundedWrapper, rCardWrapperStyle, { backgroundColor: cardColor }, style]}>
+                <Animated.View
+                    onLayout={handleDialogLayout}
+                    style={[styles.roundedWrapper, rCardWrapperStyle, { backgroundColor: cardColor }, style]}>
                     {/* Only fade the inner content */}
                     <Animated.View style={[styles.innerContent, rCardFadeStyle]}>
                         <Card
@@ -158,7 +164,7 @@ export function AlertDialog({
                             {(title || description) && (
                                 <CardHeader>
                                     {title ? <CardTitle>{title}</CardTitle> : null}
-                                    {description ? <CardDescription>{description}</CardDescription> : null}
+                                    {description ? <TextX variant="description">{description}</TextX> : null}
                                 </CardHeader>
                             )}
                             {children ? <CardContent>{children}</CardContent> : null}

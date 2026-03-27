@@ -3,7 +3,7 @@ import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, BUTTON_HEIGHT, BUTTON_HEIGHT_LG, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { LucideProps, X } from 'lucide-react-native';
-import React, { forwardRef, ReactElement, useState } from 'react';
+import React, { forwardRef, ReactElement, useRef, useState } from 'react';
 import { Pressable, TextInput, TextInputProps, TextStyle, View, ViewStyle } from 'react-native';
 
 export interface InputProps extends Omit<TextInputProps, 'style'> {
@@ -51,6 +51,23 @@ export const Input = forwardRef<TextInput, InputProps>(
         },
         ref,
     ) => {
+        const inputRef = useRef<TextInput>(null);
+
+        const setInputRef = (node: TextInput | null) => {
+            inputRef.current = node;
+            if (typeof ref === 'function') {
+                ref(node);
+                return;
+            }
+            if (ref) {
+                ref.current = node;
+            }
+        };
+
+        const focusInput = () => {
+            inputRef.current?.focus();
+        };
+
         const [isFocused, setIsFocused] = useState(false);
         const [internalValue, setInternalValue] = useState(typeof defaultValue === 'string' ? defaultValue : '');
 
@@ -106,7 +123,7 @@ export const Input = forwardRef<TextInput, InputProps>(
             flex: 1,
             fontSize: FONT_SIZE,
             lineHeight: isTextarea ? 20 : undefined,
-            color: disabled ? textMutedColor : error ? danger : textColor,
+            color: disabled ? textMutedColor : textColor,
             paddingVertical: 0, // Remove default padding
             textAlignVertical: isTextarea ? 'top' : 'center',
         });
@@ -152,6 +169,7 @@ export const Input = forwardRef<TextInput, InputProps>(
                             onPress={() => {
                                 handleChangeText('');
                                 onClear?.();
+                                focusInput();
                             }}
                             hitSlop={8}
                             accessibilityRole="button"
@@ -178,8 +196,8 @@ export const Input = forwardRef<TextInput, InputProps>(
                 <Pressable
                     style={[getVariantStyle(), disabled && { opacity: 0.6 }]}
                     onPress={() => {
-                        if (!disabled && ref && 'current' in ref && ref.current) {
-                            ref.current.focus();
+                        if (!disabled) {
+                            focusInput();
                         }
                     }}
                     disabled={disabled}>
@@ -229,11 +247,11 @@ export const Input = forwardRef<TextInput, InputProps>(
 
                             {/* TextInput section */}
                             <TextInput
-                                ref={ref}
+                                ref={setInputRef}
                                 multiline
                                 numberOfLines={rows}
                                 style={[getInputStyle(), inputStyle]}
-                                placeholderTextColor={error ? danger + '99' : textMutedColor}
+                                placeholderTextColor={textMutedColor}
                                 placeholder={placeholder || 'Type your message...'}
                                 onFocus={handleFocus}
                                 onBlur={handleBlur}
@@ -282,9 +300,9 @@ export const Input = forwardRef<TextInput, InputProps>(
                             {/* TextInput section - takes remaining space */}
                             <View style={{ flex: 1 }}>
                                 <TextInput
-                                    ref={ref}
+                                    ref={setInputRef}
                                     style={[getInputStyle(), inputStyle]}
-                                    placeholderTextColor={error ? danger + 99 : textMutedColor}
+                                    placeholderTextColor={textMutedColor}
                                     onFocus={handleFocus}
                                     onBlur={handleBlur}
                                     onChangeText={handleChangeText}
@@ -513,14 +531,14 @@ export const GroupedInputItem = forwardRef<TextInput, GroupedInputItemProps>(
                                     {
                                         fontSize: FONT_SIZE,
                                         lineHeight: 20,
-                                        color: disabled ? textMutedColor : error ? danger : text,
+                                        color: disabled ? textMutedColor : text,
                                         textAlignVertical: 'top',
                                         paddingVertical: 0,
                                         minHeight: rows * 20,
                                     },
                                     inputStyle,
                                 ]}
-                                placeholderTextColor={error ? danger + '99' : textMutedColor}
+                                placeholderTextColor={textMutedColor}
                                 placeholder={placeholder || 'Type your message...'}
                                 editable={!disabled}
                                 selectionColor={primary}
@@ -573,13 +591,13 @@ export const GroupedInputItem = forwardRef<TextInput, GroupedInputItemProps>(
                                         {
                                             flex: 1,
                                             fontSize: FONT_SIZE,
-                                            color: disabled ? textMutedColor : error ? danger : text,
+                                            color: disabled ? textMutedColor : text,
                                             paddingVertical: 0,
                                         },
                                         inputStyle,
                                     ]}
                                     placeholder={placeholder}
-                                    placeholderTextColor={error ? danger + '99' : textMutedColor}
+                                    placeholderTextColor={textMutedColor}
                                     editable={!disabled}
                                     selectionColor={primary}
                                     onFocus={handleFocus}
