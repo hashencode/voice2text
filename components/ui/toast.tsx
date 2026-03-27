@@ -9,16 +9,15 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { Colors } from '~/theme/colors';
+import { FONT_SIZE, FONT_SIZE_LG, FONT_SIZE_SM, LINE_HEIGHT_SIZE_LG, LINE_HEIGHT_SIZE_SM } from '~/theme/globals';
 
 export type ToastVariant = 'default' | 'success' | 'error' | 'warning' | 'info';
-export type ToastSize = 'lg' | 'md' | 'sm';
 
 export interface ToastData {
     id: string;
     title?: string;
     description?: string;
     variant?: ToastVariant;
-    size?: ToastSize;
     duration?: number;
     action?: {
         label: string;
@@ -36,32 +35,36 @@ interface ToastProps extends ToastData {
 }
 
 const TOAST_MARGIN = 8;
-type ToastSizeConfig = {
+type ToastLayoutConfig = {
     height: number;
     width: number;
     contentPaddingHorizontal: number;
     contentPaddingVertical: number;
+    titleFontSize: number;
+    titleLineHeight: number;
+    descriptionFontSize?: number;
+    descriptionLineHeight?: number;
 };
 
-function getSizeConfig(screenWidth: number): Record<ToastSize, ToastSizeConfig> {
+function getToastLayoutConfig(screenWidth: number): { compact: ToastLayoutConfig; expanded: ToastLayoutConfig } {
     return {
-        sm: {
+        compact: {
             height: 40,
             width: Math.max(screenWidth - 200, 140),
             contentPaddingHorizontal: 12,
             contentPaddingVertical: 7,
+            titleFontSize: FONT_SIZE,
+            titleLineHeight: LINE_HEIGHT_SIZE_SM,
         },
-        md: {
-            height: 66,
-            width: Math.max(screenWidth - 100, 220),
-            contentPaddingHorizontal: 28,
-            contentPaddingVertical: 9,
-        },
-        lg: {
+        expanded: {
             height: 70,
             width: Math.max(screenWidth - 32, 280),
             contentPaddingHorizontal: 32,
             contentPaddingVertical: 10,
+            titleFontSize: FONT_SIZE_LG,
+            titleLineHeight: LINE_HEIGHT_SIZE_LG,
+            descriptionFontSize: FONT_SIZE_SM,
+            descriptionLineHeight: LINE_HEIGHT_SIZE_SM,
         },
     };
 }
@@ -125,7 +128,6 @@ export function Toast({
     title,
     description,
     variant = 'default',
-    size = 'md',
     onDismiss,
     onShown,
     index,
@@ -135,24 +137,25 @@ export function Toast({
     action,
 }: ToastProps) {
     const { width: windowWidth } = useWindowDimensions();
-    const sizeConfigMap = React.useMemo(() => getSizeConfig(windowWidth), [windowWidth]);
-    const sizeConfig = sizeConfigMap[size];
+    const layoutConfig = React.useMemo(() => getToastLayoutConfig(windowWidth), [windowWidth]);
     const isDismissingRef = useRef(false);
 
     // Reanimated shared values
     const translateY = useSharedValue(-100);
     const opacity = useSharedValue(0);
     const scale = useSharedValue(0.8);
-    const width = useSharedValue(sizeConfig.width);
-    const height = useSharedValue(sizeConfig.height);
+    const hasDescription = Boolean(description);
+    const activeConfig = hasDescription ? layoutConfig.expanded : layoutConfig.compact;
+    const width = useSharedValue(activeConfig.width);
+    const height = useSharedValue(activeConfig.height);
 
     const textColor = Colors.light.card;
     const isExpanded = Boolean(title || description || action);
-    const isSmSize = size === 'sm';
+    const isCompact = !hasDescription;
 
     useEffect(() => {
-        width.value = sizeConfig.width;
-        height.value = sizeConfig.height;
+        width.value = activeConfig.width;
+        height.value = activeConfig.height;
 
         // Animate in toast
         translateY.value = withTiming(0, { duration: TOAST_TIMING.enter });
@@ -166,7 +169,7 @@ export function Toast({
         return () => {
             clearTimeout(shownTimer);
         };
-    }, [id, onShown, sizeConfig.height, sizeConfig.width]);
+    }, [activeConfig.height, activeConfig.width, id, onShown]);
 
     const variantBackgroundColor = VARIANT_BACKGROUND[variant];
 
@@ -249,7 +252,7 @@ export function Toast({
     }));
 
     const animatedIslandStyle = useAnimatedStyle(() => ({
-        ...(isSmSize ? { maxWidth: width.value } : { width: width.value }),
+        ...(isCompact ? { maxWidth: width.value } : { width: width.value }),
         height: height.value,
         justifyContent: 'center',
         alignItems: 'center',
@@ -273,30 +276,34 @@ export function Toast({
                     {/* Expanded state - full content */}
                     {isExpanded && (
                         <Animated.View
-                            className={isSmSize ? 'flex-row items-center' : 'absolute inset-0 flex-row items-center'}
+                            className={isCompact ? 'flex-row items-center' : 'absolute inset-0 flex-row items-center'}
                             style={{
-                                paddingHorizontal: sizeConfig.contentPaddingHorizontal,
-                                paddingVertical: sizeConfig.contentPaddingVertical,
-                                maxWidth: isSmSize ? '100%' : undefined,
+                                paddingHorizontal: activeConfig.contentPaddingHorizontal,
+                                paddingVertical: activeConfig.contentPaddingVertical,
+                                maxWidth: isCompact ? '100%' : undefined,
                             }}>
-                            {isSmSize ? inlineIcon : null}
-                            <View className={isSmSize ? 'min-w-0' : 'min-w-0 flex-1'}>
+                            {isCompact ? inlineIcon : null}
+                            <View className={isCompact ? 'min-w-0 pr-2' : 'min-w-0 flex-1'}>
                                 {title && (
                                     <TextX
-                                        variant={isSmSize ? 'body' : 'subtitle'}
+                                        variant={isCompact ? 'body' : 'subtitle'}
                                         style={{
                                             color: textColor,
+                                            fontSize: activeConfig.titleFontSize,
+                                            lineHeight: activeConfig.titleLineHeight,
                                         }}
                                         numberOfLines={1}
                                         ellipsizeMode="tail">
                                         {title}
                                     </TextX>
                                 )}
-                                {!isSmSize && description && (
+                                {!isCompact && description && (
                                     <TextX
                                         variant="description"
                                         style={{
                                             color: textColor,
+                                            fontSize: activeConfig.descriptionFontSize,
+                                            lineHeight: activeConfig.descriptionLineHeight,
                                         }}
                                         numberOfLines={1}
                                         ellipsizeMode="tail">
@@ -320,7 +327,7 @@ export function Toast({
                                 </TouchableOpacity>
                             )}
 
-                            {isSmSize ? null : glassIcon}
+                            {isCompact ? null : glassIcon}
                         </Animated.View>
                     )}
                 </Animated.View>
@@ -348,23 +355,19 @@ interface ToastProviderProps {
 
 export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
     const { width: windowWidth } = useWindowDimensions();
-    const sizeConfigMap = React.useMemo(() => getSizeConfig(windowWidth), [windowWidth]);
+    const layoutConfig = React.useMemo(() => getToastLayoutConfig(windowWidth), [windowWidth]);
     const [toasts, setToasts] = useState<ToastData[]>([]);
     const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
     const insets = useSafeAreaInsets();
     const dismissTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     const durationMapRef = useRef<Map<string, number>>(new Map());
-    const resolveDuration = useCallback(
-        (duration?: number) => duration ?? TOAST_TIMING.defaultDuration,
-        [],
-    );
+    const resolveDuration = useCallback((duration?: number) => duration ?? TOAST_TIMING.defaultDuration, []);
 
     const getToastStackHeight = useCallback(
         (toast: ToastData) => {
-            const size = toast.size ?? 'md';
-            return sizeConfigMap[size].height + TOAST_MARGIN;
+            return (toast.description ? layoutConfig.expanded.height : layoutConfig.compact.height) + TOAST_MARGIN;
         },
-        [sizeConfigMap],
+        [layoutConfig.compact.height, layoutConfig.expanded.height],
     );
 
     const generateId = () => Math.random().toString(36).substr(2, 9);
