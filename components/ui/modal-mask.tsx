@@ -1,6 +1,6 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, type ModalProps, type ViewStyle, View } from 'react-native';
-import Animated, { useAnimatedStyle, type SharedValue, type AnimatedStyleProp } from 'react-native-reanimated';
+import { Modal, Pressable, StyleSheet, type ModalProps, type StyleProp, type ViewStyle, View } from 'react-native';
+import Animated, { useAnimatedStyle, type AnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
 type ModalMaskProps = {
     isVisible: boolean;
@@ -8,7 +8,7 @@ type ModalMaskProps = {
     maskColor?: string;
     maskOpacity?: number;
     maskOpacitySV?: SharedValue<number>;
-    maskAnimatedStyle?: AnimatedStyleProp<ViewStyle>;
+    maskAnimatedStyle?: StyleProp<ViewStyle> | AnimatedStyle<ViewStyle>;
     renderMask?: (params: { onPressMask: () => void; defaultMask: React.ReactNode }) => React.ReactNode;
     animationType?: ModalProps['animationType'];
     statusBarTranslucent?: boolean;
