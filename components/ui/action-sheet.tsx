@@ -1,14 +1,13 @@
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
+import { ModalMask } from '@/components/ui/modal-mask';
 import { useColor } from '@/hooks/useColor';
 import { CORNERS, FONT_SIZE } from '@/theme/globals';
 import React, { useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   Dimensions,
-  Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -145,11 +144,6 @@ function AndroidActionSheet({
     }
   }, [visible, progress]);
 
-  // Animated style for the backdrop
-  const backdropAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
-  }));
-
   // Animated style for the sheet itself (slide up/down)
   const sheetAnimatedStyle = useAnimatedStyle(() => {
     const translateY = interpolate(progress.value, [0, 1], [screenHeight, 0]);
@@ -175,29 +169,21 @@ function AndroidActionSheet({
   }
 
   return (
-    <Modal
-      transparent
-      visible={isSheetVisible}
-      animationType='none'
+    <ModalMask
+      isVisible={isSheetVisible}
+      onPressMask={handleBackdropPress}
+      maskColor='rgba(0, 0, 0, 0.5)'
+      maskOpacitySV={progress}
       statusBarTranslucent
-      onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
-          <Pressable
-            style={styles.backdropPressable}
-            onPress={handleBackdropPress}
-          />
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.sheet,
-            { backgroundColor: cardColor },
-            sheetAnimatedStyle,
-            style,
-          ]}
-        >
+      <Animated.View
+        style={[
+          styles.sheet,
+          { backgroundColor: cardColor },
+          sheetAnimatedStyle,
+          style,
+        ]}
+      >
           {/* Header */}
           {(title || message) && (
             <View style={styles.header}>
@@ -273,9 +259,8 @@ function AndroidActionSheet({
               </TextX>
             </TouchableOpacity>
           </View>
-        </Animated.View>
-      </View>
-    </Modal>
+      </Animated.View>
+    </ModalMask>
   );
 }
 

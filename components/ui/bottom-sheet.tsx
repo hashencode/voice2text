@@ -1,12 +1,12 @@
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
+import { ModalMask } from '@/components/ui/modal-mask';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'; // Make sure this path is correct
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS } from '@/theme/globals';
 import React, { useEffect } from 'react';
 import {
   Dimensions,
-  Modal,
   ScrollView,
   TouchableWithoutFeedback,
   ViewStyle,
@@ -281,24 +281,37 @@ export function BottomSheet({
   };
 
   return (
-    <Modal
-      visible={modalVisible}
-      transparent
+    <ModalMask
+      isVisible={modalVisible}
+      onPressMask={handleBackdropPress}
       statusBarTranslucent
-      animationType='none'
-    >
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      renderMask={({ onPressMask }) => (
         <Animated.View
           style={[
             { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)' },
             rBackdropStyle,
           ]}
         >
-          <TouchableWithoutFeedback onPress={handleBackdropPress}>
+          <TouchableWithoutFeedback onPress={onPressMask}>
             <Animated.View style={{ flex: 1 }} />
           </TouchableWithoutFeedback>
-
-          {disablePanGesture ? (
+        </Animated.View>
+      )}
+    >
+      <GestureHandlerRootView style={{ flex: 1 }} pointerEvents='box-none'>
+        {disablePanGesture ? (
+          <BottomSheetContent
+            title={title}
+            style={style}
+            rBottomSheetStyle={rBottomSheetStyle}
+            cardColor={cardColor}
+            mutedColor={mutedColor}
+            onHandlePress={() => runOnJS(handlePress)()}
+          >
+            {children}
+          </BottomSheetContent>
+        ) : (
+          <GestureDetector gesture={gesture}>
             <BottomSheetContent
               title={title}
               style={style}
@@ -309,23 +322,10 @@ export function BottomSheet({
             >
               {children}
             </BottomSheetContent>
-          ) : (
-            <GestureDetector gesture={gesture}>
-              <BottomSheetContent
-                title={title}
-                style={style}
-                rBottomSheetStyle={rBottomSheetStyle}
-                cardColor={cardColor}
-                mutedColor={mutedColor}
-                onHandlePress={() => runOnJS(handlePress)()}
-              >
-                {children}
-              </BottomSheetContent>
-            </GestureDetector>
-          )}
-        </Animated.View>
+          </GestureDetector>
+        )}
       </GestureHandlerRootView>
-    </Modal>
+    </ModalMask>
   );
 }
 

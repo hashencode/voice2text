@@ -3,7 +3,7 @@ import { Stack, useNavigation } from 'expo-router';
 import { Mic, Pause, Play, Square } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
-import { DefaultLayout } from '~/components/layout/DefaultLayout';
+import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { ModeToggle } from '~/components/ui/mode-toggle';

@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView } from 'react-native';
-import { DefaultLayout } from '~/components/layout/DefaultLayout';
+import { DefaultLayout } from '~/components/layout/default-layout';
 import { ButtonX } from '~/components/ui/buttonx';
 import { SwitchX } from '~/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';

@@ -6,6 +6,7 @@ const initSql = `
 CREATE TABLE IF NOT EXISTS recordings (
   path TEXT PRIMARY KEY NOT NULL,
   display_name TEXT,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
   sample_rate INTEGER,
   num_samples INTEGER,
   duration_ms INTEGER,
@@ -19,16 +20,27 @@ CREATE INDEX IF NOT EXISTS idx_recordings_recorded_at ON recordings(recorded_at_
 CREATE INDEX IF NOT EXISTS idx_recordings_session_id ON recordings(session_id);
 CREATE TABLE IF NOT EXISTS folders (
   name TEXT PRIMARY KEY NOT NULL,
-  created_at_ms INTEGER NOT NULL
+  created_at_ms INTEGER NOT NULL,
+  is_favorite INTEGER NOT NULL DEFAULT 0
 );
 `;
 
 async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync(initSql);
-    const tableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(recordings)');
-    const hasDisplayNameColumn = tableInfo.some(column => column.name === 'display_name');
+    const recordingsTableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(recordings)');
+    const hasDisplayNameColumn = recordingsTableInfo.some(column => column.name === 'display_name');
     if (!hasDisplayNameColumn) {
         await db.execAsync('ALTER TABLE recordings ADD COLUMN display_name TEXT;');
+    }
+    const hasRecordingFavoriteColumn = recordingsTableInfo.some(column => column.name === 'is_favorite');
+    if (!hasRecordingFavoriteColumn) {
+        await db.execAsync('ALTER TABLE recordings ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;');
+    }
+
+    const foldersTableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(folders)');
+    const hasFolderFavoriteColumn = foldersTableInfo.some(column => column.name === 'is_favorite');
+    if (!hasFolderFavoriteColumn) {
+        await db.execAsync('ALTER TABLE folders ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;');
     }
 }
 

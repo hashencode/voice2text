@@ -2,8 +2,24 @@ import { Stack, useFocusEffect } from 'expo-router';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { DefaultLayout } from '~/components/layout/DefaultLayout';
+import { DefaultLayout } from '~/components/layout/default-layout';
+import { ActionSheet } from '~/components/ui/action-sheet';
+import { BottomSheet } from '~/components/ui/bottom-sheet';
 import { ButtonX } from '~/components/ui/buttonx';
+import {
+    Combobox,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxInput,
+    ComboboxItem,
+    ComboboxList,
+    ComboboxTrigger,
+    ComboboxValue,
+    type OptionType,
+} from '~/components/ui/combobox';
+import { ModalMask } from '~/components/ui/modal-mask';
+import { Popover, PopoverBody, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { TextX } from '~/components/ui/textx';
 import { getDenoiseEnabled, getSpeakerDiarizationEnabled } from '~/db/mmkv/app-config';
 import { getCurrentModel } from '~/db/mmkv/model-selection';
@@ -11,6 +27,7 @@ import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/scripts/utils';
+import { withTiming, useSharedValue } from 'react-native-reanimated';
 
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
@@ -56,6 +73,13 @@ export default function Home() {
     const [vadSegments, setVadSegments] = useState<VadSegmentItem[]>([]);
     const [segmentRecognitionMap, setSegmentRecognitionMap] = useState<Record<string, SegmentRecognitionState>>({});
     const [playingVadPath, setPlayingVadPath] = useState<string | null>(null);
+    const [isModalMaskVisible, setIsModalMaskVisible] = useState(false);
+    const [isActionSheetVisible, setIsActionSheetVisible] = useState(false);
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
+    const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
+    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [comboboxValue, setComboboxValue] = useState<OptionType | null>(null);
+    const modalMaskOpacity = useSharedValue(0);
     const vadPlayer = useAudioPlayer(null, { updateInterval: 200 });
     const vadPlayerStatus = useAudioPlayerStatus(vadPlayer);
 
@@ -251,6 +275,10 @@ export default function Home() {
         };
     }, [vadPlayer]);
 
+    useEffect(() => {
+        modalMaskOpacity.value = withTiming(isModalMaskVisible ? 1 : 0, { duration: 220 });
+    }, [isModalMaskVisible, modalMaskOpacity]);
+
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
@@ -297,7 +325,118 @@ export default function Home() {
                         );
                     })}
                 </View>
+
+                <View className="mt-4 gap-3">
+                    <TextX variant="subtitle">Overlay / ModalMask 组件测试</TextX>
+                    <View className="flex-row flex-wrap gap-2">
+                        <ButtonX size="sm" variant="outline" onPress={() => setIsModalMaskVisible(true)}>
+                            打开 ModalMask
+                        </ButtonX>
+                        <ButtonX size="sm" variant="outline" onPress={() => setIsActionSheetVisible(true)}>
+                            打开 ActionSheet
+                        </ButtonX>
+                        <ButtonX size="sm" variant="outline" onPress={() => setIsSheetOpen(true)}>
+                            打开 Sheet
+                        </ButtonX>
+                        <ButtonX size="sm" variant="outline" onPress={() => setIsBottomSheetVisible(true)}>
+                            打开 BottomSheet
+                        </ButtonX>
+                    </View>
+
+                    <View className="gap-2">
+                        <TextX variant="description">Combobox Demo</TextX>
+                        <Combobox value={comboboxValue} onValueChange={setComboboxValue}>
+                            <ComboboxTrigger>
+                                <ComboboxValue placeholder="请选择一个选项" />
+                            </ComboboxTrigger>
+                            <ComboboxContent>
+                                <ComboboxInput placeholder="搜索选项..." />
+                                <ComboboxList>
+                                    <ComboboxItem value="mask">ModalMask</ComboboxItem>
+                                    <ComboboxItem value="action-sheet">ActionSheet</ComboboxItem>
+                                    <ComboboxItem value="sheet">Sheet</ComboboxItem>
+                                    <ComboboxItem value="bottom-sheet">BottomSheet</ComboboxItem>
+                                    <ComboboxItem value="popover">Popover</ComboboxItem>
+                                </ComboboxList>
+                                <ComboboxEmpty>未找到选项</ComboboxEmpty>
+                            </ComboboxContent>
+                        </Combobox>
+                        <TextX variant="description">当前值：{comboboxValue?.label ?? '(未选择)'}</TextX>
+                    </View>
+
+                    <View className="gap-2">
+                        <TextX variant="description">Popover Demo</TextX>
+                        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <ButtonX size="sm" variant="outline">
+                                    打开 Popover
+                                </ButtonX>
+                            </PopoverTrigger>
+                            <PopoverContent side="bottom" align="start">
+                                <PopoverBody>
+                                    <TextX>这是 Popover 内容，用于验证 ModalMask 替代是否正常。</TextX>
+                                </PopoverBody>
+                            </PopoverContent>
+                        </Popover>
+                    </View>
+                </View>
             </ScrollView>
+
+            <ModalMask
+                isVisible={isModalMaskVisible}
+                onPressMask={() => setIsModalMaskVisible(false)}
+                maskColor="rgba(0, 0, 0, 0.18)"
+                maskOpacitySV={modalMaskOpacity}
+                renderMask={({ defaultMask }) => defaultMask}>
+                <View className="flex-1 items-center justify-center px-6">
+                    <View className="bg-card border-border w-full rounded-2xl border p-4">
+                        <TextX variant="subtitle">ModalMask 测试弹层</TextX>
+                        <TextX variant="description" className="mt-2">
+                            点击空白遮罩区域可关闭，用于验证 SharedValue 动画和点击关闭逻辑。
+                        </TextX>
+                        <View className="mt-4">
+                            <ButtonX size="sm" onPress={() => setIsModalMaskVisible(false)}>
+                                关闭
+                            </ButtonX>
+                        </View>
+                    </View>
+                </View>
+            </ModalMask>
+
+            <ActionSheet
+                visible={isActionSheetVisible}
+                onClose={() => setIsActionSheetVisible(false)}
+                title="ActionSheet Demo"
+                message="验证 ModalMask 替代后的遮罩和动画"
+                options={[
+                    { title: '普通操作', onPress: () => setIsActionSheetVisible(false) },
+                    { title: '危险操作', destructive: true, onPress: () => setIsActionSheetVisible(false) },
+                ]}
+                cancelButtonTitle="取消"
+            />
+
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+                <SheetContent>
+                    <SheetHeader>
+                        <SheetTitle>Sheet Demo</SheetTitle>
+                        <SheetDescription>验证侧边抽屉遮罩与关闭逻辑</SheetDescription>
+                    </SheetHeader>
+                    <View className="p-4">
+                        <ButtonX size="sm" onPress={() => setIsSheetOpen(false)}>
+                            关闭 Sheet
+                        </ButtonX>
+                    </View>
+                </SheetContent>
+            </Sheet>
+
+            <BottomSheet isVisible={isBottomSheetVisible} onClose={() => setIsBottomSheetVisible(false)} title="BottomSheet Demo">
+                <TextX variant="description">验证底部弹层在 ModalMask 下的遮罩与手势行为。</TextX>
+                <View className="mt-4">
+                    <ButtonX size="sm" onPress={() => setIsBottomSheetVisible(false)}>
+                        关闭 BottomSheet
+                    </ButtonX>
+                </View>
+            </BottomSheet>
         </DefaultLayout>
     );
 }

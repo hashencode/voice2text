@@ -1,4 +1,5 @@
 import { ButtonX } from '@/components/ui/buttonx';
+import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
@@ -7,9 +8,7 @@ import { X } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import {
   Dimensions,
-  Modal,
   Platform,
-  Pressable,
   StyleSheet,
   TouchableOpacity,
   ViewStyle,
@@ -172,34 +171,28 @@ export function SheetContent({ children, style }: SheetContentProps) {
   }
 
   return (
-    <Modal
-      visible={isVisible}
-      transparent={true}
-      animationType='none'
-      onRequestClose={handleClose}
-      statusBarTranslucent={true}
+    <ModalMask
+      isVisible={isVisible}
+      onPressMask={handleClose}
+      maskColor='rgba(0, 0, 0, 1)'
+      maskAnimatedStyle={animatedOverlayStyle}
+      statusBarTranslucent
     >
-      <View style={styles.modalContainer}>
-        {/* Semi-transparent overlay */}
-        <Animated.View style={[styles.overlay, animatedOverlayStyle]}>
-          <Pressable style={styles.overlayPressable} onPress={handleClose} />
-        </Animated.View>
-
-        {/* Sheet */}
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              borderRadius: BORDER_RADIUS,
-              backgroundColor,
-              borderColor,
-              width: sheetWidth,
-              [side]: 0,
-            },
-            animatedSheetStyle, // Apply the animated style
-            style,
-          ]}
-        >
+      {/* Sheet */}
+      <Animated.View
+        style={[
+          styles.sheet,
+          {
+            borderRadius: BORDER_RADIUS,
+            backgroundColor,
+            borderColor,
+            width: sheetWidth,
+            [side]: 0,
+          },
+          animatedSheetStyle, // Apply the animated style
+          style,
+        ]}
+      >
           {/* Close button */}
           <TouchableOpacity
             style={[
@@ -217,9 +210,8 @@ export function SheetContent({ children, style }: SheetContentProps) {
 
           {/* Content */}
           <View style={styles.contentContainer}>{children}</View>
-        </Animated.View>
-      </View>
-    </Modal>
+      </Animated.View>
+    </ModalMask>
   );
 }
 
@@ -246,16 +238,6 @@ export function SheetDescription({ children }: SheetDescriptionProps) {
 }
 
 const styles = StyleSheet.create({
-  modalContainer: {
-    flex: 1,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 1)', // Opacity is controlled by animation
-  },
-  overlayPressable: {
-    flex: 1,
-  },
   sheet: {
     position: 'absolute',
     top: 0,

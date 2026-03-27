@@ -1,4 +1,5 @@
 import { ButtonX } from '@/components/ui/buttonx';
+import { ModalMask } from '@/components/ui/modal-mask';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS } from '@/theme/globals';
 import React, {
@@ -11,8 +12,6 @@ import React, {
 } from 'react';
 import {
   Dimensions,
-  Modal,
-  Pressable,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -308,33 +307,31 @@ export function PopoverContent({
   };
 
   return (
-    <Modal
-      visible={isOpen}
-      transparent
+    <ModalMask
+      isVisible={isOpen}
+      onPressMask={handleClose}
+      maskColor='rgba(0, 0, 0, 0.5)'
       animationType='fade'
-      onRequestClose={handleClose}
     >
-      <Pressable style={styles.overlay} onPress={handleClose}>
-        <View
-          style={[
-            styles.content,
-            {
-              backgroundColor: popoverColor,
-              borderColor: borderColor,
-              top: position.top,
-              left: position.left,
-              maxWidth: position.maxWidth,
-              maxHeight: position.maxHeight,
-            },
-            style,
-          ]}
-          onLayout={handleContentLayout}
-          onStartShouldSetResponder={() => true}
-        >
-          {children}
-        </View>
-      </Pressable>
-    </Modal>
+      <View
+        style={[
+          styles.content,
+          {
+            backgroundColor: popoverColor,
+            borderColor: borderColor,
+            top: position.top,
+            left: position.left,
+            maxWidth: position.maxWidth,
+            maxHeight: position.maxHeight,
+          },
+          style,
+        ]}
+        onLayout={handleContentLayout}
+        onStartShouldSetResponder={() => true}
+      >
+        {children}
+      </View>
+    </ModalMask>
   );
 }
 

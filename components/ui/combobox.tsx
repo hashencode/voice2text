@@ -1,5 +1,6 @@
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, CORNERS, FONT_SIZE, HEIGHT } from '@/theme/globals';
+import { ModalMask } from '@/components/ui/modal-mask';
 import { ChevronDown } from 'lucide-react-native';
 import React, {
   Children,
@@ -14,8 +15,6 @@ import React, {
 } from 'react';
 import {
   Dimensions,
-  Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -269,30 +268,28 @@ export function ComboboxContent({
   }
 
   return (
-    <Modal
-      visible={isOpen}
-      transparent
+    <ModalMask
+      isVisible={isOpen}
+      onPressMask={handleClose}
+      maskColor='rgba(0, 0, 0, 0.3)'
       animationType='fade'
-      onRequestClose={handleClose}
     >
-      <Pressable style={styles.overlay} onPress={handleClose}>
-        <View
-          style={[
-            styles.dropdown,
-            {
-              backgroundColor: cardColor,
-              borderColor: borderColor,
-              top: triggerLayout.y + triggerLayout.height + 6,
-              left: triggerLayout.x,
-              width: triggerLayout.width,
-              maxHeight: dropdownHeight,
-            },
-          ]}
-        >
-          {children}
-        </View>
-      </Pressable>
-    </Modal>
+      <View
+        style={[
+          styles.dropdown,
+          {
+            backgroundColor: cardColor,
+            borderColor: borderColor,
+            top: triggerLayout.y + triggerLayout.height + 6,
+            left: triggerLayout.x,
+            width: triggerLayout.width,
+            maxHeight: dropdownHeight,
+          },
+        ]}
+      >
+        {children}
+      </View>
+    </ModalMask>
   );
 }
 
@@ -407,7 +404,7 @@ interface ComboboxEmptyProps {
 }
 
 export function ComboboxEmpty({ children, style }: ComboboxEmptyProps) {
-  const { searchQuery, filteredItemsCount } = useCombobox();
+  const { filteredItemsCount } = useCombobox();
   const mutedColor = useColor('textMuted');
 
   if (filteredItemsCount > 0) return null;
