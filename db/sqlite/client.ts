@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS recordings (
 );
 CREATE INDEX IF NOT EXISTS idx_recordings_recorded_at ON recordings(recorded_at_ms DESC);
 CREATE INDEX IF NOT EXISTS idx_recordings_session_id ON recordings(session_id);
+CREATE TABLE IF NOT EXISTS folders (
+  name TEXT PRIMARY KEY NOT NULL,
+  created_at_ms INTEGER NOT NULL
+);
 `;
 
 async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {

@@ -19,3 +19,13 @@ export type RecordingMetaRow = {
     session_id: string | null;
     reason: string | null;
 };
+
+export type Folder = {
+    name: string;
+    createdAtMs: number;
+};
+
+export type FolderRow = {
+    name: string;
+    created_at_ms: number;
+};
