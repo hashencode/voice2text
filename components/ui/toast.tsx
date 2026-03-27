@@ -1,22 +1,24 @@
 import { TextX } from '@/components/ui/textx';
 import { LinearGradient } from 'expo-linear-gradient';
+import type { LucideProps } from 'lucide-react-native';
 import { CircleCheck, CircleX, Info, TriangleAlert } from 'lucide-react-native';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Dimensions, Platform, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Platform, TouchableOpacity, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { Colors } from '~/theme/colors';
-import { BORDER_RADIUS } from '~/theme/globals';
 
 export type ToastVariant = 'default' | 'success' | 'error' | 'warning' | 'info';
+export type ToastSize = 'lg' | 'md' | 'sm';
 
 export interface ToastData {
     id: string;
     title?: string;
     description?: string;
     variant?: ToastVariant;
+    size?: ToastSize;
     duration?: number;
     action?: {
         label: string;
@@ -29,15 +31,55 @@ interface ToastProps extends ToastData {
     onShown: (id: string) => void;
     index: number;
     topInset: number;
+    stackOffset: number;
     shouldDismiss: boolean;
 }
 
-const { width: screenWidth } = Dimensions.get('window');
-const DYNAMIC_ISLAND_HEIGHT = 37;
-const EXPANDED_HEIGHT = 76;
 const TOAST_MARGIN = 8;
-const DYNAMIC_ISLAND_WIDTH = 126;
-const EXPANDED_WIDTH = screenWidth - 32;
+type ToastSizeConfig = {
+    height: number;
+    width: number;
+    contentPaddingHorizontal: number;
+    contentPaddingVertical: number;
+};
+
+function getSizeConfig(screenWidth: number): Record<ToastSize, ToastSizeConfig> {
+    return {
+        sm: {
+            height: 40,
+            width: Math.max(screenWidth - 200, 140),
+            contentPaddingHorizontal: 12,
+            contentPaddingVertical: 7,
+        },
+        md: {
+            height: 66,
+            width: Math.max(screenWidth - 100, 220),
+            contentPaddingHorizontal: 28,
+            contentPaddingVertical: 9,
+        },
+        lg: {
+            height: 70,
+            width: Math.max(screenWidth - 32, 280),
+            contentPaddingHorizontal: 32,
+            contentPaddingVertical: 10,
+        },
+    };
+}
+
+const VARIANT_BACKGROUND: Record<ToastVariant, string> = {
+    default: '#1C1C1E',
+    success: '#389e0d',
+    error: '#cf1322',
+    warning: '#d48806',
+    info: '#0958d9',
+};
+
+const VARIANT_ICON: Partial<Record<ToastVariant, React.ComponentType<LucideProps>>> = {
+    success: CircleCheck,
+    error: CircleX,
+    warning: TriangleAlert,
+    info: Info,
+};
 
 // Reanimated spring configuration
 const SPRING_CONFIG = {
@@ -46,6 +88,13 @@ const SPRING_CONFIG = {
     mass: 0.8,
     overshootClamping: true,
 };
+
+const TOAST_TIMING = {
+    enter: 170,
+    shownDelay: 220,
+    dismiss: 180,
+    defaultDuration: 3000,
+} as const;
 
 const ABSOLUTE_FILL: ViewStyle = {
     position: 'absolute',
@@ -76,95 +125,75 @@ export function Toast({
     title,
     description,
     variant = 'default',
+    size = 'md',
     onDismiss,
     onShown,
     index,
     topInset,
+    stackOffset,
     shouldDismiss,
     action,
 }: ToastProps) {
+    const { width: windowWidth } = useWindowDimensions();
+    const sizeConfigMap = React.useMemo(() => getSizeConfig(windowWidth), [windowWidth]);
+    const sizeConfig = sizeConfigMap[size];
     const isDismissingRef = useRef(false);
 
     // Reanimated shared values
     const translateY = useSharedValue(-100);
-    const translateX = useSharedValue(0);
     const opacity = useSharedValue(0);
     const scale = useSharedValue(0.8);
-    const width = useSharedValue(DYNAMIC_ISLAND_WIDTH);
-    const height = useSharedValue(DYNAMIC_ISLAND_HEIGHT);
-    const borderRadius = useSharedValue(BORDER_RADIUS);
+    const width = useSharedValue(sizeConfig.width);
+    const height = useSharedValue(sizeConfig.height);
 
     const textColor = Colors.light.card;
     const isExpanded = Boolean(title || description || action);
+    const isSmSize = size === 'sm';
 
     useEffect(() => {
-        const shownNotifyDelay = isExpanded ? 220 : 150;
+        width.value = sizeConfig.width;
+        height.value = sizeConfig.height;
 
-        if (isExpanded) {
-            // If there's content, start directly with expanded state
-            width.value = EXPANDED_WIDTH;
-            height.value = EXPANDED_HEIGHT;
-            borderRadius.value = 9999;
-
-            // Animate in expanded toast
-            translateY.value = withTiming(0, { duration: 170 });
-            opacity.value = withTiming(1, { duration: 170 });
-            scale.value = withTiming(1, { duration: 170 });
-        } else {
-            // Animate in compact toast
-            translateY.value = withTiming(0, { duration: 140 });
-            opacity.value = withTiming(1, { duration: 140 });
-            scale.value = withTiming(1, { duration: 140 });
-        }
+        // Animate in toast
+        translateY.value = withTiming(0, { duration: TOAST_TIMING.enter });
+        opacity.value = withTiming(1, { duration: TOAST_TIMING.enter });
+        scale.value = withTiming(1, { duration: TOAST_TIMING.enter });
 
         const shownTimer = setTimeout(() => {
             onShown(id);
-        }, shownNotifyDelay);
+        }, TOAST_TIMING.shownDelay);
 
         return () => {
             clearTimeout(shownTimer);
         };
-    }, [id, isExpanded, onShown]);
+    }, [id, onShown, sizeConfig.height, sizeConfig.width]);
 
-    const variantBackgroundColor = (() => {
-        switch (variant) {
-            case 'success':
-                return '#389e0d'; // antd green (same level as info)
-            case 'error':
-                return '#cf1322'; // antd red (same level as info)
-            case 'warning':
-                return '#d48806'; // antd gold (same level as info)
-            case 'info':
-                return '#0958d9'; // antd blue (user-specified)
-            default:
-                return '#1C1C1E'; // previous default black
+    const variantBackgroundColor = VARIANT_BACKGROUND[variant];
+
+    const getIcon = (iconSize: number, strokeWidth: number) => {
+        const IconComponent = VARIANT_ICON[variant];
+        if (!IconComponent) {
+            return null;
         }
-    })();
-
-    const getIcon = () => {
-        const iconProps = { size: 100, color: textColor, strokeWidth: 1.7 };
-
-        switch (variant) {
-            case 'success':
-                return <CircleCheck {...iconProps} />;
-            case 'error':
-                return <CircleX {...iconProps} />;
-            case 'warning':
-                return <TriangleAlert {...iconProps} />;
-            case 'info':
-                return <Info {...iconProps} />;
-            default:
-                return null;
-        }
+        const iconProps = { size: iconSize, color: textColor, strokeWidth };
+        return <IconComponent {...iconProps} />;
     };
 
     const renderGlassIcon = () => {
-        const icon = getIcon();
+        const icon = getIcon(100, 1.7);
         if (!icon) {
             return null;
         }
 
         return <View className="absolute -right-3 top-1 opacity-50">{icon}</View>;
+    };
+
+    const renderInlineIcon = () => {
+        const icon = getIcon(18, 2);
+        if (!icon) {
+            return null;
+        }
+        return <View className="mr-2">{icon}</View>;
     };
 
     const dismissOnUiThread = useCallback(() => {
@@ -178,13 +207,13 @@ export function Toast({
         }
         isDismissingRef.current = true;
 
-        translateY.value = withTiming(-80, { duration: 180 });
-        opacity.value = withTiming(0, { duration: 180 }, finished => {
+        translateY.value = withTiming(-80, { duration: TOAST_TIMING.dismiss });
+        opacity.value = withTiming(0, { duration: TOAST_TIMING.dismiss }, finished => {
             if (finished) {
                 dismissOnUiThread();
             }
         });
-        scale.value = withTiming(0.9, { duration: 180 });
+        scale.value = withTiming(0.9, { duration: TOAST_TIMING.dismiss });
     }, [dismissOnUiThread]);
 
     useEffect(() => {
@@ -196,88 +225,80 @@ export function Toast({
 
     const panGesture = Gesture.Pan()
         .onUpdate(event => {
-            translateX.value = event.translationX;
+            translateY.value = Math.min(0, event.translationY);
         })
         .onEnd(event => {
-            const { translationX, velocityX } = event;
+            const { translationY, velocityY } = event;
 
-            if (Math.abs(translationX) > screenWidth * 0.25 || Math.abs(velocityX) > 800) {
-                // Animate out horizontally
-                translateX.value = withTiming(translationX > 0 ? screenWidth : -screenWidth, { duration: 250 });
-                opacity.value = withTiming(0, { duration: 250 }, finished => {
-                    if (finished) {
-                        dismissOnUiThread();
-                    }
-                });
+            if (translationY < -24 || velocityY < -700) {
+                scheduleOnRN(dismiss);
             } else {
-                // Snap back with spring animation
-                translateX.value = withSpring(0, SPRING_CONFIG);
+                translateY.value = withSpring(0, SPRING_CONFIG);
             }
         });
 
     const getTopPosition = () => {
         const safeTop = Math.max(topInset, Platform.OS === 'ios' ? 8 : 12);
-        return safeTop + TOAST_MARGIN + index * (EXPANDED_HEIGHT + TOAST_MARGIN);
+        return safeTop + TOAST_MARGIN + stackOffset;
     };
 
     // Animated styles
     const animatedContainerStyle = useAnimatedStyle(() => ({
         opacity: opacity.value,
-        transform: [{ translateY: translateY.value }, { translateX: translateX.value }, { scale: scale.value }],
+        transform: [{ translateY: translateY.value }, { scale: scale.value }],
     }));
 
     const animatedIslandStyle = useAnimatedStyle(() => ({
-        width: width.value,
+        ...(isSmSize ? { maxWidth: width.value } : { width: width.value }),
         height: height.value,
-        borderRadius: borderRadius.value,
         justifyContent: 'center',
         alignItems: 'center',
         overflow: 'hidden',
     }));
 
     const toastStyle: ViewStyle = {
-        position: 'absolute',
         top: getTopPosition(),
-        alignSelf: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.25,
-        shadowRadius: 20,
-        elevation: 10,
         zIndex: 1000 + index,
     };
     const gradientColors: [string, string] = [shiftHexColor(variantBackgroundColor, -16), shiftHexColor(variantBackgroundColor, 22)];
     const glassIcon = renderGlassIcon();
+    const inlineIcon = renderInlineIcon();
 
     return (
         <GestureDetector gesture={panGesture}>
-            <Animated.View style={[toastStyle, animatedContainerStyle]}>
-                <Animated.View style={animatedIslandStyle}>
-                    <LinearGradient colors={gradientColors} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={ABSOLUTE_FILL} />
+            <Animated.View className="absolute self-center shadow" style={[toastStyle, animatedContainerStyle]}>
+                <Animated.View className="rounded-full" style={animatedIslandStyle}>
+                    <LinearGradient colors={gradientColors} start={{ x: 0, y: 1 }} end={{ x: 1, y: 1 }} style={ABSOLUTE_FILL} />
 
                     {/* Expanded state - full content */}
                     {isExpanded && (
-                        <Animated.View className="absolute inset-0 flex-row items-center px-8 py-2.5">
-                            <View className="min-w-0 flex-1">
+                        <Animated.View
+                            className={isSmSize ? 'flex-row items-center' : 'absolute inset-0 flex-row items-center'}
+                            style={{
+                                paddingHorizontal: sizeConfig.contentPaddingHorizontal,
+                                paddingVertical: sizeConfig.contentPaddingVertical,
+                                maxWidth: isSmSize ? '100%' : undefined,
+                            }}>
+                            {isSmSize ? inlineIcon : null}
+                            <View className={isSmSize ? 'min-w-0' : 'min-w-0 flex-1'}>
                                 {title && (
                                     <TextX
-                                        variant="subtitle"
+                                        variant={isSmSize ? 'body' : 'subtitle'}
                                         style={{
                                             color: textColor,
-                                            marginBottom: description ? 2 : 0,
                                         }}
                                         numberOfLines={1}
                                         ellipsizeMode="tail">
                                         {title}
                                     </TextX>
                                 )}
-                                {description && (
+                                {!isSmSize && description && (
                                     <TextX
                                         variant="description"
                                         style={{
                                             color: textColor,
                                         }}
-                                        numberOfLines={2}
+                                        numberOfLines={1}
                                         ellipsizeMode="tail">
                                         {description}
                                     </TextX>
@@ -299,7 +320,7 @@ export function Toast({
                                 </TouchableOpacity>
                             )}
 
-                            {glassIcon}
+                            {isSmSize ? null : glassIcon}
                         </Animated.View>
                     )}
                 </Animated.View>
@@ -326,11 +347,25 @@ interface ToastProviderProps {
 }
 
 export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
+    const { width: windowWidth } = useWindowDimensions();
+    const sizeConfigMap = React.useMemo(() => getSizeConfig(windowWidth), [windowWidth]);
     const [toasts, setToasts] = useState<ToastData[]>([]);
     const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
     const insets = useSafeAreaInsets();
     const dismissTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     const durationMapRef = useRef<Map<string, number>>(new Map());
+    const resolveDuration = useCallback(
+        (duration?: number) => duration ?? TOAST_TIMING.defaultDuration,
+        [],
+    );
+
+    const getToastStackHeight = useCallback(
+        (toast: ToastData) => {
+            const size = toast.size ?? 'md';
+            return sizeConfigMap[size].height + TOAST_MARGIN;
+        },
+        [sizeConfigMap],
+    );
 
     const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -376,7 +411,7 @@ export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
         (id: string) => {
             clearDismissTimer(id);
 
-            const duration = durationMapRef.current.get(id) ?? 4000;
+            const duration = resolveDuration(durationMapRef.current.get(id));
             if (duration <= 0) {
                 return;
             }
@@ -386,7 +421,7 @@ export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
             }, duration);
             dismissTimersRef.current.set(id, timer);
         },
-        [clearDismissTimer, markToastDismissing],
+        [clearDismissTimer, markToastDismissing, resolveDuration],
     );
 
     const addToast = useCallback(
@@ -395,7 +430,7 @@ export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
             const newToast: ToastData = {
                 ...toastData,
                 id,
-                duration: toastData.duration ?? 4000,
+                duration: resolveDuration(toastData.duration),
             };
 
             setToasts(prev => {
@@ -419,9 +454,9 @@ export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
                 }
                 return sliced;
             });
-            durationMapRef.current.set(id, newToast.duration ?? 4000);
+            durationMapRef.current.set(id, resolveDuration(newToast.duration));
         },
-        [clearDismissTimer, maxToasts],
+        [clearDismissTimer, maxToasts, resolveDuration],
     );
 
     const dismissAll = useCallback(() => {
@@ -455,31 +490,30 @@ export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
         dismissAll,
     };
 
-    const containerStyle: ViewStyle = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        pointerEvents: 'box-none',
-    };
-
     return (
         <ToastContext.Provider value={contextValue}>
             <GestureHandlerRootView style={{ flex: 1 }}>
                 {children}
-                <View style={containerStyle} pointerEvents="box-none">
-                    {toasts.map((toast, index) => (
-                        <Toast
-                            key={toast.id}
-                            {...toast}
-                            index={index}
-                            topInset={insets.top}
-                            onShown={scheduleDismiss}
-                            shouldDismiss={dismissingIds.has(toast.id)}
-                            onDismiss={dismissToast}
-                        />
-                    ))}
+                <View className="pointer-events-box-none absolute left-0 right-0 top-0 z-[1000]" pointerEvents="box-none">
+                    {(() => {
+                        let stackOffset = 0;
+                        return toasts.map((toast, index) => {
+                            const currentOffset = stackOffset;
+                            stackOffset += getToastStackHeight(toast);
+                            return (
+                                <Toast
+                                    key={toast.id}
+                                    {...toast}
+                                    index={index}
+                                    stackOffset={currentOffset}
+                                    topInset={insets.top}
+                                    onShown={scheduleDismiss}
+                                    shouldDismiss={dismissingIds.has(toast.id)}
+                                    onDismiss={dismissToast}
+                                />
+                            );
+                        });
+                    })()}
                 </View>
             </GestureHandlerRootView>
         </ToastContext.Provider>
