@@ -348,14 +348,14 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
             return (
                 <View style={[styles.permissionContainer, { backgroundColor: cardColor }]}>
                     <CameraIcon size={36} color={textColor} style={styles.permissionIcon} />
-                    <TextX variant="title" style={{ textAlign: 'center' }}>
+                    <TextX variant="title" className="text-center">
                         Camera Access Required
                     </TextX>
-                    <TextX variant="body" style={{ textAlign: 'center' }}>
+                    <TextX variant="body" className="text-center">
                         We need access to your camera to take pictures and videos
                     </TextX>
-                    <View style={{ width: '100%' }}>
-                        <ButtonX onPress={requestPermission} style={{ width: '100%' }}>
+                    <View className="w-full">
+                        <ButtonX onPress={requestPermission} className="w-full">
                             Grant Permission
                         </ButtonX>
                     </View>

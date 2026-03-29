@@ -409,7 +409,7 @@ export function DatePicker(props: DatePickerProps) {
                         borderRadius: CORNERS,
                         backgroundColor: mutedColor,
                     }}>
-                    <TextX variant="subtitle" style={{ marginRight: 4 }}>
+                    <TextX variant="subtitle" className="mr-1">
                         {MONTHS[calendarData.month]}
                     </TextX>
                     <ChevronDown size={16} color={textColor} />
@@ -427,7 +427,7 @@ export function DatePicker(props: DatePickerProps) {
                         borderRadius: CORNERS,
                         backgroundColor: mutedColor,
                     }}>
-                    <TextX variant="subtitle" style={{ marginRight: 4 }}>
+                    <TextX variant="subtitle" className="mr-1">
                         {calendarData.year}
                     </TextX>
                     <ChevronDown size={16} color={textColor} />
@@ -471,7 +471,7 @@ export function DatePicker(props: DatePickerProps) {
             </View>
 
             {/* Calendar grid */}
-            <View style={{ paddingHorizontal: 4 }}>
+            <View className="px-1">
                 {calendarData.weeks.map((week, weekIndex) => (
                     <View
                         key={weekIndex}
@@ -574,7 +574,7 @@ export function DatePicker(props: DatePickerProps) {
                                             </TextX>
                                         </TouchableOpacity>
                                     ) : (
-                                        <View style={{ width: 40, height: 40 }} />
+                                        <View className="h-10 w-10" />
                                     )}
                                 </View>
                             );
@@ -596,15 +596,15 @@ export function DatePicker(props: DatePickerProps) {
                         backgroundColor: mutedColor,
                         borderRadius: BORDER_RADIUS,
                     }}>
-                    <TextX variant="subtitle" style={{ flex: 1 }}>
+                    <TextX variant="subtitle" className="flex-1">
                         {tempRange.startDate ? `${tempRange.startDate.toLocaleDateString()}` : 'Start date'}
                     </TextX>
 
-                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <View className="flex-1 items-center justify-center">
                         <ArrowRight color={textColor} strokeWidth={3} />
                     </View>
 
-                    <TextX variant="subtitle" style={{ flex: 1, textAlign: 'right' }}>
+                    <TextX variant="subtitle" className="flex-1 text-right">
                         {tempRange.endDate ? `${tempRange.endDate.toLocaleDateString()}` : 'End date'}
                     </TextX>
                 </View>
@@ -627,8 +627,8 @@ export function DatePicker(props: DatePickerProps) {
                         gap: 16,
                     }}>
                     {/* Hours */}
-                    <View style={{ flex: 1 }}>
-                        <TextX variant="body" style={{ textAlign: 'center', marginBottom: 12 }}>
+                    <View className="flex-1">
+                        <TextX variant="body" className="mb-3 text-center">
                             Hours
                         </TextX>
                         <ScrollView
@@ -669,8 +669,8 @@ export function DatePicker(props: DatePickerProps) {
                     </View>
 
                     {/* Minutes */}
-                    <View style={{ flex: 1 }}>
-                        <TextX variant="body" style={{ textAlign: 'center', marginBottom: 12 }}>
+                    <View className="flex-1">
+                        <TextX variant="body" className="mb-3 text-center">
                             Minutes
                         </TextX>
                         <ScrollView
@@ -705,7 +705,7 @@ export function DatePicker(props: DatePickerProps) {
                     {/* AM/PM picker for 12-hour format */}
                     {timeFormat === '12' && (
                         <View style={{ flex: 0.5 }}>
-                            <TextX variant="body" style={{ textAlign: 'center', marginBottom: 12 }}>
+                            <TextX variant="body" className="mb-3 text-center">
                                 Period
                             </TextX>
                             <View
@@ -895,7 +895,7 @@ export function DatePicker(props: DatePickerProps) {
 
                         {/* Label takes 1/3 of available width when present */}
                         {label && (
-                            <View style={{ flex: 1 }}>
+                            <View className="flex-1">
                                 <TextX
                                     variant="body"
                                     numberOfLines={1}
@@ -913,7 +913,7 @@ export function DatePicker(props: DatePickerProps) {
                     </View>
 
                     {/* Text takes 2/3 of available width when label is present, or full width when no label */}
-                    <View style={{ flex: 1 }}>
+                    <View className="flex-1">
                         <TextX
                             numberOfLines={1}
                             ellipsizeMode="tail"
@@ -936,7 +936,7 @@ export function DatePicker(props: DatePickerProps) {
                 title={getBottomSheetTitle()}
                 snapPoints={[0.7]}
                 disablePanGesture={showMonthPicker || showYearPicker}>
-                <View style={{ flex: 1 }}>
+                <View className="flex-1">
                     {getBottomSheetContent()}
 
                     <View
@@ -969,11 +969,11 @@ export function DatePicker(props: DatePickerProps) {
                         </View>
 
                         {mode === 'datetime' && viewMode === 'date' ? (
-                            <ButtonX onPress={() => setViewMode('time')} style={{ flex: 1 }}>
+                            <ButtonX onPress={() => setViewMode('time')} className="flex-1">
                                 Next
                             </ButtonX>
                         ) : (
-                            <ButtonX onPress={handleConfirm} style={{ flex: 1 }}>
+                            <ButtonX onPress={handleConfirm} className="flex-1">
                                 Done
                             </ButtonX>
                         )}

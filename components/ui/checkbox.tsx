@@ -23,12 +23,8 @@ export function Checkbox({ checked, error, disabled = false, label, labelStyle, 
 
     return (
         <TouchableOpacity
-            style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                opacity: disabled ? 0.5 : 1,
-                paddingVertical: 4,
-            }}
+            className="flex-row items-center py-1"
+            style={{ opacity: disabled ? 0.5 : 1 }}
             onPress={() => !disabled && onCheckedChange(!checked)}
             disabled={disabled}>
             <View
@@ -39,10 +35,9 @@ export function Checkbox({ checked, error, disabled = false, label, labelStyle, 
                     borderWidth: 1.5,
                     borderColor: checked ? primary : borderColor,
                     backgroundColor: checked ? primary : 'transparent',
-                    alignItems: 'center',
-                    justifyContent: 'center',
                     marginRight: label ? 8 : 0,
-                }}>
+                }}
+                className="items-center justify-center">
                 {checked && <Check size={16} color={primaryForegroundColor} strokeWidth={3} strokeLinecap="round" />}
             </View>
             {label && (

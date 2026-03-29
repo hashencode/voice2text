@@ -55,32 +55,15 @@ const BottomSheetContent = ({
             ]}>
             {/* Handle */}
             <TouchableWithoutFeedback onPress={onHandlePress}>
-                <View
-                    style={{
-                        width: '100%',
-                        paddingVertical: 12,
-                        alignItems: 'center',
-                    }}>
-                    <View
-                        style={{
-                            width: 64,
-                            height: 6,
-                            backgroundColor: mutedColor,
-                            borderRadius: 999,
-                        }}
-                    />
+                <View className="w-full items-center py-3">
+                    <View className="h-1.5 w-16 rounded-full" style={{ backgroundColor: mutedColor }} />
                 </View>
             </TouchableWithoutFeedback>
 
             {/* Title */}
             {title && (
-                <View
-                    style={{
-                        marginHorizontal: 16,
-                        marginTop: 16,
-                        paddingBottom: 8,
-                    }}>
-                    <TextX variant="title" style={{ textAlign: 'center' }}>
+                <View className="mx-4 mt-4 pb-2">
+                    <TextX variant="title" className="text-center">
                         {title}
                     </TextX>
                 </View>
@@ -88,7 +71,7 @@ const BottomSheetContent = ({
 
             {/* Content now wrapped in a ScrollView */}
             <ScrollView
-                style={{ flex: 1 }}
+                className="flex-1"
                 contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}>
@@ -255,7 +238,7 @@ export function BottomSheet({
 
     return (
         <ModalMask isVisible={modalVisible} onPressMask={handleBackdropPress} statusBarTranslucent contentTransitionPreset="none">
-            <View style={{ flex: 1 }} pointerEvents="box-none">
+            <View className="flex-1" pointerEvents="box-none">
                 {disablePanGesture ? (
                     <BottomSheetContent
                         title={title}

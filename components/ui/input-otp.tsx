@@ -200,7 +200,7 @@ export const InputOTP = forwardRef<InputOTPRef, InputOTPProps>(
                     </Pressable>
 
                     {/* Separator */}
-                    {separator && index < length - 1 && <View style={{ marginHorizontal: 4 }}>{separator}</View>}
+                    {separator && index < length - 1 && <View className="mx-1">{separator}</View>}
                 </React.Fragment>
             );
         });
@@ -219,22 +219,15 @@ export const InputOTP = forwardRef<InputOTPRef, InputOTPProps>(
                     maxLength={length}
                     editable={!disabled}
                     selectionColor="transparent"
-                    style={{
-                        position: 'absolute',
-                        left: -9999,
-                        opacity: 0,
-                    }}
+                    className="absolute opacity-0"
+                    style={{ left: -9999 }}
                     {...textInputProps}
                 />
 
                 {/* OTP Slots */}
                 <View
-                    style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: separator ? 0 : 8,
-                    }}>
+                    className="flex-row items-center justify-center"
+                    style={{ gap: separator ? 0 : 8 }}>
                     {slots}
                 </View>
 

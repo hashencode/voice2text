@@ -161,13 +161,7 @@ export function CameraPreview() {
                                 <X size={24} color={textColor} />
                             </TouchableOpacity>
 
-                            <View
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: 16,
-                                }}>
+                            <View className="flex-row items-center justify-between gap-4">
                                 <TouchableOpacity
                                     style={[styles.floatingButton, { backgroundColor: cardColor, opacity: 0.9 }]}
                                     onPress={handleSaveToAlbum}

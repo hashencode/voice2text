@@ -278,7 +278,7 @@ export function Table<T = any>({
                     Page {currentPage} of {totalPages} ({filteredAndSortedData.length} total)
                 </TextX>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View className="flex-row items-center gap-2">
                     <ButtonX variant="outline" size="sm" onPress={() => handlePageChange(1)} disabled={currentPage === 1}>
                         <ChevronsLeft size={16} color={currentPage === 1 ? mutedColor : textColor} />
                     </ButtonX>
@@ -308,9 +308,8 @@ export function Table<T = any>({
 
         return (
             <View
+                className="flex-row items-center"
                 style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
                     backgroundColor: cardColor,
                     borderBottomWidth: 1,
                     borderColor: borderColor,
@@ -318,7 +317,7 @@ export function Table<T = any>({
                     height: HEIGHT,
                     marginVertical: 2,
                 }}>
-                <Search size={16} color={mutedColor} style={{ marginRight: 8 }} />
+                <Search size={16} color={mutedColor} className="mr-2" />
 
                 <TextInput
                     style={{
@@ -337,13 +336,7 @@ export function Table<T = any>({
     };
 
     const renderEmptyState = () => (
-        <View
-            style={{
-                padding: 32,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: cardColor,
-            }}>
+        <View className="items-center justify-center p-8" style={{ backgroundColor: cardColor }}>
             <TextX variant="body" style={{ color: mutedColor }}>
                 {emptyMessage}
             </TextX>
@@ -351,13 +344,7 @@ export function Table<T = any>({
     );
 
     const renderLoadingState = () => (
-        <View
-            style={{
-                padding: 32,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: cardColor,
-            }}>
+        <View className="items-center justify-center p-8" style={{ backgroundColor: cardColor }}>
             <TextX variant="body" style={{ color: mutedColor }}>
                 Loading...
             </TextX>
@@ -380,7 +367,7 @@ export function Table<T = any>({
             {renderSearchBar()}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={{ minWidth: '100%' }}>
+                <View className="min-w-full">
                     {renderHeader()}
 
                     {loading ? (

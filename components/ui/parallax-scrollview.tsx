@@ -32,10 +32,7 @@ export function ParallaxScrollView({ children, headerHeight = 250, headerImage }
     });
 
     return (
-        <View
-            style={{
-                flex: 1,
-            }}>
+        <View className="flex-1">
             <Animated.ScrollView
                 ref={scrollRef}
                 scrollEventThrottle={16}
@@ -52,14 +49,7 @@ export function ParallaxScrollView({ children, headerHeight = 250, headerImage }
                     ]}>
                     {headerImage}
                 </Animated.View>
-                <View
-                    style={{
-                        flex: 1,
-                        padding: 32,
-                        gap: 16,
-                        overflow: 'hidden',
-                        backgroundColor,
-                    }}>
+                <View className="flex-1 gap-4 overflow-hidden p-8" style={{ backgroundColor }}>
                     {children}
                 </View>
             </Animated.ScrollView>

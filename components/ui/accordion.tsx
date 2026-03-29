@@ -45,7 +45,7 @@ export function Accordion({ type, collapsible = false, defaultValue, value: cont
                 value,
                 onValueChange: handleValueChange,
             }}>
-            <View style={{ width: '100%' }}>{children}</View>
+            <View className="w-full">{children}</View>
         </AccordionContext.Provider>
     );
 }
@@ -105,15 +105,7 @@ export function AccordionTrigger({ children }: AccordionTriggerProps) {
     }
 
     return (
-        <TouchableOpacity
-            style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingVertical: 6,
-            }}
-            onPress={context.toggle}
-            activeOpacity={0.8}>
+        <TouchableOpacity className="flex-row items-center justify-between py-1.5" onPress={context.toggle} activeOpacity={0.8}>
             <TextX variant="subtitle">{children}</TextX>
             <Icon
                 name={ChevronRight}
@@ -143,14 +135,7 @@ export function AccordionContent({ children, style }: AccordionContentProps) {
     }
 
     return (
-        <View
-            style={[
-                {
-                    paddingBottom: 16,
-                    paddingLeft: 0,
-                },
-                style,
-            ]}>
+        <View className="pb-4" style={style}>
             {children}
         </View>
     );

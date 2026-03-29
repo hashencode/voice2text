@@ -316,12 +316,12 @@ export const Button = forwardRef<View, ButtonProps>(
                     {loading ? (
                         <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
                     ) : typeof children === 'string' ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View className="flex-row items-center gap-1.5">
                             {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
                             <TextX style={[finalTextStyle, textStyle]}>{children}</TextX>
                         </View>
                     ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View className="flex-row items-center gap-1.5">
                             {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
                             {children}
                         </View>
@@ -339,7 +339,7 @@ export const Button = forwardRef<View, ButtonProps>(
                 {loading ? (
                     <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
                 ) : typeof children === 'string' ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View className="flex-row items-center gap-1.5">
                         {icon && <Icon name={icon} color={contentColor} size={iconSize} />}
                         <TextX style={[finalTextStyle, textStyle]}>{children}</TextX>
                     </View>

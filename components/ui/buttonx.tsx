@@ -377,16 +377,16 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                     {loading ? (
                         <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
                     ) : hasStringChildren ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <View className="flex-row items-center gap-1">
                             {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
                             <TextX style={[finalTextStyle, textStyle]}>{displayLabel}</TextX>
                         </View>
                     ) : isIconOnly ? (
-                        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                        <View className="items-center justify-center">
                             <Icon name={icon!} color={contentColor} size={iconSize} {...iconProps} />
                         </View>
                     ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <View className="flex-row items-center gap-1">
                             {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
                             {children}
                         </View>
@@ -404,12 +404,12 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                 {loading ? (
                     <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
                 ) : hasStringChildren ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View className="flex-row items-center gap-1.5">
                         {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
                         <TextX style={[finalTextStyle, textStyle]}>{displayLabel}</TextX>
                     </View>
                 ) : isIconOnly ? (
-                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                    <View className="items-center justify-center">
                         <Icon name={icon!} color={contentColor} size={iconSize} {...iconProps} />
                     </View>
                 ) : (

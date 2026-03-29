@@ -309,7 +309,7 @@ export const Carousel = forwardRef<CarouselRef, CarouselProps>(
                         setContainerWidth(width);
                     }
                 }}>
-                <View style={{ position: 'relative', overflow: 'hidden' }}>
+                <View className="relative overflow-hidden">
                     <GestureDetector gesture={horizontalPan}>
                         <ScrollView
                             ref={scrollViewRef}

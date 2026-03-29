@@ -107,7 +107,7 @@ export function Link({ href, asChild = false, children, browser = 'in-app', ...r
         return (
             <ERLink asChild={asChild} href={href} onPress={handlePress} {...rest}>
                 {typeof children === 'string' ? (
-                    <TextX style={{ textDecorationLine: 'underline', fontWeight: '500' }} variant="body">
+                    <TextX className="font-medium underline" variant="body">
                         {children}
                     </TextX>
                 ) : (
@@ -121,7 +121,7 @@ export function Link({ href, asChild = false, children, browser = 'in-app', ...r
     return (
         <ERLink asChild={typeof children === 'string' ? false : true} href={href} {...rest}>
             {typeof children === 'string' ? (
-                <TextX style={{ textDecorationLine: 'underline', fontWeight: '500' }} variant="body">
+                <TextX className="font-medium underline" variant="body">
                     {children}
                 </TextX>
             ) : (

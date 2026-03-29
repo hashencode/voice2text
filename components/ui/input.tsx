@@ -162,7 +162,7 @@ export const Input = forwardRef<TextInput, InputProps>(
             }
 
             return (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 8 }}>
+                <View className="flex-row items-center gap-2 pr-2">
                     {hasClearButton ? (
                         <Pressable
                             onPress={() => {
@@ -297,7 +297,7 @@ export const Input = forwardRef<TextInput, InputProps>(
                             </View>
 
                             {/* TextInput section - takes remaining space */}
-                            <View style={{ flex: 1 }}>
+                            <View className="flex-1">
                                 <TextInput
                                     ref={setInputRef}
                                     style={[getInputStyle(), inputStyle]}
@@ -392,7 +392,7 @@ export const GroupedInput = ({ children, containerStyle, title, titleStyle }: Gr
             </View>
 
             {errors.length > 0 && (
-                <View style={{ marginTop: 6 }}>
+                <View className="mt-1.5">
                     {errors.map((error, i) => (
                         <TextX
                             key={i}
@@ -583,7 +583,7 @@ export const GroupedInputItem = forwardRef<TextInput, GroupedInputItemProps>(
                             </View>
 
                             {/* Input */}
-                            <View style={{ flex: 1 }}>
+                            <View className="flex-1">
                                 <TextInput
                                     ref={ref}
                                     style={[

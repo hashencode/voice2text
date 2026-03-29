@@ -112,7 +112,7 @@ export function SearchBar({
             />
 
             {/* Loading Indicator */}
-            {loading && <ActivityIndicator size="small" color={muted} style={{ marginRight: 4 }} />}
+            {loading && <ActivityIndicator size="small" color={muted} className="mr-1" />}
 
             {/* Clear Button */}
             {showClear && !loading && (
@@ -168,7 +168,7 @@ export function SearchBarWithSuggestions({
     };
 
     return (
-        <View style={[{ width: '100%' }, containerStyle]}>
+        <View className="w-full" style={containerStyle}>
             <SearchBar
                 {...searchBarProps}
                 onFocus={e => {
@@ -185,14 +185,10 @@ export function SearchBarWithSuggestions({
             {/* Suggestions Dropdown */}
             {shouldShowSuggestions && (
                 <View
+                    className="absolute left-0 right-0 mt-2 rounded-xl"
                     style={{
-                        position: 'absolute',
                         top: '100%',
-                        left: 0,
-                        right: 0,
                         backgroundColor: cardColor,
-                        marginTop: 8,
-                        borderRadius: 12,
                         maxHeight: 200,
                         zIndex: 999,
                     }}>
@@ -200,9 +196,8 @@ export function SearchBarWithSuggestions({
                         <TouchableOpacity
                             key={`${suggestion}-${index}`}
                             onPress={() => handleSuggestionPress(suggestion)}
+                            className="px-4 py-3"
                             style={{
-                                paddingHorizontal: 16,
-                                paddingVertical: 12,
                                 borderBottomWidth: index < filteredSuggestions.length - 1 ? 0.6 : 0,
                                 borderBottomColor: borderColor,
                             }}

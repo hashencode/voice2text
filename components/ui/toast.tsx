@@ -495,7 +495,7 @@ export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
 
     return (
         <ToastContext.Provider value={contextValue}>
-            <GestureHandlerRootView style={{ flex: 1 }}>
+            <GestureHandlerRootView className="flex-1">
                 {children}
                 <View className="pointer-events-box-none absolute left-0 right-0 top-0 z-[1000]" pointerEvents="box-none">
                     {(() => {

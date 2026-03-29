@@ -180,7 +180,7 @@ export function ShareButton({
         const textContent = typeof children === 'string' ? <TextX style={getButtonTextStyle()}>{children}</TextX> : children;
 
         return (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View className="flex-row items-center">
                 <ShareIcon size={iconSize} color={getButtonTextStyle().color} style={{ marginRight: 8 }} />
                 {textContent}
             </View>

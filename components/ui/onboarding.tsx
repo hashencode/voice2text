@@ -208,7 +208,7 @@ export function Onboarding({
             {/* Navigation Buttons */}
             <View style={styles.buttonContainer}>
                 {!isFirstStep && (
-                    <ButtonX variant="outline" onPress={handleBack} style={{ flex: 1 }}>
+                    <ButtonX variant="outline" onPress={handleBack} className="flex-1">
                         {backButtonText}
                     </ButtonX>
                 )}

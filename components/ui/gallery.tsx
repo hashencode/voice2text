@@ -535,17 +535,14 @@ export function Gallery({
                     {showPages && (
                         <TextX
                             variant="body"
-                            style={{
-                                textAlign: 'center',
-                                marginBottom: 8,
-                                color: mutedColor,
-                            }}>
+                            className="mb-2 text-center"
+                            style={{ color: mutedColor }}>
                             {selectedIndex + 1} of {items.length}
                         </TextX>
                     )}
 
                     {currentItem?.title && (
-                        <TextX variant="subtitle" style={{ textAlign: 'center', marginBottom: 8, color: textColor }} numberOfLines={1}>
+                        <TextX variant="subtitle" className="mb-2 text-center" style={{ color: textColor }} numberOfLines={1}>
                             {currentItem.title}
                         </TextX>
                     )}
@@ -553,11 +550,8 @@ export function Gallery({
                     {currentItem?.description && (
                         <TextX
                             variant="body"
-                            style={{
-                                textAlign: 'center',
-                                marginBottom: 16,
-                                color: mutedColor,
-                            }}
+                            className="mb-4 text-center"
+                            style={{ color: mutedColor }}
                             numberOfLines={2}>
                             {currentItem.description}
                         </TextX>
@@ -584,7 +578,7 @@ export function Gallery({
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.thumbnailContainer}
-                        ItemSeparatorComponent={() => <View style={{ width: 8 }} />} // Spacing between thumbnails
+                        ItemSeparatorComponent={() => <View className="w-2" />} // Spacing between thumbnails
                         getItemLayout={(data, index) => ({
                             length: 48, // Fixed item length for layout calculation
                             offset: 56 * index, // Offset for each item (item length + separator width)
@@ -609,7 +603,7 @@ export function Gallery({
 
     return (
         // GestureHandlerRootView is required for React Native Gesture Handler to work
-        <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureHandlerRootView className="flex-1">
             {/* ScrollView for the main gallery grid */}
             <ScrollView
                 style={[styles.container, { backgroundColor }]}
@@ -631,9 +625,9 @@ export function Gallery({
                 statusBarTranslucent
                 maskColor={backgroundColor}
                 contentTransitionPreset="fade">
-                <View style={{ flex: 1, backgroundColor }}>
+                <View className="flex-1" style={{ backgroundColor }}>
                     {/* GestureHandlerRootView for gestures within the modal */}
-                    <GestureHandlerRootView style={{ flex: 1 }}>
+                    <GestureHandlerRootView className="flex-1">
                         {/* FlatList for horizontal swiping of fullscreen images */}
                         <FlatList
                             ref={fullscreenFlatListRef}

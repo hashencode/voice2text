@@ -47,7 +47,7 @@ export function HelloWave({ children = '👋', size = 'md' }: HelloWaveProps) {
     const sizeStyle = sizeVariants[size];
 
     return (
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View className="items-center justify-center">
             <Animated.View style={animatedStyle}>
                 {typeof children === 'string' ? <TextX style={sizeStyle}>{children}</TextX> : children}
             </Animated.View>

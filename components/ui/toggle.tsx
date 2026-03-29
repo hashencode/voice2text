@@ -233,7 +233,7 @@ export function ToggleGroup({
                     disabled={disabled || item.disabled}
                     style={getItemStyle(index)}>
                     {item.icon && item.label ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View className="flex-row items-center gap-2">
                             <Icon
                                 name={item.icon}
                                 size={16}
