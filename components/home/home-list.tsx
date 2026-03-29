@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
 import { FolderInput, Heart, PencilLine, Share2, Trash2 } from 'lucide-react-native';
 import React from 'react';
-import { Animated, Easing, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import NameInputDialog from '~/components/home/common/name-input-dialog';
 import FileListToolbar from '~/components/home/file-list/file-list-toolbar';
 import FileListView from '~/components/home/file-list/file-list-view';
@@ -165,10 +165,8 @@ export default function HomeList() {
         toggleSelectAllFolders,
     } = useFolderSelection(selectableFolderNames, ALL_FOLDERS_KEY);
     const selectedCount = isFolderListMode ? selectedFolderNames.length : selectedPaths.length;
-    const actionMenuVisible = (isMultiSelectMode || isSingleSelectMode) && selectedCount > 0;
     const isSingleMaskVisible = isSingleSelectMode || isSingleSelectClosing;
-    const actionMenuOpacity = React.useRef(new Animated.Value(0)).current;
-    const actionMenuTranslateY = React.useRef(new Animated.Value(16)).current;
+    const shouldRenderActionMenu = (isMultiSelectMode && selectedCount > 0) || isSingleMaskVisible;
     const selectedPathForRename = selectedCount === 1 ? selectedPaths[0] : null;
     const selectedItemForRename = React.useMemo(
         () => (selectedPathForRename ? items.find(item => item.path === selectedPathForRename) : undefined),
@@ -261,23 +259,6 @@ export default function HomeList() {
         setSelectedPaths([]);
         setSelectedFolderNames([name]);
     }, [setSelectedFolderNames, setSelectedPaths]);
-
-    React.useEffect(() => {
-        Animated.parallel([
-            Animated.timing(actionMenuOpacity, {
-                toValue: actionMenuVisible ? 1 : 0,
-                duration: 220,
-                easing: Easing.out(Easing.quad),
-                useNativeDriver: true,
-            }),
-            Animated.timing(actionMenuTranslateY, {
-                toValue: actionMenuVisible ? 0 : 16,
-                duration: 220,
-                easing: Easing.out(Easing.quad),
-                useNativeDriver: true,
-            }),
-        ]).start();
-    }, [actionMenuOpacity, actionMenuTranslateY, actionMenuVisible]);
 
     const actionMenuTitle =
         selectedCount <= 0
@@ -510,6 +491,19 @@ export default function HomeList() {
             </View>
         </View>
     );
+    const actionMenuLayer = (
+        <View
+            pointerEvents={shouldRenderActionMenu ? 'auto' : 'none'}
+            style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: cardColor,
+            }}>
+            {actionMenuContent}
+        </View>
+    );
 
     return (
         <View className="flex-1">
@@ -556,7 +550,7 @@ export default function HomeList() {
                 emptyText={isFolderListMode ? '暂无文件夹' : '暂无录音文件'}
                 isLoadedAll={!loading && !isFolderListMode && filteredItems.length > 0}
                 loadedAllText={isFolderListMode ? '已加载全部文件夹' : '已加载全部录音'}
-                contentContainerStyle={{ paddingBottom: actionMenuVisible ? 96 : 12 }}>
+                contentContainerStyle={{ paddingBottom: shouldRenderActionMenu ? 96 : 12 }}>
                 {isFolderListMode ? (
                     <FolderListView
                         folders={folderListEntries}
@@ -587,42 +581,14 @@ export default function HomeList() {
                     />
                 )}
             </PullToRefreshScrollView>
-            {isSingleMaskVisible ? (
-                <ModalMask
-                    isVisible={isSingleMaskVisible}
-                    onPressMask={exitSingleSelectMode}
-                    maskColor="rgba(0, 0, 0, 0.18)">
-                    <Animated.View
-                        pointerEvents={actionMenuVisible ? 'auto' : 'none'}
-                        style={{
-                            position: 'absolute',
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: cardColor,
-                            opacity: actionMenuOpacity,
-                            transform: [{ translateY: actionMenuTranslateY }],
-                        }}>
-                        {actionMenuContent}
-                    </Animated.View>
-                </ModalMask>
-            ) : null}
-            {!isSingleMaskVisible ? (
-                <Animated.View
-                    pointerEvents={actionMenuVisible ? 'auto' : 'none'}
-                    style={{
-                        position: 'absolute',
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-
-                        backgroundColor: cardColor,
-                        opacity: actionMenuOpacity,
-                        transform: [{ translateY: actionMenuTranslateY }],
-                    }}>
-                    {actionMenuContent}
-                </Animated.View>
-            ) : null}
+            <ModalMask
+                isVisible={isSingleMaskVisible}
+                onPressMask={exitSingleSelectMode}
+                contentTransitionPreset="slide-up"
+                contentTransitionDuration={160}>
+                {actionMenuLayer}
+            </ModalMask>
+            {!isSingleMaskVisible && shouldRenderActionMenu ? actionMenuLayer : null}
             <NameInputDialog
                 isVisible={renameDialogVisible}
                 onClose={() => {

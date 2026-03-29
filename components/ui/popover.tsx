@@ -310,8 +310,9 @@ export function PopoverContent({
     <ModalMask
       isVisible={isOpen}
       onPressMask={handleClose}
-      maskColor='rgba(0, 0, 0, 0.5)'
       animationType='fade'
+      contentTransitionPreset='scale'
+      contentTransitionDuration={180}
     >
       <View
         style={[
@@ -418,14 +419,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: BORDER_RADIUS,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 8,
     minWidth: 200, // Ensure minimum width
   },
   header: {

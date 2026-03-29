@@ -2,25 +2,16 @@ import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { ModalMask } from '@/components/ui/modal-mask';
 import { useColor } from '@/hooks/useColor';
-import { CORNERS, FONT_SIZE } from '@/theme/globals';
-import React, { useEffect, useState } from 'react';
+import { BORDER_RADIUS, FONT_SIZE } from '@/theme/globals';
+import React, { useEffect } from 'react';
 import {
   ActionSheetIOS,
-  Dimensions,
   Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import Animated, {
-  Easing,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 
 export interface ActionSheetOption {
   title: string;
@@ -113,44 +104,11 @@ function AndroidActionSheet({
   cancelButtonTitle,
   style,
 }: ActionSheetProps) {
-  const [isSheetVisible, setIsSheetVisible] = useState(visible);
-  const progress = useSharedValue(0);
-  const screenHeight = Dimensions.get('window').height;
-
   const cardColor = useColor('card');
   const textColor = useColor('text');
   const mutedColor = useColor('textMuted');
   const borderColor = useColor('border');
   const destructiveColor = useColor('red');
-
-  useEffect(() => {
-    if (visible) {
-      setIsSheetVisible(true);
-      progress.value = withTiming(1, {
-        duration: 300,
-        easing: Easing.out(Easing.quad),
-      });
-    } else {
-      // Animate out, then set the modal to invisible after the animation is done
-      progress.value = withTiming(
-        0,
-        { duration: 250, easing: Easing.in(Easing.quad) },
-        (finished) => {
-          if (finished) {
-            runOnJS(setIsSheetVisible)(false);
-          }
-        }
-      );
-    }
-  }, [visible, progress]);
-
-  // Animated style for the sheet itself (slide up/down)
-  const sheetAnimatedStyle = useAnimatedStyle(() => {
-    const translateY = interpolate(progress.value, [0, 1], [screenHeight, 0]);
-    return {
-      transform: [{ translateY }],
-    };
-  });
 
   const handleOptionPress = (option: ActionSheetOption) => {
     if (!option.disabled) {
@@ -163,27 +121,16 @@ function AndroidActionSheet({
     onClose();
   };
 
-  // Render null if the sheet is not supposed to be visible
-  if (!isSheetVisible) {
-    return null;
-  }
-
   return (
     <ModalMask
-      isVisible={isSheetVisible}
+      isVisible={visible}
       onPressMask={handleBackdropPress}
-      maskColor='rgba(0, 0, 0, 0.5)'
-      maskOpacitySV={progress}
       statusBarTranslucent
+      contentTransitionPreset='slide-up'
+      contentTransitionDuration={280}
     >
-      <Animated.View
-        style={[
-          styles.sheet,
-          { backgroundColor: cardColor },
-          sheetAnimatedStyle,
-          style,
-        ]}
-      >
+      <View style={styles.container} pointerEvents='box-none'>
+        <View style={[styles.sheet, { backgroundColor: cardColor }, style]}>
           {/* Header */}
           {(title || message) && (
             <View style={styles.header}>
@@ -259,7 +206,8 @@ function AndroidActionSheet({
               </TextX>
             </TouchableOpacity>
           </View>
-      </Animated.View>
+        </View>
+      </View>
     </ModalMask>
   );
 }
@@ -277,8 +225,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheet: {
-    borderTopLeftRadius: CORNERS,
-    borderTopRightRadius: CORNERS,
+    borderTopLeftRadius: BORDER_RADIUS,
+    borderTopRightRadius: BORDER_RADIUS,
     paddingBottom: 34, // Safe area bottom padding
     maxHeight: '80%',
     elevation: 10,

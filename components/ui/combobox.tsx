@@ -271,8 +271,9 @@ export function ComboboxContent({
     <ModalMask
       isVisible={isOpen}
       onPressMask={handleClose}
-      maskColor='rgba(0, 0, 0, 0.3)'
       animationType='fade'
+      contentTransitionPreset='scale'
+      contentTransitionDuration={180}
     >
       <View
         style={[

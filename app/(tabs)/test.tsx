@@ -27,7 +27,6 @@ import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/scripts/utils';
-import { withTiming, useSharedValue } from 'react-native-reanimated';
 
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
@@ -79,7 +78,6 @@ export default function Home() {
     const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [comboboxValue, setComboboxValue] = useState<OptionType | null>(null);
-    const modalMaskOpacity = useSharedValue(0);
     const vadPlayer = useAudioPlayer(null, { updateInterval: 200 });
     const vadPlayerStatus = useAudioPlayerStatus(vadPlayer);
 
@@ -275,10 +273,6 @@ export default function Home() {
         };
     }, [vadPlayer]);
 
-    useEffect(() => {
-        modalMaskOpacity.value = withTiming(isModalMaskVisible ? 1 : 0, { duration: 220 });
-    }, [isModalMaskVisible, modalMaskOpacity]);
-
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
@@ -385,11 +379,11 @@ export default function Home() {
             <ModalMask
                 isVisible={isModalMaskVisible}
                 onPressMask={() => setIsModalMaskVisible(false)}
-                maskColor="rgba(0, 0, 0, 0.18)"
-                maskOpacitySV={modalMaskOpacity}
-                renderMask={({ defaultMask }) => defaultMask}>
+                renderMask={({ defaultMask }) => defaultMask}
+                contentTransitionPreset="scale"
+                contentTransitionDuration={220}>
                 <View className="flex-1 items-center justify-center px-6">
-                    <View className="bg-card border-border w-full rounded-2xl border p-4">
+                    <View className="bg-card border-border w-full rounded-2xl border p-4 bg-white">
                         <TextX variant="subtitle">ModalMask 测试弹层</TextX>
                         <TextX variant="description" className="mt-2">
                             点击空白遮罩区域可关闭，用于验证 SharedValue 动画和点击关闭逻辑。

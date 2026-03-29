@@ -5,7 +5,7 @@ import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS } from '@/theme/globals';
 import { X } from 'lucide-react-native';
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   Dimensions,
   Platform,
@@ -13,14 +13,6 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import Animated, {
-  Easing,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -106,90 +98,33 @@ export function SheetTrigger({ children, asChild }: SheetTriggerProps) {
 export function SheetContent({ children, style }: SheetContentProps) {
   const { open, onOpenChange, side } = useSheet();
   const sheetWidth = Math.min(SCREEN_WIDTH * 0.8, 400);
-  const [isVisible, setIsVisible] = React.useState(open);
 
   const backgroundColor = useColor('background');
-  const borderColor = useColor('border');
   const iconColor = useColor('text');
-
-  // Animation values using Reanimated's useSharedValue
-  const initialPosition = side === 'left' ? -sheetWidth : sheetWidth;
-  const translateX = useSharedValue(initialPosition);
-  const overlayOpacity = useSharedValue(0);
-
-  // Effect to handle the animation based on the `open` prop
-  useEffect(() => {
-    // Reset position if side changes while closed
-    if (open && !isVisible) {
-      translateX.value = side === 'left' ? -sheetWidth : sheetWidth;
-    }
-
-    if (open) {
-      setIsVisible(true); // Mount the modal
-      // Animate in
-      translateX.value = withTiming(0, {
-        duration: 300,
-        easing: Easing.out(Easing.quad),
-      });
-      overlayOpacity.value = withTiming(1, { duration: 300 });
-    } else if (isVisible) {
-      // Animate out, then hide modal in the callback
-      translateX.value = withTiming(
-        initialPosition,
-        { duration: 250 },
-        (finished) => {
-          if (finished) {
-            // Use runOnJS to update React state from the UI thread
-            runOnJS(setIsVisible)(false);
-          }
-        }
-      );
-      overlayOpacity.value = withTiming(0, { duration: 250 });
-    }
-  }, [open, side, sheetWidth]); // Rerun if these change
-
-  // Animated style for the sheet content
-  const animatedSheetStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: translateX.value }],
-    };
-  });
-
-  // Animated style for the overlay
-  const animatedOverlayStyle = useAnimatedStyle(() => {
-    return {
-      opacity: interpolate(overlayOpacity.value, [0, 1], [0, 0.3]),
-    };
-  });
 
   const handleClose = () => {
     onOpenChange(false);
   };
 
-  if (!isVisible) {
-    return null;
-  }
-
   return (
     <ModalMask
-      isVisible={isVisible}
+      isVisible={open}
       onPressMask={handleClose}
-      maskColor='rgba(0, 0, 0, 1)'
-      maskAnimatedStyle={animatedOverlayStyle}
       statusBarTranslucent
+      contentTransitionPreset={side === 'left' ? 'slide-right' : 'slide-left'}
+      contentTransitionDistance={sheetWidth}
+      contentTransitionDuration={280}
     >
       {/* Sheet */}
-      <Animated.View
+      <View
         style={[
           styles.sheet,
           {
             borderRadius: BORDER_RADIUS,
             backgroundColor,
-            borderColor,
             width: sheetWidth,
             [side]: 0,
           },
-          animatedSheetStyle, // Apply the animated style
           style,
         ]}
       >
@@ -210,7 +145,7 @@ export function SheetContent({ children, style }: SheetContentProps) {
 
           {/* Content */}
           <View style={styles.contentContainer}>{children}</View>
-      </Animated.View>
+      </View>
     </ModalMask>
   );
 }
@@ -242,8 +177,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
     ...Platform.select({
       ios: {
         shadowColor: '#000',

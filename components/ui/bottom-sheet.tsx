@@ -14,18 +14,21 @@ import {
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAX_TRANSLATE_Y = -SCREEN_HEIGHT + 50;
+const SHEET_SPRING_CONFIG = {
+  damping: 28,
+  stiffness: 280,
+  overshootClamping: true,
+};
 
 type BottomSheetContentProps = {
   children: React.ReactNode;
@@ -139,7 +142,6 @@ export function BottomSheet({
 
   const translateY = useSharedValue(0);
   const context = useSharedValue({ y: 0 });
-  const opacity = useSharedValue(0);
   const currentSnapIndex = useSharedValue(0);
   // Shared value to hold keyboard height for use in worklets
   const keyboardHeightSV = useSharedValue(0);
@@ -153,15 +155,10 @@ export function BottomSheet({
   useEffect(() => {
     if (isVisible) {
       setModalVisible(true);
-      translateY.value = withSpring(defaultHeight, {
-        damping: 50,
-        stiffness: 400,
-      });
-      opacity.value = withTiming(1, { duration: 300 });
+      translateY.value = withSpring(defaultHeight, SHEET_SPRING_CONFIG);
       currentSnapIndex.value = 0;
     } else {
-      translateY.value = withSpring(0, { damping: 50, stiffness: 400 });
-      opacity.value = withTiming(0, { duration: 300 }, (finished) => {
+      translateY.value = withSpring(0, SHEET_SPRING_CONFIG, (finished) => {
         if (finished) {
           runOnJS(setModalVisible)(false);
         }
@@ -172,7 +169,7 @@ export function BottomSheet({
   // Function to animate the sheet to a specific destination
   const scrollTo = (destination: number) => {
     'worklet';
-    translateY.value = withSpring(destination, { damping: 50, stiffness: 400 });
+    translateY.value = withSpring(destination, SHEET_SPRING_CONFIG);
   };
 
   // --- START: NEW KEYBOARD HANDLING LOGIC ---
@@ -228,8 +225,7 @@ export function BottomSheet({
 
   const animateClose = () => {
     'worklet';
-    translateY.value = withSpring(0, { damping: 50, stiffness: 400 });
-    opacity.value = withTiming(0, { duration: 300 }, (finished) => {
+    translateY.value = withSpring(0, SHEET_SPRING_CONFIG, (finished) => {
       if (finished) {
         runOnJS(onClose)();
       }
@@ -268,12 +264,6 @@ export function BottomSheet({
     };
   });
 
-  const rBackdropStyle = useAnimatedStyle(() => {
-    return {
-      opacity: opacity.value,
-    };
-  });
-
   const handleBackdropPress = () => {
     if (enableBackdropDismiss) {
       animateClose();
@@ -285,20 +275,10 @@ export function BottomSheet({
       isVisible={modalVisible}
       onPressMask={handleBackdropPress}
       statusBarTranslucent
-      renderMask={({ onPressMask }) => (
-        <Animated.View
-          style={[
-            { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)' },
-            rBackdropStyle,
-          ]}
-        >
-          <TouchableWithoutFeedback onPress={onPressMask}>
-            <Animated.View style={{ flex: 1 }} />
-          </TouchableWithoutFeedback>
-        </Animated.View>
-      )}
+      contentTransitionPreset='fade'
+      contentTransitionDuration={180}
     >
-      <GestureHandlerRootView style={{ flex: 1 }} pointerEvents='box-none'>
+      <View style={{ flex: 1 }} pointerEvents='box-none'>
         {disablePanGesture ? (
           <BottomSheetContent
             title={title}
@@ -324,7 +304,7 @@ export function BottomSheet({
             </BottomSheetContent>
           </GestureDetector>
         )}
-      </GestureHandlerRootView>
+      </View>
     </ModalMask>
   );
 }
