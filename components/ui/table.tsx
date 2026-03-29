@@ -2,7 +2,7 @@ import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, FONT_SIZE, HEIGHT } from '@/theme/globals';
+import { BORDER_RADIUS, BUTTON_HEIGHT, FONT_SIZE } from '@/theme/globals';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Search } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, TextInput, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
@@ -314,7 +314,7 @@ export function Table<T = any>({
                     borderBottomWidth: 1,
                     borderColor: borderColor,
                     paddingHorizontal: 18,
-                    height: HEIGHT,
+                    height: BUTTON_HEIGHT,
                     marginVertical: 2,
                 }}>
                 <Search size={16} color={mutedColor} className="mr-2" />

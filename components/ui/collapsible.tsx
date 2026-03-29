@@ -10,20 +10,13 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
 
     return (
         <View>
-            <TouchableOpacity
-                className="flex-row items-center gap-1.5"
-                onPress={() => setIsOpen(value => !value)}
-                activeOpacity={0.8}>
+            <TouchableOpacity className="flex-row items-center gap-1.5" onPress={() => setIsOpen(value => !value)} activeOpacity={0.8}>
                 <Icon name={ChevronRight} size={18} style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }} />
 
                 <TextX variant="subtitle">{title}</TextX>
             </TouchableOpacity>
 
-            {isOpen && (
-                <View className="ml-6 mt-1.5">
-                    {children}
-                </View>
-            )}
+            {isOpen && <View className="ml-6 mt-1.5">{children}</View>}
         </View>
     );
 }

@@ -5,7 +5,7 @@ import { ScrollView } from '@/components/ui/scroll-view';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, CORNERS, HEIGHT } from '@/theme/globals';
+import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import { ArrowRight, Calendar, CalendarClock, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
@@ -863,7 +863,7 @@ export function DatePicker(props: DatePickerProps) {
         borderColor: variant === 'outline' ? borderColor : cardColor,
         borderRadius: CORNERS,
         backgroundColor: variant === 'filled' ? cardColor : 'transparent',
-        minHeight: variant === 'group' ? 'auto' : HEIGHT,
+        minHeight: variant === 'group' ? 'auto' : BUTTON_HEIGHT,
     };
 
     return (

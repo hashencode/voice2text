@@ -2,7 +2,7 @@ import { Icon } from '@/components/ui/icon';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { CORNERS, HEIGHT } from '@/theme/globals';
+import { BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import { LucideProps } from 'lucide-react-native';
 import React from 'react';
 import { TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
@@ -55,12 +55,12 @@ export function Toggle({
         switch (size) {
             case 'icon':
                 Object.assign(baseStyle, {
-                    width: HEIGHT,
-                    height: HEIGHT,
+                    width: BUTTON_HEIGHT,
+                    height: BUTTON_HEIGHT,
                 });
                 break;
             default:
-                Object.assign(baseStyle, { height: HEIGHT, paddingHorizontal: 32 });
+                Object.assign(baseStyle, { height: BUTTON_HEIGHT, paddingHorizontal: 32 });
         }
 
         // State and variant styles - following button component pattern

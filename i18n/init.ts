@@ -5,20 +5,20 @@ import { fallbackChecker } from './fallbackChecker';
 import { languageDetector } from './languageDetector';
 
 type Init18n = {
-  resources: Resource;
-  fallbackLng: string;
+    resources: Resource;
+    fallbackLng: string;
 };
 
 export const init18n = ({ resources, fallbackLng }: Init18n) => {
-  return i18n
-    .use(languageDetector)
-    .use(initReactI18next)
-    .init({
-      resources,
-      fallbackLng: fallbackChecker(resources, fallbackLng),
-      compatibilityJSON: 'v3', // By default React Native projects does not support Intl
-      interpolation: {
-        escapeValue: false,
-      },
-    });
+    return i18n
+        .use(languageDetector)
+        .use(initReactI18next)
+        .init({
+            resources,
+            fallbackLng: fallbackChecker(resources, fallbackLng),
+            compatibilityJSON: 'v3', // By default React Native projects does not support Intl
+            interpolation: {
+                escapeValue: false,
+            },
+        });
 };

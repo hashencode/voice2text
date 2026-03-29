@@ -217,8 +217,8 @@ export function useWavRecording({
               : phase === 'paused'
                 ? '继续录音'
                 : phase === 'recording'
-                ? '停止录音并保存'
-                : '开始录音';
+                  ? '停止录音并保存'
+                  : '开始录音';
 
     return {
         phase,

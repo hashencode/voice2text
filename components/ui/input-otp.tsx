@@ -225,9 +225,7 @@ export const InputOTP = forwardRef<InputOTPRef, InputOTPProps>(
                 />
 
                 {/* OTP Slots */}
-                <View
-                    className="flex-row items-center justify-center"
-                    style={{ gap: separator ? 0 : 8 }}>
+                <View className="flex-row items-center justify-center" style={{ gap: separator ? 0 : 8 }}>
                     {slots}
                 </View>
 
