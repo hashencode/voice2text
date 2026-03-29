@@ -1,4 +1,5 @@
 import { Icon } from '@/components/ui/icon';
+import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { acquireOverlayInteractionLock } from '@/hooks/use-overlay-interaction-lock';
@@ -15,7 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
+import { ScrollView, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
 
 export interface PickerOption {
     label: string;
@@ -307,27 +308,8 @@ export function Picker({
                 </TextX>
             )}
 
-            <Modal
-                visible={isOpen}
-                transparent
-                animationType="fade"
-                hardwareAccelerated
-                statusBarTranslucent
-                onRequestClose={() => setOpen(false)}>
-                <View className="flex-1">
-                    <Pressable className="absolute inset-0 bg-black/50" onPress={() => setOpen(false)} />
-                </View>
-            </Modal>
-
-            <Modal
-                visible={isOpen}
-                transparent
-                animationType="slide"
-                hardwareAccelerated
-                statusBarTranslucent
-                onRequestClose={() => setOpen(false)}>
+            <ModalMask isVisible={isOpen} onPressMask={() => setOpen(false)} statusBarTranslucent contentTransitionPreset="slide-up">
                 <View className="flex-1 justify-end">
-                    <Pressable className="absolute inset-0" onPress={() => setOpen(false)} />
                     <View
                         className="w-full overflow-hidden pb-8"
                         style={{
@@ -394,7 +376,7 @@ export function Picker({
                         </View>
                     </View>
                 </View>
-            </Modal>
+            </ModalMask>
         </>
     );
 }

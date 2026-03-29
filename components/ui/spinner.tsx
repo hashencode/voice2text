@@ -1,3 +1,4 @@
+import { ModalMask } from '@/components/ui/modal-mask';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { Loader2 } from 'lucide-react-native';
@@ -260,22 +261,16 @@ export function Spinner({ size = 'default', variant = 'default', label, showLabe
 }
 
 // Loading Overlay Component
-export function LoadingOverlay({ visible, backdrop = true, backdropColor, backdropOpacity = 0.5, ...spinnerProps }: LoadingOverlayProps) {
-    const opacity = useSharedValue(0);
+export function LoadingOverlay({
+    visible,
+    backdrop = true,
+    backdropColor,
+    backdropOpacity = 0.5,
+    onRequestClose,
+    ...spinnerProps
+}: LoadingOverlayProps) {
     const backgroundColor = useColor('background');
     const cardColor = useColor('card');
-
-    useEffect(() => {
-        opacity.value = withTiming(visible ? 1 : 0, {
-            duration: 200,
-        });
-    }, [visible, opacity]);
-
-    const animatedOverlayStyle = useAnimatedStyle(() => ({
-        opacity: opacity.value,
-        // Conditionally render to avoid interaction issues
-        display: opacity.value === 0 ? 'none' : 'flex',
-    }));
 
     const defaultBackdropColor =
         backdropColor ||
@@ -284,13 +279,18 @@ export function LoadingOverlay({ visible, backdrop = true, backdropColor, backdr
             .padStart(2, '0')}`;
 
     return (
-        <Animated.View
-            style={[styles.overlay, { backgroundColor: backdrop ? defaultBackdropColor : 'transparent' }, animatedOverlayStyle]}
-            pointerEvents={visible ? 'auto' : 'none'}>
-            <View style={[styles.overlayContent, { backgroundColor: cardColor }]}>
-                <Spinner {...spinnerProps} />
+        <ModalMask
+            isVisible={visible}
+            onPressMask={onRequestClose ?? (() => {})}
+            statusBarTranslucent
+            maskColor={backdrop ? defaultBackdropColor : 'transparent'}
+            contentTransitionPreset="fade">
+            <View style={styles.overlay} pointerEvents="box-none">
+                <View style={[styles.overlayContent, { backgroundColor: cardColor }]}>
+                    <Spinner {...spinnerProps} />
+                </View>
             </View>
-        </Animated.View>
+        </ModalMask>
     );
 }
 

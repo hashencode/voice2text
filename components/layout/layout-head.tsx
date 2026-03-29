@@ -1,5 +1,5 @@
-import { useNavigation } from 'expo-router';
 import { useThrottleFn } from 'ahooks';
+import { useNavigation } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { ReactNode } from 'react';
 import { ButtonX } from '~/components/ui/buttonx';

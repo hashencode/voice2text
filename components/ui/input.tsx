@@ -154,8 +154,7 @@ export const Input = forwardRef<TextInput, InputProps>(
 
         const customRightComponent = renderRightComponent();
         const shouldAutoShowClearButton = !customRightComponent;
-        const hasClearButton =
-            !disabled && currentValue.length > 0 && (clearable || shouldAutoShowClearButton);
+        const hasClearButton = !disabled && currentValue.length > 0 && (clearable || shouldAutoShowClearButton);
 
         const renderTrailingActions = () => {
             if (!hasClearButton && !customRightComponent) {

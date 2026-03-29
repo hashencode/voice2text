@@ -242,23 +242,29 @@ export default function HomeList() {
             singleSelectClosingTimerRef.current = null;
         }, SINGLE_MENU_EXIT_DURATION);
     }, [SINGLE_MENU_EXIT_DURATION, setSelectedFolderNames, setSelectedPaths]);
-    const openSingleActionForFile = React.useCallback((path: string) => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        setIsMultiSelectMode(false);
-        setIsSingleSelectMode(true);
-        setSelectedFolderNames([]);
-        setSelectedPaths([path]);
-    }, [setSelectedFolderNames, setSelectedPaths]);
-    const openSingleActionForFolder = React.useCallback((name: string) => {
-        if (name === ALL_FOLDERS_KEY) {
-            return;
-        }
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        setIsMultiSelectMode(false);
-        setIsSingleSelectMode(true);
-        setSelectedPaths([]);
-        setSelectedFolderNames([name]);
-    }, [setSelectedFolderNames, setSelectedPaths]);
+    const openSingleActionForFile = React.useCallback(
+        (path: string) => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setIsMultiSelectMode(false);
+            setIsSingleSelectMode(true);
+            setSelectedFolderNames([]);
+            setSelectedPaths([path]);
+        },
+        [setSelectedFolderNames, setSelectedPaths],
+    );
+    const openSingleActionForFolder = React.useCallback(
+        (name: string) => {
+            if (name === ALL_FOLDERS_KEY) {
+                return;
+            }
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setIsMultiSelectMode(false);
+            setIsSingleSelectMode(true);
+            setSelectedPaths([]);
+            setSelectedFolderNames([name]);
+        },
+        [setSelectedFolderNames, setSelectedPaths],
+    );
 
     const actionMenuTitle =
         selectedCount <= 0
@@ -448,7 +454,7 @@ export default function HomeList() {
         [handleConfirmFavorite, handleOpenRenameDialog, isSingleSelectMode, selectedCount, selectedPaths, shareSingleFile, toast],
     );
     const actionMenuActions = isFolderListMode
-        ? (isMultiSelectMode
+        ? isMultiSelectMode
             ? [
                   { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
                   { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
@@ -457,21 +463,21 @@ export default function HomeList() {
                   { key: 'rename', label: '重命名', icon: PencilLine, disabled: selectedCount === 0 },
                   { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
                   { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
-              ])
-        : (isMultiSelectMode
-            ? [
-                  { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
-                  { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
-                  { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
-                  { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
               ]
-            : [
-                  { key: 'rename', label: '重命名', icon: PencilLine, disabled: selectedCount === 0 },
-                  { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
-                  { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
-                  { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
-                  { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
-              ]);
+        : isMultiSelectMode
+          ? [
+                { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
+                { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
+                { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
+                { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
+            ]
+          : [
+                { key: 'rename', label: '重命名', icon: PencilLine, disabled: selectedCount === 0 },
+                { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
+                { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
+                { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
+                { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
+            ];
     const actionMenuContent = (
         <View className="border-t py-4" style={{ borderTopColor: borderColor }}>
             <View className="flex flex-row justify-between">
@@ -581,11 +587,7 @@ export default function HomeList() {
                     />
                 )}
             </PullToRefreshScrollView>
-            <ModalMask
-                isVisible={isSingleMaskVisible}
-                onPressMask={exitSingleSelectMode}
-                contentTransitionPreset="slide-up"
-                contentTransitionDuration={160}>
+            <ModalMask isVisible={isSingleMaskVisible} onPressMask={exitSingleSelectMode} contentTransitionPreset="slide-up">
                 {actionMenuLayer}
             </ModalMask>
             {!isSingleMaskVisible && shouldRenderActionMenu ? actionMenuLayer : null}

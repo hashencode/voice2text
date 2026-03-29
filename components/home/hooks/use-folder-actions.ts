@@ -60,7 +60,13 @@ export function useFolderActions({
     setSelectedFolderNames,
 }: UseFolderActionsParams) {
     const confirmRenameFolder = React.useCallback(
-        async ({ renaming, selectedFolderNameForRename, setRenaming, setRenameError, closeRenameDialog }: RenameFolderRuntime): Promise<boolean> => {
+        async ({
+            renaming,
+            selectedFolderNameForRename,
+            setRenaming,
+            setRenameError,
+            closeRenameDialog,
+        }: RenameFolderRuntime): Promise<boolean> => {
             if (renaming || !selectedFolderNameForRename) {
                 return false;
             }
@@ -113,7 +119,17 @@ export function useFolderActions({
                 setRenaming(false);
             }
         },
-        [allFoldersKey, folders, renameValue, selectedFolder, setFolders, setSelectedFolder, setSelectedFolderNames, toastApi, validateName],
+        [
+            allFoldersKey,
+            folders,
+            renameValue,
+            selectedFolder,
+            setFolders,
+            setSelectedFolder,
+            setSelectedFolderNames,
+            toastApi,
+            validateName,
+        ],
     );
 
     const confirmCreateFolder = React.useCallback(
@@ -138,7 +154,9 @@ export function useFolderActions({
                 setCreateFolderError('');
                 const now = Date.now();
                 await createFolder(sanitizedName);
-                setFolders(prev => [...prev, { name: sanitizedName, createdAtMs: now, isFavorite: false }].sort((a, b) => b.createdAtMs - a.createdAtMs));
+                setFolders(prev =>
+                    [...prev, { name: sanitizedName, createdAtMs: now, isFavorite: false }].sort((a, b) => b.createdAtMs - a.createdAtMs),
+                );
                 closeCreateDialog();
                 toastApi.toast({
                     title: '创建文件夹成功',

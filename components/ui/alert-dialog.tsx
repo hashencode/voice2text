@@ -1,11 +1,12 @@
 import type { ButtonProps } from '@/components/ui/buttonx';
 import { ButtonX } from '@/components/ui/buttonx';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { ModalMask } from '@/components/ui/modal-mask';
 import { useColor } from '@/hooks/useColor';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import React, { useEffect } from 'react';
-import { LayoutChangeEvent, Modal, StyleSheet, TouchableWithoutFeedback, useWindowDimensions, ViewStyle } from 'react-native';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { LayoutChangeEvent, StyleSheet, useWindowDimensions, ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { TextX } from '~/components/ui/textx';
 
 export type AlertDialogProps = {
@@ -46,30 +47,17 @@ export function AlertDialog({
     const { height: windowHeight } = useWindowDimensions();
     const { keyboardHeight, isKeyboardVisible, keyboardAnimationDuration } = useKeyboardHeight();
 
-    const [modalVisible, setModalVisible] = React.useState(false);
     const [dialogLayout, setDialogLayout] = React.useState<{ y: number; height: number } | null>(null);
-    const backdropOpacity = useSharedValue(0);
-    const cardOpacity = useSharedValue(0);
     const cardTranslateY = useSharedValue(0);
 
     useEffect(() => {
-        if (isVisible) {
-            setModalVisible(true);
-            backdropOpacity.value = withTiming(1, { duration: 250 });
-            cardOpacity.value = withTiming(1, { duration: 200 });
-        } else {
+        if (!isVisible) {
             cardTranslateY.value = withTiming(0, { duration: 200 });
-            backdropOpacity.value = withTiming(0, { duration: 250 }, finished => {
-                if (finished) {
-                    runOnJS(setModalVisible)(false);
-                }
-            });
-            cardOpacity.value = withTiming(0, { duration: 200 });
         }
-    }, [isVisible]);
+    }, [cardTranslateY, isVisible]);
 
     useEffect(() => {
-        if (!isVisible || !modalVisible || !dialogLayout) {
+        if (!isVisible || !dialogLayout) {
             cardTranslateY.value = withTiming(0, { duration: 180 });
             return;
         }
@@ -82,45 +70,27 @@ export function AlertDialog({
         const duration = keyboardAnimationDuration > 0 ? keyboardAnimationDuration : 220;
 
         cardTranslateY.value = withTiming(targetTranslateY, { duration });
-    }, [cardTranslateY, dialogLayout, isKeyboardVisible, isVisible, keyboardAnimationDuration, keyboardHeight, modalVisible, windowHeight]);
-
-    const rBackdropStyle = useAnimatedStyle(() => ({
-        opacity: backdropOpacity.value,
-    }));
-
-    const rCardFadeStyle = useAnimatedStyle(() => ({
-        opacity: cardOpacity.value,
-    }));
+    }, [cardTranslateY, dialogLayout, isKeyboardVisible, isVisible, keyboardAnimationDuration, keyboardHeight, windowHeight]);
 
     const rCardWrapperStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: cardTranslateY.value }],
     }));
 
-    const animateClose = () => {
-        'worklet';
-        backdropOpacity.value = withTiming(0, { duration: 300 }, finished => {
-            if (finished) {
-                runOnJS(onClose)();
-            }
-        });
-        cardOpacity.value = withTiming(0, { duration: 200 });
-    };
-
     const handleBackdropPress = () => {
         if (dismissible) {
-            animateClose();
+            onClose();
             if (onCancel) onCancel();
         }
     };
 
     const handleCancel = () => {
         if (onCancel) onCancel();
-        animateClose();
+        onClose();
     };
 
     const handleConfirm = async () => {
         if (!onConfirm) {
-            animateClose();
+            onClose();
             return;
         }
 
@@ -129,7 +99,7 @@ export function AlertDialog({
             if (shouldClose === false) {
                 return;
             }
-            animateClose();
+            onClose();
         } catch {
             // Keep dialog open when confirm action fails.
         }
@@ -146,75 +116,49 @@ export function AlertDialog({
     };
 
     return (
-        <Modal visible={modalVisible} transparent statusBarTranslucent animationType="none">
-            <Animated.View style={[styles.backdrop, rBackdropStyle]}>
-                <TouchableWithoutFeedback onPress={handleBackdropPress}>
-                    <Animated.View style={styles.backdropTouchableArea} />
-                </TouchableWithoutFeedback>
-
-                {/* Non-animated outer wrapper: handles rounded corners and clipping */}
+        <ModalMask isVisible={isVisible} onPressMask={handleBackdropPress} statusBarTranslucent contentTransitionPreset="scale">
+            <Animated.View style={styles.contentContainer} pointerEvents="box-none">
                 <Animated.View
                     onLayout={handleDialogLayout}
                     style={[styles.roundedWrapper, rCardWrapperStyle, { backgroundColor: cardColor }, style]}>
-                    {/* Only fade the inner content */}
-                    <Animated.View style={[styles.innerContent, rCardFadeStyle]}>
-                        <Card
-                            // Card has no rounded corners, background or shadow (delegated to wrapper)
-                            style={{ backgroundColor: 'transparent', elevation: 0 }}>
-                            {(title || description) && (
-                                <CardHeader>
-                                    {title ? <CardTitle>{title}</CardTitle> : null}
-                                    {description ? <TextX variant="description">{description}</TextX> : null}
-                                </CardHeader>
-                            )}
-                            {children ? <CardContent>{children}</CardContent> : null}
-                            <CardFooter>
-                                {showCancelButton && (
-                                    <ButtonX
-                                        variant="secondary"
-                                        className="flex-grow"
-                                        size="lg"
-                                        onPress={handleCancel}
-                                        {...cancelButtonProps}>
-                                        {cancelText}
-                                    </ButtonX>
-                                )}
-                                <ButtonX variant="primary" className="flex-grow" size="lg" onPress={handleConfirm} {...confirmButtonProps}>
-                                    {confirmText}
+                    <Card
+                        // Card has no rounded corners, background or shadow (delegated to wrapper)
+                        style={{ backgroundColor: 'transparent', elevation: 0 }}>
+                        {(title || description) && (
+                            <CardHeader>
+                                {title ? <CardTitle>{title}</CardTitle> : null}
+                                {description ? <TextX variant="description">{description}</TextX> : null}
+                            </CardHeader>
+                        )}
+                        {children ? <CardContent>{children}</CardContent> : null}
+                        <CardFooter>
+                            {showCancelButton && (
+                                <ButtonX variant="secondary" className="flex-grow" size="lg" onPress={handleCancel} {...cancelButtonProps}>
+                                    {cancelText}
                                 </ButtonX>
-                            </CardFooter>
-                        </Card>
-                    </Animated.View>
+                            )}
+                            <ButtonX variant="primary" className="flex-grow" size="lg" onPress={handleConfirm} {...confirmButtonProps}>
+                                {confirmText}
+                            </ButtonX>
+                        </CardFooter>
+                    </Card>
                 </Animated.View>
             </Animated.View>
-        </Modal>
+        </ModalMask>
     );
 }
 
 const styles = StyleSheet.create({
-    backdrop: {
+    contentContainer: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
         alignItems: 'center',
         justifyContent: 'center',
         padding: 24,
     },
-    backdropTouchableArea: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-    },
-    // Rounded corners and clipping consolidated here (non-animated)
     roundedWrapper: {
         width: '100%',
         borderRadius: 16,
         overflow: 'hidden',
-    },
-    // Inner content can render freely (only opacity is animated)
-    innerContent: {
-        width: '100%',
     },
 });
 

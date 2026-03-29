@@ -1,5 +1,5 @@
-import React from 'react';
 import * as FileSystem from 'expo-file-system/legacy';
+import React from 'react';
 import { deleteRecordingMeta, updateRecordingDisplayName } from '~/db/sqlite/services/recordings.service';
 
 type FileItem = {

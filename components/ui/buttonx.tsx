@@ -25,7 +25,7 @@ import { TextX } from '~/components/ui/textx';
 
 export type ButtonVariant = 'default' | 'text' | 'primary' | 'destructive' | 'success' | 'outline' | 'secondary' | 'ghost' | 'link';
 
-export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
+export type ButtonSize = 'default' | 'sm' | 'lg';
 
 export interface ButtonProps extends Omit<TouchableOpacityProps, 'style'> {
     label?: string;
@@ -76,6 +76,10 @@ export const ButtonX = forwardRef<View, ButtonProps>(
         const borderColor = useColor('border');
         const textColor = useColor('text');
         const outlineColor = useColor('text', { reverse: true });
+        const hasStringChildren = typeof children === 'string' && children.trim().length > 0;
+        const hasNodeChildren =
+            children !== undefined && children !== null && !(typeof children === 'string' && children.trim().length === 0);
+        const isIconOnly = Boolean(icon) && !hasNodeChildren;
 
         // Animation values for liquid glass effect
         const scale = useSharedValue(1);
@@ -97,15 +101,16 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                 case 'lg':
                     Object.assign(baseStyle, { height: BUTTON_HEIGHT_LG, paddingHorizontal: BUTTON_PADDING_HORIZON_LG });
                     break;
-                case 'icon':
-                    Object.assign(baseStyle, {
-                        height: BUTTON_HEIGHT,
-                        width: BUTTON_HEIGHT,
-                        paddingHorizontal: 0,
-                    });
-                    break;
                 default:
                     Object.assign(baseStyle, { height: BUTTON_HEIGHT, paddingHorizontal: BUTTON_PADDING_HORIZON });
+            }
+
+            if (isIconOnly) {
+                const edge = size === 'sm' ? BUTTON_HEIGHT_SM : size === 'lg' ? BUTTON_HEIGHT_LG : BUTTON_HEIGHT;
+                Object.assign(baseStyle, {
+                    width: edge,
+                    paddingHorizontal: 0,
+                });
             }
 
             // Variant styles
@@ -220,8 +225,6 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                     return BUTTON_ICON_SM;
                 case 'lg':
                     return BUTTON_ICON_LG;
-                case 'icon':
-                    return BUTTON_ICON;
                 default:
                     return BUTTON_ICON;
             }
@@ -352,6 +355,14 @@ export const ButtonX = forwardRef<View, ButtonProps>(
         const contentColor = getColor();
         const iconSize = getIconSize();
         const styleWithoutFlex = getStyleWithoutFlex();
+        const formatTwoCjkChars = (label: string): string => {
+            const trimmed = label.trim();
+            if (/^[\u4E00-\u9FFF]{2}$/.test(trimmed)) {
+                return `${trimmed[0]} ${trimmed[1]}`;
+            }
+            return label;
+        };
+        const displayLabel = hasStringChildren ? formatTwoCjkChars(children) : null;
 
         return animation ? (
             <Pressable
@@ -365,10 +376,14 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                 <Animated.View style={[animatedStyle, buttonStyle, styleWithoutFlex]}>
                     {loading ? (
                         <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
-                    ) : typeof children === 'string' ? (
+                    ) : hasStringChildren ? (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                             {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
-                            <TextX style={[finalTextStyle, textStyle]}>{children}</TextX>
+                            <TextX style={[finalTextStyle, textStyle]}>{displayLabel}</TextX>
+                        </View>
+                    ) : isIconOnly ? (
+                        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                            <Icon name={icon!} color={contentColor} size={iconSize} {...iconProps} />
                         </View>
                     ) : (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -388,10 +403,14 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                 {...props}>
                 {loading ? (
                     <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
-                ) : typeof children === 'string' ? (
+                ) : hasStringChildren ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         {icon && <Icon name={icon} color={contentColor} size={iconSize} {...iconProps} />}
-                        <TextX style={[finalTextStyle, textStyle]}>{children}</TextX>
+                        <TextX style={[finalTextStyle, textStyle]}>{displayLabel}</TextX>
+                    </View>
+                ) : isIconOnly ? (
+                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                        <Icon name={icon!} color={contentColor} size={iconSize} {...iconProps} />
                     </View>
                 ) : (
                     children
