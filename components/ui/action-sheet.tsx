@@ -95,7 +95,7 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
     return (
         <ModalMask isVisible={visible} onPressMask={handleBackdropPress} statusBarTranslucent contentTransitionPreset="slide-up">
             <View style={styles.container} pointerEvents="box-none">
-                <View style={[styles.sheet, { backgroundColor: cardColor }, style]}>
+                <View className="shadow" style={[styles.sheet, { backgroundColor: cardColor }, style]}>
                     {/* Header */}
                     {(title || message) && (
                         <View style={styles.header}>
@@ -172,14 +172,6 @@ const styles = StyleSheet.create({
         borderTopRightRadius: BORDER_RADIUS,
         paddingBottom: 34, // Safe area bottom padding
         maxHeight: '80%',
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: -2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 10,
     },
     header: {
         paddingHorizontal: 20,

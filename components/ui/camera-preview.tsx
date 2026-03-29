@@ -155,6 +155,7 @@ export function CameraPreview() {
                                 justifyContent: 'space-between',
                             }}>
                             <TouchableOpacity
+                                className="shadow"
                                 style={[styles.floatingButton, { backgroundColor: cardColor, opacity: 0.9 }]}
                                 onPress={handleRetakeMedia}
                                 activeOpacity={0.8}>
@@ -163,6 +164,7 @@ export function CameraPreview() {
 
                             <View className="flex-row items-center justify-between gap-4">
                                 <TouchableOpacity
+                                    className="shadow"
                                     style={[styles.floatingButton, { backgroundColor: cardColor, opacity: 0.9 }]}
                                     onPress={handleSaveToAlbum}
                                     activeOpacity={0.8}>
@@ -170,6 +172,7 @@ export function CameraPreview() {
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
+                                    className="shadow"
                                     style={[styles.floatingButton, { backgroundColor: cardColor, opacity: 0.9 }]}
                                     onPress={handleUploadAction}
                                     activeOpacity={0.8}>
@@ -320,14 +323,6 @@ const styles = StyleSheet.create({
         borderRadius: 28,
         justifyContent: 'center',
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5,
     },
     bottomActionContainer: {
         padding: 20,
@@ -339,14 +334,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 32,
         paddingVertical: 16,
         borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-        elevation: 3,
     },
     uploadIcon: {
         marginRight: 12,

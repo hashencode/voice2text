@@ -6,7 +6,7 @@ import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS } from '@/theme/globals';
 import { X } from 'lucide-react-native';
 import React from 'react';
-import { Dimensions, Platform, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { Dimensions, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -100,6 +100,7 @@ export function SheetContent({ children, style }: SheetContentProps) {
             contentTransitionDistance={sheetWidth}>
             {/* Sheet */}
             <View
+                className="shadow"
                 style={[
                     styles.sheet,
                     {
@@ -156,17 +157,6 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         bottom: 0,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.25,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 10,
-            },
-        }),
     },
     closeButton: {
         position: 'absolute',
