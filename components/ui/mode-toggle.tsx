@@ -8,11 +8,11 @@ type Props = {
     size?: ButtonSize;
 };
 
-export const ModeToggle = ({ variant = 'outline', size = 'icon' }: Props) => {
+export const ModeToggle = ({ variant = 'outline', size = 'default' }: Props) => {
     const { toggleMode, isDark } = useModeToggle();
 
     return (
-        <ButtonX variant="text" size={size} onPress={toggleMode}>
+        <ButtonX variant={variant} size={size} onPress={toggleMode}>
             <Icon name={isDark ? Moon : Sun} size={20} />
         </ButtonX>
     );

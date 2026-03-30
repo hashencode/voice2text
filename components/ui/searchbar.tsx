@@ -2,7 +2,7 @@ import { Icon } from '@/components/ui/icon';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { CORNERS, FONT_SIZE, HEIGHT } from '@/theme/globals';
+import { BUTTON_HEIGHT, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { Search, X } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, TextInput, TextInputProps, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
@@ -80,7 +80,7 @@ export function SearchBar({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: cardColor,
-        height: HEIGHT,
+        height: BUTTON_HEIGHT,
         paddingHorizontal: 16,
         borderRadius: CORNERS,
     };

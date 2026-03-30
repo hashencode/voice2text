@@ -533,10 +533,7 @@ export function Gallery({
                 {/* Bottom controls (page, title, description, thumbnails) */}
                 <View style={[styles.bottomControls, { backgroundColor }]}>
                     {showPages && (
-                        <TextX
-                            variant="body"
-                            className="mb-2 text-center"
-                            style={{ color: mutedColor }}>
+                        <TextX variant="body" className="mb-2 text-center" style={{ color: mutedColor }}>
                             {selectedIndex + 1} of {items.length}
                         </TextX>
                     )}
@@ -548,11 +545,7 @@ export function Gallery({
                     )}
 
                     {currentItem?.description && (
-                        <TextX
-                            variant="body"
-                            className="mb-4 text-center"
-                            style={{ color: mutedColor }}
-                            numberOfLines={2}>
+                        <TextX variant="body" className="mb-4 text-center" style={{ color: mutedColor }} numberOfLines={2}>
                             {currentItem.description}
                         </TextX>
                     )}

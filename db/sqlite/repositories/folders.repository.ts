@@ -11,7 +11,9 @@ function toFolder(row: FolderRow): Folder {
 
 export async function listFolders(): Promise<Folder[]> {
     const db = await getSqliteDb();
-    const rows = await db.getAllAsync<FolderRow>('SELECT name, created_at_ms, is_favorite FROM folders ORDER BY created_at_ms DESC, name ASC');
+    const rows = await db.getAllAsync<FolderRow>(
+        'SELECT name, created_at_ms, is_favorite FROM folders ORDER BY created_at_ms DESC, name ASC',
+    );
     return rows.map(toFolder);
 }
 

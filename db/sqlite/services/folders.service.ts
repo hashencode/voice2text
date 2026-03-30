@@ -1,2 +1,8 @@
-export { createFolder, deleteFolder, listFolders, updateFolderFavorite, updateFolderName } from '~/db/sqlite/repositories/folders.repository';
+export {
+    createFolder,
+    deleteFolder,
+    listFolders,
+    updateFolderFavorite,
+    updateFolderName,
+} from '~/db/sqlite/repositories/folders.repository';
 export type { Folder } from '~/db/sqlite/types';

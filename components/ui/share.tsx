@@ -1,4 +1,4 @@
-import { ButtonVariant, ButtonX } from '@/components/ui/buttonx';
+import { ButtonSize, ButtonVariant, ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/useColor';
 import { Share as ShareIcon } from 'lucide-react-native';
@@ -24,7 +24,7 @@ interface ShareButtonProps {
     options?: ShareButtonOptions;
     children?: React.ReactNode;
     variant?: ButtonVariant;
-    size?: 'default' | 'sm' | 'lg' | 'icon';
+    size?: ButtonSize;
     disabled?: boolean;
     loading?: boolean;
     onShareStart?: () => void;
