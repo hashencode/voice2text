@@ -375,8 +375,11 @@ export function Gallery({
     );
 
     // Function to close the fullscreen modal
-    const closeFullscreen = useCallback(() => {
+    const requestCloseFullscreen = useCallback(() => {
         setIsModalVisible(false);
+    }, []);
+
+    const handleFullscreenClosed = useCallback(() => {
         setSelectedIndex(-1); // Reset selected index
         setFlatListScrollEnabled(true); // Ensure scrolling is re-enabled on close
     }, []);
@@ -525,7 +528,7 @@ export function Gallery({
                         </ButtonX>
                     </View>
 
-                    <ButtonX size="sm" variant="ghost" onPress={closeFullscreen}>
+                    <ButtonX size="sm" variant="ghost" onPress={requestCloseFullscreen}>
                         <X size={26} color={primary} />
                     </ButtonX>
                 </View>
@@ -614,7 +617,8 @@ export function Gallery({
             {/* Modal for fullscreen image view */}
             <ModalMask
                 isVisible={isModalVisible}
-                onPressMask={closeFullscreen}
+                onPressMask={requestCloseFullscreen}
+                onClose={handleFullscreenClosed}
                 statusBarTranslucent
                 maskColor={backgroundColor}
                 contentTransitionPreset="fade">

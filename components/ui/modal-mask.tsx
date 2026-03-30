@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 type ContentTransitionPreset = 'none' | 'fade' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'scale';
+type MaskMode = 'dark' | 'light';
 
 const CONTENT_TRANSITION_DURATION_BY_PRESET: Record<ContentTransitionPreset, number> = {
     none: 0,
@@ -25,6 +26,8 @@ const CONTENT_TRANSITION_DURATION_BY_PRESET: Record<ContentTransitionPreset, num
 type ModalMaskProps = {
     isVisible: boolean;
     onPressMask: () => void;
+    onClose?: () => void;
+    mode?: MaskMode;
     maskColor?: string;
     maskOpacity?: number;
     maskAnimatedStyle?: StyleProp<ViewStyle> | AnimatedStyle<ViewStyle>;
@@ -45,7 +48,9 @@ type ModalMaskProps = {
 export function ModalMask({
     isVisible,
     onPressMask,
-    maskColor = 'rgba(0, 0, 0, 0.6)',
+    onClose,
+    mode = 'dark',
+    maskColor,
     maskOpacity = 1,
     maskAnimatedStyle,
     renderMask,
@@ -64,6 +69,7 @@ export function ModalMask({
     const screen = Dimensions.get('window');
     const [shouldRender, setShouldRender] = React.useState(isVisible);
     const isVisibleRef = React.useRef(isVisible);
+    const wasVisibleRef = React.useRef(isVisible);
     const internalOpacity = useSharedValue(0);
     const contentProgress = useSharedValue(0);
     const resolvedContentDuration =
@@ -75,6 +81,7 @@ export function ModalMask({
             : contentTransitionPreset === 'slide-left' || contentTransitionPreset === 'slide-right'
               ? screen.width
               : 20);
+    const resolvedMaskColor = maskColor ?? (mode === 'light' ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)');
 
     React.useEffect(() => {
         isVisibleRef.current = isVisible;
@@ -83,10 +90,14 @@ export function ModalMask({
     const hideAfterAnimation = React.useCallback(() => {
         if (!isVisibleRef.current) {
             setShouldRender(false);
+            onClose?.();
         }
-    }, []);
+    }, [onClose]);
 
     React.useEffect(() => {
+        const wasVisible = wasVisibleRef.current;
+        wasVisibleRef.current = isVisible;
+
         if (isVisible) {
             setShouldRender(true);
             internalOpacity.value = withTiming(1, { duration: fadeDuration });
@@ -101,10 +112,15 @@ export function ModalMask({
             return;
         }
 
+        if (!wasVisible) {
+            return;
+        }
+
         if (!deferUnmountOnHide) {
             internalOpacity.value = 0;
             contentProgress.value = 0;
             setShouldRender(false);
+            onClose?.();
             return;
         }
 
@@ -139,6 +155,7 @@ export function ModalMask({
         hideAfterAnimation,
         internalOpacity,
         isVisible,
+        onClose,
         resolvedContentDuration,
     ]);
 
@@ -199,7 +216,7 @@ export function ModalMask({
 
     const defaultMask = (
         <>
-            <Animated.View style={[styles.mask, { backgroundColor: maskColor }, composedOpacityStyle, maskAnimatedStyle]} />
+            <Animated.View style={[styles.mask, { backgroundColor: resolvedMaskColor }, composedOpacityStyle, maskAnimatedStyle]} />
             <Pressable style={StyleSheet.absoluteFill} onPress={onPressMask} />
         </>
     );

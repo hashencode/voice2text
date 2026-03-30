@@ -225,13 +225,16 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
             }
         };
 
-        const closeGalleryModal = () => {
+        const requestCloseGalleryModal = () => {
             galleryRequestIdRef.current += 1;
             if (galleryOpenTimerRef.current) {
                 clearTimeout(galleryOpenTimerRef.current);
                 galleryOpenTimerRef.current = null;
             }
             setIsGalleryVisible(false);
+        };
+
+        const handleGalleryModalClose = () => {
             setIsGalleryContentReady(false);
             setIsGalleryLoading(false);
             setIsGalleryLoadingMore(false);
@@ -359,7 +362,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
             setAssets(draftAssets);
             prevSelectedAssetsRef.current = draftAssets;
             onSelectionChange?.(draftAssets);
-            closeGalleryModal();
+            requestCloseGalleryModal();
         };
 
         const handleSelectAlbum = async (albumId: string | null) => {
@@ -454,7 +457,8 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                     {gallery && (
                         <ModalMask
                             isVisible={isGalleryVisible}
-                            onPressMask={closeGalleryModal}
+                            onPressMask={requestCloseGalleryModal}
+                            onClose={handleGalleryModalClose}
                             statusBarTranslucent
                             animationType="none"
                             maskColor="transparent">
@@ -493,7 +497,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                                 )}
 
                                 <View style={[styles.bottomControlBar, { borderTopColor: borderColor, backgroundColor: cardColor }]}>
-                                    <ButtonX size="default" variant="secondary" onPress={closeGalleryModal}>
+                                    <ButtonX size="default" variant="secondary" onPress={requestCloseGalleryModal}>
                                         取消
                                     </ButtonX>
                                     {multiple ? (

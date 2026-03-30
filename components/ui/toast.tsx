@@ -283,7 +283,7 @@ export function Toast({
                                 maxWidth: isCompact ? '100%' : undefined,
                             }}>
                             {isCompact ? inlineIcon : null}
-                            <View className={isCompact ? 'min-w-0 pr-2' : 'min-w-0 flex-1'}>
+                            <View className={isCompact ? 'min-w-0 pr-1' : 'min-w-0 flex-1'}>
                                 {title && (
                                     <TextX
                                         variant={isCompact ? 'body' : 'subtitle'}

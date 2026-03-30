@@ -11,3 +11,4 @@
 - 2026-03-25: [TypeScript 全量检查失败] `npx tsc --noEmit` 在当前仓库存在多处历史类型错误（如 `theme/globals` 的 `HEIGHT` 导出缺失、若干 `Timeout` 类型不匹配）-> 非本次改动引入 -> 变更验证优先用目标文件 `eslint` 或局部检查，避免把全量 `tsc` 作为单次改动阻塞项。 #promote
 - 2026-03-27: [命令不可用] `pnpm` 在本仓库环境报 `command not found` -> 项目实际使用 `bun.lock` 与 `bun run` 工作流 -> 执行校验/脚本优先用 `bun run <script>`，避免默认使用 `pnpm`。
 - 2026-03-29: [命令不可用] `rg` 在当前环境报 `command not found` -> 终端未安装 ripgrep -> 文件检索降级使用 `find` + `grep`，避免依赖 `rg`。
+- 2026-03-30: [命令不可用] `python` 在当前环境报 `command not found` -> 仅有 `python3` 或未安装 `python` 别名 -> 文件编辑优先使用 `apply_patch`，脚本型命令优先检查 `python3` 可用性后再执行。
