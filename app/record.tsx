@@ -9,21 +9,26 @@ import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { ModeToggle } from '~/components/ui/mode-toggle';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
+import { getCurrentRecordingFolderName } from '~/db/mmkv/app-config';
 import { upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 import { useWavRecording } from '~/hooks/useWavRecording';
 import { Colors } from '~/theme/colors';
 
-function getRecordingsDir(): string {
+function getRecordingsDir(folderName?: string | null): string {
     if (!FileSystem.documentDirectory) {
         throw new Error('文件系统目录不可用');
     }
-    return `${FileSystem.documentDirectory}recordings/`;
+    const baseDir = `${FileSystem.documentDirectory}recordings/`;
+    if (!folderName) {
+        return baseDir;
+    }
+    return `${baseDir}${folderName}/`;
 }
 
-function createRecordingPath(): string {
+function createRecordingPath(folderName?: string | null): string {
     const fileName = `record-${Date.now()}.wav`;
-    return `${getRecordingsDir()}${fileName}`;
+    return `${getRecordingsDir(folderName)}${fileName}`;
 }
 
 export default function RecordPage() {
@@ -61,9 +66,10 @@ export default function RecordPage() {
     const { phase, isPaused, actionLoading, elapsedText, startRecord, pauseRecord, resumeRecord, stopRecord } = useWavRecording({
         sampleRate: 16000,
         createTargetPath: async () => {
-            const directory = getRecordingsDir();
+            const recordingFolderName = getCurrentRecordingFolderName();
+            const directory = getRecordingsDir(recordingFolderName);
             await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
-            return createRecordingPath();
+            return createRecordingPath(recordingFolderName);
         },
         onStart: () => {},
         onStop: async wavResult => {

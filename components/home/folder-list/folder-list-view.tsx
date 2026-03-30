@@ -70,8 +70,8 @@ export default function FolderListView({
                                       }
                                     : () => onEnterMultiSelectWithFolder(folder.name)
                             }
-                            onPressMore={() => onOpenSingleActionForFolder(folder.name)}
-                            showArrow={!isMultiSelectMode}
+                            onPressMore={isAllFolder ? undefined : () => onOpenSingleActionForFolder(folder.name)}
+                            showArrow={!isMultiSelectMode && !isAllFolder}
                             rightSlot={
                                 isMultiSelectMode && !isAllFolder ? (
                                     <Checkbox

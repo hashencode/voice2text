@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
-import { FolderInput, Heart, PencilLine, Share2, Trash2 } from 'lucide-react-native';
+import { FolderInput, Heart, HeartOff, PencilLine, Share2, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import NameInputDialog from '~/components/home/common/name-input-dialog';
@@ -18,6 +18,7 @@ import { ModalMask } from '~/components/ui/modal-mask';
 import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
+import { setCurrentRecordingFolderName } from '~/db/mmkv/app-config';
 import type { Folder } from '~/db/sqlite/services/folders.service';
 import { listFolders, updateFolderFavorite } from '~/db/sqlite/services/folders.service';
 import { listRecordingMeta, updateRecordingFavorite } from '~/db/sqlite/services/recordings.service';
@@ -53,7 +54,6 @@ function extractFolder(path: string): string {
 }
 
 export default function HomeList() {
-    const SINGLE_MENU_EXIT_DURATION = 220;
     const { toast } = useToast();
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
     const [folders, setFolders] = React.useState<Folder[]>([]);
@@ -165,8 +165,8 @@ export default function HomeList() {
         toggleSelectAllFolders,
     } = useFolderSelection(selectableFolderNames, ALL_FOLDERS_KEY);
     const selectedCount = isFolderListMode ? selectedFolderNames.length : selectedPaths.length;
-    const isSingleMaskVisible = isSingleSelectMode || isSingleSelectClosing;
-    const shouldRenderActionMenu = (isMultiSelectMode && selectedCount > 0) || isSingleMaskVisible;
+    const isSingleMaskVisible = isSingleSelectMode;
+    const shouldRenderActionMenu = (isMultiSelectMode && selectedCount > 0) || isSingleSelectMode || isSingleSelectClosing;
     const selectedPathForRename = selectedCount === 1 ? selectedPaths[0] : null;
     const selectedItemForRename = React.useMemo(
         () => (selectedPathForRename ? items.find(item => item.path === selectedPathForRename) : undefined),
@@ -174,6 +174,18 @@ export default function HomeList() {
     );
     const selectedFolderNameForRename = selectedCount === 1 ? selectedFolderNames[0] : null;
     const isAllFilteredSelected = isFolderListMode ? isAllFoldersSelected : isAllFilesSelected;
+    const isSingleTargetFavorited = React.useMemo(() => {
+        if (!isSingleSelectMode || selectedCount !== 1) {
+            return false;
+        }
+        if (isFolderListMode) {
+            if (!selectedFolderNameForRename) {
+                return false;
+            }
+            return folders.some(folder => folder.name === selectedFolderNameForRename && folder.isFavorite);
+        }
+        return selectedItemForRename?.isFavorite === true;
+    }, [folders, isFolderListMode, isSingleSelectMode, selectedCount, selectedFolderNameForRename, selectedItemForRename]);
 
     const handleToggleMultiSelectMode = React.useCallback(() => {
         setIsMultiSelectMode(prev => {
@@ -181,11 +193,13 @@ export default function HomeList() {
                 clearSelectedPaths();
                 clearSelectedFolderNames();
                 setIsSingleSelectMode(false);
+                setIsSingleSelectClosing(false);
             } else {
                 // Entering multi-select should start clean and not inherit single-action selection.
                 clearSelectedPaths();
                 clearSelectedFolderNames();
                 setIsSingleSelectMode(false);
+                setIsSingleSelectClosing(false);
             }
             return !prev;
         });
@@ -203,6 +217,7 @@ export default function HomeList() {
         (path: string) => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             setIsSingleSelectMode(false);
+            setIsSingleSelectClosing(false);
             setIsMultiSelectMode(true);
             addSelectedPath(path);
         },
@@ -213,6 +228,7 @@ export default function HomeList() {
         (name: string) => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             setIsSingleSelectMode(false);
+            setIsSingleSelectClosing(false);
             setIsMultiSelectMode(true);
             if (name !== ALL_FOLDERS_KEY) {
                 addSelectedFolderName(name);
@@ -220,32 +236,27 @@ export default function HomeList() {
         },
         [addSelectedFolderName],
     );
-    const singleSelectClosingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     React.useEffect(() => {
-        return () => {
-            if (singleSelectClosingTimerRef.current) {
-                clearTimeout(singleSelectClosingTimerRef.current);
-            }
-        };
-    }, []);
-    const exitSingleSelectMode = React.useCallback(() => {
-        if (singleSelectClosingTimerRef.current) {
-            clearTimeout(singleSelectClosingTimerRef.current);
-            singleSelectClosingTimerRef.current = null;
+        const recordingFolderName = !isFolderListMode && selectedFolder !== ALL_FOLDERS_KEY ? selectedFolder : null;
+        setCurrentRecordingFolderName(recordingFolderName);
+    }, [isFolderListMode, selectedFolder]);
+    const closeSingleSelectMode = React.useCallback(() => {
+        if (!isSingleSelectMode) {
+            return;
         }
         setIsSingleSelectClosing(true);
         setIsSingleSelectMode(false);
-        singleSelectClosingTimerRef.current = setTimeout(() => {
-            setSelectedPaths([]);
-            setSelectedFolderNames([]);
-            setIsSingleSelectClosing(false);
-            singleSelectClosingTimerRef.current = null;
-        }, SINGLE_MENU_EXIT_DURATION);
-    }, [SINGLE_MENU_EXIT_DURATION, setSelectedFolderNames, setSelectedPaths]);
+    }, [isSingleSelectMode]);
+    const handleSingleSelectClosed = React.useCallback(() => {
+        setSelectedPaths([]);
+        setSelectedFolderNames([]);
+        setIsSingleSelectClosing(false);
+    }, [setSelectedFolderNames, setSelectedPaths]);
     const openSingleActionForFile = React.useCallback(
         (path: string) => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
             setIsMultiSelectMode(false);
+            setIsSingleSelectClosing(false);
             setIsSingleSelectMode(true);
             setSelectedFolderNames([]);
             setSelectedPaths([path]);
@@ -259,6 +270,7 @@ export default function HomeList() {
             }
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
             setIsMultiSelectMode(false);
+            setIsSingleSelectClosing(false);
             setIsSingleSelectMode(true);
             setSelectedPaths([]);
             setSelectedFolderNames([name]);
@@ -382,41 +394,42 @@ export default function HomeList() {
         });
     }, [confirmDeleteFiles, confirmDeleteFolders, deleting, isFolderListMode]);
 
-    const handleConfirmFavorite = React.useCallback(async (): Promise<void> => {
-        if (selectedCount <= 0) {
-            return;
-        }
-
-        if (isFolderListMode) {
-            const targetNames = selectedFolderNames.filter(name => name !== ALL_FOLDERS_KEY);
-            if (targetNames.length <= 0) {
+    const handleUpdateFavorite = React.useCallback(
+        async (isFavorite: boolean): Promise<void> => {
+            if (selectedCount <= 0) {
                 return;
             }
-            await Promise.all(targetNames.map(name => updateFolderFavorite(name, true)));
-            const targetSet = new Set(targetNames);
-            setFolders(prev => prev.map(folder => (targetSet.has(folder.name) ? { ...folder, isFavorite: true } : folder)));
+
+            if (isFolderListMode) {
+                const targetNames = selectedFolderNames.filter(name => name !== ALL_FOLDERS_KEY);
+                if (targetNames.length <= 0) {
+                    return;
+                }
+                await Promise.all(targetNames.map(name => updateFolderFavorite(name, isFavorite)));
+                const targetSet = new Set(targetNames);
+                setFolders(prev => prev.map(folder => (targetSet.has(folder.name) ? { ...folder, isFavorite } : folder)));
+                toast({
+                    title: isFavorite ? '已收藏文件夹' : '已取消收藏文件夹',
+                    variant: 'success',
+                });
+                return;
+            }
+
+            await Promise.all(selectedPaths.map(path => updateRecordingFavorite(path, isFavorite)));
+            const targetSet = new Set(selectedPaths);
+            setItems(prev => prev.map(item => (targetSet.has(item.path) ? { ...item, isFavorite } : item)));
             toast({
-                title: `已收藏 ${targetNames.length} 个文件夹`,
+                title: isFavorite ? '已收藏文件' : '已取消收藏文件',
                 variant: 'success',
             });
-            return;
-        }
-
-        await Promise.all(selectedPaths.map(path => updateRecordingFavorite(path, true)));
-        const targetSet = new Set(selectedPaths);
-        setItems(prev => prev.map(item => (targetSet.has(item.path) ? { ...item, isFavorite: true } : item)));
-        toast({
-            title: `已收藏 ${selectedPaths.length} 个文件`,
-            variant: 'success',
-        });
-    }, [isFolderListMode, selectedCount, selectedFolderNames, selectedPaths, toast]);
+        },
+        [isFolderListMode, selectedCount, selectedFolderNames, selectedPaths, toast],
+    );
 
     const handleActionPress = React.useCallback(
         (actionKey: string) => {
             if (actionKey === 'rename') {
-                if (isSingleSelectMode) {
-                    setIsSingleSelectMode(false);
-                }
+                closeSingleSelectMode();
                 handleOpenRenameDialog();
                 return;
             }
@@ -424,62 +437,67 @@ export default function HomeList() {
                 if (selectedCount <= 0) {
                     return;
                 }
-                if (isSingleSelectMode) {
-                    setIsSingleSelectMode(false);
-                }
+                closeSingleSelectMode();
                 setDeleteDialogVisible(true);
                 return;
             }
             if (actionKey === 'share') {
-                if (isSingleSelectMode) {
-                    setIsSingleSelectMode(false);
-                }
+                closeSingleSelectMode();
                 shareSingleFile(selectedPaths).catch(() => {});
                 return;
             }
             if (actionKey === 'favorite') {
-                handleConfirmFavorite().catch(() => {
+                const shouldFavorite = !(isSingleSelectMode && isSingleTargetFavorited);
+                handleUpdateFavorite(shouldFavorite).catch(() => {
                     toast({
-                        title: '收藏失败',
+                        title: shouldFavorite ? '收藏失败' : '取消收藏失败',
                         description: '请稍后重试',
                         variant: 'error',
                     });
                 });
-                if (isSingleSelectMode) {
-                    setIsSingleSelectMode(false);
-                }
+                closeSingleSelectMode();
                 return;
             }
         },
-        [handleConfirmFavorite, handleOpenRenameDialog, isSingleSelectMode, selectedCount, selectedPaths, shareSingleFile, toast],
+        [
+            closeSingleSelectMode,
+            handleOpenRenameDialog,
+            handleUpdateFavorite,
+            isSingleSelectMode,
+            isSingleTargetFavorited,
+            selectedCount,
+            selectedPaths,
+            shareSingleFile,
+            toast,
+        ],
     );
+    const favoriteAction =
+        isSingleSelectMode && isSingleTargetFavorited
+            ? { key: 'favorite', label: '取消收藏', icon: HeartOff, disabled: selectedCount === 0 }
+            : { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 };
     const actionMenuActions = isFolderListMode
         ? isMultiSelectMode
-            ? [
-                  { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
-                  { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
-              ]
+            ? [{ key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 }]
             : [
                   { key: 'rename', label: '重命名', icon: PencilLine, disabled: selectedCount === 0 },
-                  { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
+                  favoriteAction,
                   { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
               ]
         : isMultiSelectMode
           ? [
                 { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
-                { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
                 { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
                 { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
             ]
           : [
                 { key: 'rename', label: '重命名', icon: PencilLine, disabled: selectedCount === 0 },
                 { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
-                { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 },
+                favoriteAction,
                 { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
                 { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
             ];
     const actionMenuContent = (
-        <View className="border-t py-4" style={{ borderTopColor: borderColor }}>
+        <View className="border-t py-6" style={{ borderTopColor: borderColor }}>
             <View className="flex flex-row justify-between">
                 {actionMenuActions.map(action => (
                     <Pressable
@@ -534,6 +552,7 @@ export default function HomeList() {
                         if (isMultiSelectMode || isSingleSelectMode) {
                             setIsMultiSelectMode(false);
                             setIsSingleSelectMode(false);
+                            setIsSingleSelectClosing(false);
                             setSelectedPaths([]);
                             setSelectedFolderNames([]);
                         }
@@ -587,10 +606,15 @@ export default function HomeList() {
                     />
                 )}
             </PullToRefreshScrollView>
-            <ModalMask isVisible={isSingleMaskVisible} onPressMask={exitSingleSelectMode} contentTransitionPreset="slide-up">
+            <ModalMask
+                isVisible={isSingleMaskVisible}
+                onPressMask={closeSingleSelectMode}
+                onClose={handleSingleSelectClosed}
+                contentTransitionPreset="slide-up"
+                mode="light">
                 {actionMenuLayer}
             </ModalMask>
-            {!isSingleMaskVisible && shouldRenderActionMenu ? actionMenuLayer : null}
+            {!isSingleMaskVisible && !isSingleSelectClosing && isMultiSelectMode && selectedCount > 0 ? actionMenuLayer : null}
             <NameInputDialog
                 isVisible={renameDialogVisible}
                 onClose={() => {

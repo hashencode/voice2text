@@ -7,6 +7,7 @@ export const APP_CONFIG_KEYS = {
     speakerDiarizationEnabled: 'app.config.speakerDiarizationEnabled',
     denoiseEnabled: 'app.config.denoiseEnabled',
     recognitionProfile: 'app.config.recognitionProfile',
+    currentRecordingFolderName: 'app.config.currentRecordingFolderName',
 } as const;
 
 type BoolConfigKey =
@@ -69,4 +70,14 @@ export function getRecognitionProfile(): RecognitionProfileId {
 
 export function setRecognitionProfile(value: RecognitionProfileId): void {
     storage.set(APP_CONFIG_KEYS.recognitionProfile, value);
+}
+
+export function getCurrentRecordingFolderName(): string | null {
+    const value = storage.getString(APP_CONFIG_KEYS.currentRecordingFolderName)?.trim() ?? '';
+    return value ? value : null;
+}
+
+export function setCurrentRecordingFolderName(value: string | null): void {
+    const normalizedValue = value?.trim() ?? '';
+    storage.set(APP_CONFIG_KEYS.currentRecordingFolderName, normalizedValue);
 }

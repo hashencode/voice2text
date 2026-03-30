@@ -5,6 +5,7 @@ import { Pressable, View } from 'react-native';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
+import { FONT_SIZE_LG } from '~/theme/globals';
 
 type FileListItemProps = {
     name: string;
@@ -46,7 +47,7 @@ export default function FileListItem({
             delayLongPress={longPressDelayMs}>
             <View className="flex-1 gap-y-2.5 pr-4">
                 <View className="flex-row items-center gap-x-1">
-                    {isFavorite ? <Heart size={12} color="#EF4444" fill="#EF4444" /> : null}
+                    {isFavorite ? <Heart size={FONT_SIZE_LG} color="#EF4444" /> : null}
                     <TextX variant="subtitle" numberOfLines={1} className="flex-1">
                         {name}
                     </TextX>
