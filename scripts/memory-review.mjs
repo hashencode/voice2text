@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const projectRoot = process.cwd();
-const memoryDir = path.join(projectRoot, '.codex', 'memories');
+const memoryDir = path.join(projectRoot, '.agents', 'memories');
 const files = {
   profile: path.join(memoryDir, 'PROFILE.md'),
   active: path.join(memoryDir, 'ACTIVE.md'),
