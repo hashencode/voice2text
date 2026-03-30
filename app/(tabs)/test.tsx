@@ -58,6 +58,14 @@ export default function Home() {
     const [playingVadPath, setPlayingVadPath] = useState<string | null>(null);
     const vadPlayer = useAudioPlayer(null, { updateInterval: 200 });
     const vadPlayerStatus = useAudioPlayerStatus(vadPlayer);
+    const pauseVadPlayer = useCallback(async () => {
+        try {
+            await vadPlayer.pause();
+        } catch (error) {
+            // During refresh/unmount, native player can be in an invalid state.
+            console.warn('[vad-player] pause skipped:', (error as Error)?.message ?? error);
+        }
+    }, [vadPlayer]);
 
     const checkCurrentModelVersions = useCallback(async () => {
         const currentModelId = getCurrentModel();
@@ -111,7 +119,7 @@ export default function Home() {
             setVadSegments(normalizedSegments);
             setSegmentRecognitionMap({});
             setPlayingVadPath(null);
-            vadPlayer.pause();
+            void pauseVadPlayer();
 
             if (normalizedSegments.length > 0) {
                 const recognizedTexts: string[] = [];
@@ -160,7 +168,7 @@ export default function Home() {
             try {
                 if (playingVadPath === path) {
                     if (vadPlayerStatus.playing) {
-                        vadPlayer.pause();
+                        void pauseVadPlayer();
                     } else {
                         vadPlayer.play();
                     }
@@ -174,7 +182,7 @@ export default function Home() {
                 setFileRecognitionStatusText(`播放失败: ${(error as Error).message}`);
             }
         },
-        [playingVadPath, vadPlayer, vadPlayerStatus.playing],
+        [pauseVadPlayer, playingVadPath, vadPlayer, vadPlayerStatus.playing],
     );
 
     const handleRecognizeVadSegment = useCallback(
@@ -247,9 +255,9 @@ export default function Home() {
 
     useEffect(() => {
         return () => {
-            vadPlayer.pause();
+            void pauseVadPlayer();
         };
-    }, [vadPlayer]);
+    }, [pauseVadPlayer]);
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>

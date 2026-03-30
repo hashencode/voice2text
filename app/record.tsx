@@ -3,6 +3,7 @@ import { Stack, useNavigation } from 'expo-router';
 import { Mic, Pause, Play, Square } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
@@ -14,6 +15,7 @@ import { upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 import { useWavRecording } from '~/hooks/useWavRecording';
 import { Colors } from '~/theme/colors';
+import { BORDER_RADIUS } from '~/theme/globals';
 
 function getRecordingsDir(folderName?: string | null): string {
     if (!FileSystem.documentDirectory) {
@@ -32,6 +34,7 @@ function createRecordingPath(folderName?: string | null): string {
 }
 
 export default function RecordPage() {
+    const insets = useSafeAreaInsets();
     const [confirmDialogState, setConfirmDialogState] = React.useState<{
         isVisible: boolean;
         title: string;
@@ -183,14 +186,21 @@ export default function RecordPage() {
         <DefaultLayout
             headTitle="录音"
             headExtra={<ModeToggle />}
-            safeAreaViewConfig={{ edges: ['top', 'left', 'right', 'bottom'] }}
+            safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}
             scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="flex flex-1">
                 <View className="flex-grow" />
 
-                <View className="flex-shrink-0 p-4">
-                    <View className="flex-row items-center gap-3 rounded-full p-2 shadow" style={{ backgroundColor: cardColor }}>
+                <View className="flex-shrink-0" >
+                    <View
+                        className="flex-row items-center gap-3 p-2 shadow"
+                        style={{
+                            backgroundColor: cardColor,
+                            borderStartStartRadius: BORDER_RADIUS,
+                            borderEndStartRadius: BORDER_RADIUS,
+                            paddingBottom: insets.bottom,
+                        }}>
                         <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
                             <View
                                 className="items-center justify-center rounded-full"

@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { FolderInput, Heart, HeartOff, PencilLine, Share2, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NameInputDialog from '~/components/home/common/name-input-dialog';
 import FileListToolbar from '~/components/home/file-list/file-list-toolbar';
 import FileListView from '~/components/home/file-list/file-list-view';
@@ -55,6 +56,7 @@ function extractFolder(path: string): string {
 
 export default function HomeList() {
     const { toast } = useToast();
+    const insets = useSafeAreaInsets();
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
     const [folders, setFolders] = React.useState<Folder[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -497,7 +499,9 @@ export default function HomeList() {
                 { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
             ];
     const actionMenuContent = (
-        <View className="border-t py-6" style={{ borderTopColor: borderColor }}>
+        <View
+            className="border-t pt-4"
+            style={{ borderTopColor: borderColor, paddingBottom: 16 + insets.bottom }}>
             <View className="flex flex-row justify-between">
                 {actionMenuActions.map(action => (
                     <Pressable
@@ -575,7 +579,7 @@ export default function HomeList() {
                 emptyText={isFolderListMode ? '暂无文件夹' : '暂无录音文件'}
                 isLoadedAll={!loading && !isFolderListMode && filteredItems.length > 0}
                 loadedAllText={isFolderListMode ? '已加载全部文件夹' : '已加载全部录音'}
-                contentContainerStyle={{ paddingBottom: shouldRenderActionMenu ? 96 : 12 }}>
+                contentContainerStyle={{ paddingBottom: shouldRenderActionMenu ? 96 + insets.bottom : 12 }}>
                 {isFolderListMode ? (
                     <FolderListView
                         folders={folderListEntries}
