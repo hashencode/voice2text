@@ -34,12 +34,12 @@ When an Expo skill matches the task, use it first:
 
 Use project-local memory directory:
 
-- `/Users/studio/Documents/GitHub/voice2text/.codex/memories`
+- `/Users/studio/Documents/GitHub/voice2text/.agents/memories`
 
 Before starting any task:
 
-1. Read `/Users/studio/Documents/GitHub/voice2text/.codex/memories/PROFILE.md`
-2. Read `/Users/studio/Documents/GitHub/voice2text/.codex/memories/ACTIVE.md`
+1. Read `/Users/studio/Documents/GitHub/voice2text/.agents/memories/PROFILE.md`
+2. Read `/Users/studio/Documents/GitHub/voice2text/.agents/memories/ACTIVE.md`
 3. Apply them as persistent project memory before analyzing user request
 
 Log only when the result is reusable, non-obvious, or likely to recur.
@@ -54,13 +54,13 @@ Evaluate whether to log memory when any of these happen:
 
 Write entries by category:
 
-- `/Users/studio/Documents/GitHub/voice2text/.codex/memories/LEARNINGS.md`: reusable learnings and corrections
-- `/Users/studio/Documents/GitHub/voice2text/.codex/memories/ERRORS.md`: debugging notes and error patterns
-- `/Users/studio/Documents/GitHub/voice2text/.codex/memories/FEATURE_REQUESTS.md`: recurring missing capabilities
+- `/Users/studio/Documents/GitHub/voice2text/.agents/memories/LEARNINGS.md`: reusable learnings and corrections
+- `/Users/studio/Documents/GitHub/voice2text/.agents/memories/ERRORS.md`: debugging notes and error patterns
+- `/Users/studio/Documents/GitHub/voice2text/.agents/memories/FEATURE_REQUESTS.md`: recurring missing capabilities
 
 Promotion rules:
 
-1. Promote to `/Users/studio/Documents/GitHub/voice2text/.codex/memories/ACTIVE.md` only if stable and useful across tasks
+1. Promote to `/Users/studio/Documents/GitHub/voice2text/.agents/memories/ACTIVE.md` only if stable and useful across tasks
 2. Keep `ACTIVE.md` concise; remove stale rules during review
 3. Promote to this `AGENTS.md` only when a rule is stable at project policy level or user explicitly asks
 

@@ -1,44 +1,48 @@
+# Dependencies and build artifacts
 node_modules/
-.expo/
 dist/
+web-build/
+.expo/
+
+# Generated native projects (using Expo prebuild)
+ios/
+android/
+
+# Expo / Metro
+expo-env.d.ts
+.metro-health-check*
+
+# Package manager / patch leftovers
 npm-debug.*
+*.orig.*
+
+# Signing credentials and keys
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
-*.orig.*
-web-build/
-# expo router
-expo-env.d.ts
 
-
-
-/ios/
-/android/
-
-
-# macOS
+# IDE and OS files
+.idea/
 .DS_Store
 
-# Temporary files created by Metro to check the health of the file watcher
-.metro-health-check*
+# Config plugin output
+modules/sherpa/android/build/
 
-/.idea
-
-# config plugin
-/modules/sherpa/android/build/
-
-# Local AI/agent skill artifacts
-.agents/
+# Local AI tooling artifacts
 .claude/
 .kiro/
 skills-lock.json
 
+# Codex runtime logs (keep markdown memories versioned)
+.agents/memories/*.log
+
 # Keep only project-level self-improving skill in VCS
-!.agents/
 .agents/*
 !.agents/skills/
 .agents/skills/*
 !.agents/skills/self-improving-for-codex/
 !.agents/skills/self-improving-for-codex/**
+!.agents/memories/
+!.agents/memories/*.md
