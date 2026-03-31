@@ -12,20 +12,6 @@ For Expo/React Native coding tasks, always prefer Expo's LLM-friendly docs befor
 
 If a statement depends on version behavior, verify against the relevant Expo doc page and state the exact SDK/EAS version context.
 
-## Skills Usage Preference
-
-When an Expo skill matches the task, use it first:
-
-- `expo-dev-client`
-- `building-native-ui`
-- `native-data-fetching`
-- `expo-cicd-workflows`
-- `expo-deployment`
-- `upgrading-expo`
-- `expo-api-routes`
-
-`gstack-*` skills remain available for review/planning/release flow, but Expo-specific implementation and testing should prioritize Expo skills + Expo docs above.
-
 ## Additional Skills
 
 - `compound-engineering`: Use when setting up or maintaining the Compound Engineering memory loop (`PROFILE.md`, `ACTIVE.md`, `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`) or when wiring memory flow rules through `AGENTS.md`.

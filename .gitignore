@@ -11,6 +11,8 @@ android/
 # Expo / Metro
 expo-env.d.ts
 .metro-health-check*
+.expo-shared/
+*.log
 
 # Package manager / patch leftovers
 npm-debug.*
@@ -22,6 +24,9 @@ npm-debug.*
 *.p12
 *.key
 *.mobileprovision
+*.apk
+*.aab
+*.ipa
 
 # IDE and OS files
 .idea/
@@ -33,6 +38,7 @@ modules/sherpa/android/build/
 # Local AI tooling artifacts
 .claude/
 .kiro/
+.codex/
 skills-lock.json
 
 # Codex runtime logs (keep markdown memories versioned)
