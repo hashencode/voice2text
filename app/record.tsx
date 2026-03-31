@@ -1,14 +1,29 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Location from 'expo-location';
 import { Stack, useNavigation } from 'expo-router';
-import { Bold, Heading1, Italic, Link, List, ListTodo, Mic, Pause, Play, Square, Strikethrough } from 'lucide-react-native';
+import {
+    ArrowLeft,
+    Bold,
+    CalendarDays,
+    Heading1,
+    Italic,
+    Link,
+    List,
+    ListTodo,
+    MapPin,
+    Mic,
+    Pause,
+    Play,
+    Square,
+    Strikethrough,
+} from 'lucide-react-native';
 import React, { useEffect } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { EnrichedTextInput, type EnrichedTextInputInstance, type OnChangeStateEvent } from 'react-native-enriched';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
-import { Input } from '~/components/ui/input';
 import { ModeToggle } from '~/components/ui/mode-toggle';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
@@ -18,7 +33,6 @@ import { upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 import { useKeyboardHeight } from '~/hooks/useKeyboardHeight';
 import { useWavRecording } from '~/hooks/useWavRecording';
-import { Colors } from '~/theme/colors';
 import { BORDER_RADIUS, FONT_SIZE } from '~/theme/globals';
 
 function getRecordingsDir(folderName?: string | null): string {
@@ -35,6 +49,20 @@ function getRecordingsDir(folderName?: string | null): string {
 function createRecordingPath(folderName?: string | null): string {
     const fileName = `record-${Date.now()}.wav`;
     return `${getRecordingsDir(folderName)}${fileName}`;
+}
+
+function formatRecordHeaderDate(ms: number): string {
+    const date = new Date(ms);
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    const hour = `${date.getHours()}`.padStart(2, '0');
+    const minute = `${date.getMinutes()}`.padStart(2, '0');
+    return `${month}-${day} ${hour}:${minute}`;
+}
+
+function formatLocationLabel(address: Location.LocationGeocodedAddress, fallback: string): string {
+    const lines = [address.city, address.district, address.street, address.name].filter(Boolean);
+    return lines.length > 0 ? lines.join(' ') : fallback;
 }
 
 type EditorTabValue = 'remark' | 'transcript' | 'summary';
@@ -55,25 +83,31 @@ export default function RecordPage() {
         description: '',
         confirmText: '确定',
     });
-    const [displayName, setDisplayName] = React.useState('');
+    const [displayName, setDisplayName] = React.useState('新录音');
     const [, setNoteText] = React.useState('');
     const [noteSelection, setNoteSelection] = React.useState({ start: 0, end: 0, text: '' });
     const [noteStyleState, setNoteStyleState] = React.useState<OnChangeStateEvent | null>(null);
     const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
     const [isNoteFocused, setIsNoteFocused] = React.useState(false);
+    const [recordHeaderAtMs, setRecordHeaderAtMs] = React.useState(() => Date.now());
+    const [hasLocationPermission, setHasLocationPermission] = React.useState(false);
+    const [locationLabel, setLocationLabel] = React.useState('点击获取位置信息');
+    const [isLocating, setIsLocating] = React.useState(false);
     const noteInputRef = React.useRef<EnrichedTextInputInstance | null>(null);
     const isToolbarPressingRef = React.useRef(false);
+    const recordingStartedAtRef = React.useRef<number | null>(null);
 
     const navigation = useNavigation();
     const { toast } = useToast();
     const { keyboardHeight, isKeyboardVisible } = useKeyboardHeight();
     const primaryColor = useColor('primary');
+    const primaryForegroundColor = useColor('primaryForeground');
     const destructiveColor = useColor('destructive');
+    const destructiveForegroundColor = useColor('destructiveForeground');
     const textColor = useColor('text');
     const mutedTextColor = useColor('textMuted');
-    const borderColor = useColor('border');
-    const mutedColor = useColor('muted');
     const cardColor = useColor('card');
+    const mutedColor = useColor('muted');
 
     const focusNoteInput = React.useCallback(() => {
         requestAnimationFrame(() => {
@@ -101,6 +135,45 @@ export default function RecordPage() {
         });
     };
 
+    const fetchCurrentLocation = React.useCallback(async () => {
+        setIsLocating(true);
+        try {
+            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            const fallback = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+            const addresses = await Location.reverseGeocodeAsync({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+            });
+            if (!addresses.length) {
+                setLocationLabel(fallback);
+                return;
+            }
+            setLocationLabel(formatLocationLabel(addresses[0], fallback));
+        } catch (error) {
+            console.warn('[record] fetchCurrentLocation failed', error);
+            setLocationLabel('位置获取失败，点击重试');
+        } finally {
+            setIsLocating(false);
+        }
+    }, []);
+
+    const handleLocationPress = React.useCallback(async () => {
+        if (isLocating) {
+            return;
+        }
+
+        if (!hasLocationPermission) {
+            const permission = await Location.requestForegroundPermissionsAsync();
+            const granted = permission.granted;
+            setHasLocationPermission(granted);
+            if (!granted) {
+                setLocationLabel('点击获取位置信息');
+                return;
+            }
+        }
+        await fetchCurrentLocation();
+    }, [fetchCurrentLocation, hasLocationPermission, isLocating]);
+
     const { phase, isPaused, actionLoading, elapsedText, startRecord, pauseRecord, resumeRecord, stopRecord } = useWavRecording({
         sampleRate: 16000,
         createTargetPath: async () => {
@@ -109,7 +182,11 @@ export default function RecordPage() {
             await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
             return createRecordingPath(recordingFolderName);
         },
-        onStart: () => {},
+        onStart: () => {
+            const startedAt = Date.now();
+            recordingStartedAtRef.current = startedAt;
+            setRecordHeaderAtMs(startedAt);
+        },
         onStop: async wavResult => {
             if (!wavResult.path) {
                 showRecordError('未能获取录音文件，请重试');
@@ -120,12 +197,13 @@ export default function RecordPage() {
             const sessionId = wavResult.sessionId?.trim() || undefined;
 
             try {
+                const recordedAtMs = recordingStartedAtRef.current ?? Date.now();
                 await upsertRecordingMeta({
                     path: wavResult.path,
                     sampleRate: wavResult.sampleRate,
                     numSamples: wavResult.numSamples,
                     durationMs,
-                    recordedAtMs: Date.now(),
+                    recordedAtMs,
                     sessionId,
                 });
 
@@ -137,6 +215,8 @@ export default function RecordPage() {
             } catch (error) {
                 console.error('[record] upsertRecordingMeta failed', error);
                 showRecordError('录音已生成，但保存元数据失败');
+            } finally {
+                recordingStartedAtRef.current = null;
             }
         },
         onPermissionDenied: () => {
@@ -186,8 +266,8 @@ export default function RecordPage() {
         });
     };
 
-    const LeftIcon = isMicVisualState ? Mic : isPaused ? Play : Pause;
     const showKeyboardToolbar = editorTab === 'remark' && isKeyboardVisible && isNoteFocused;
+    const RecordActionIcon = isIdleLike ? Mic : isPaused ? Play : Pause;
 
     const handleLinkAction = React.useCallback(() => {
         if (noteStyleState?.link.isActive) {
@@ -289,132 +369,165 @@ export default function RecordPage() {
         return unsubscribe;
     }, [navigation, canStop, isStopping, stopRecord]);
 
+    useEffect(() => {
+        let isMounted = true;
+        void (async () => {
+            const permission = await Location.getForegroundPermissionsAsync();
+            if (!isMounted) {
+                return;
+            }
+            setHasLocationPermission(permission.granted);
+            if (permission.granted) {
+                void fetchCurrentLocation();
+            }
+        })();
+        return () => {
+            isMounted = false;
+        };
+    }, [fetchCurrentLocation]);
+
     return (
-        <DefaultLayout
-            headTitle="录音"
-            headExtra={<ModeToggle />}
-            safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}
-            scrollable={false}>
+        <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="flex flex-1">
-                <ScrollView
-                    className="flex-1"
-                    contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 16 }}
-                    keyboardShouldPersistTaps="handled">
-                    <Input label="录音名称" placeholder="输入录音名称（display name）" value={displayName} onChangeText={setDisplayName} />
+                <View className="mb-2 flex-row items-center justify-end px-4">
+                    <ModeToggle />
+                </View>
 
-                    <View className="rounded-2xl p-3" style={{ backgroundColor: cardColor }}>
-                        <Tabs value={editorTab} onValueChange={value => setEditorTab(value as EditorTabValue)}>
-                            <TabsList>
-                                <TabsTrigger value="remark" className="w-auto">
-                                    备注
-                                </TabsTrigger>
-                                <TabsTrigger value="transcript" className="w-auto">
-                                    实时转写
-                                </TabsTrigger>
-                                <TabsTrigger value="summary" className="w-auto">
-                                    智能总结
-                                </TabsTrigger>
+                <View className="flex-1 px-4">
+                    <TextInput
+                        value={displayName}
+                        onChangeText={setDisplayName}
+                        placeholderTextColor={mutedTextColor}
+                        className="p-0 text-3xl font-semibold"
+                        style={{ color: textColor }}
+                    />
+
+                    <View className="mt-3 flex-row items-center gap-5">
+                        <View className="flex-row items-center gap-1.5">
+                            <CalendarDays size={14} color={mutedTextColor} />
+                            <TextX style={{ color: mutedTextColor }}>{formatRecordHeaderDate(recordHeaderAtMs)}</TextX>
+                        </View>
+                        <Pressable
+                            onPress={() => {
+                                void handleLocationPress();
+                            }}
+                            disabled={isLocating}
+                            className="flex-row items-center gap-1.5">
+                            <MapPin size={14} color={mutedTextColor} />
+                            <TextX style={{ color: mutedTextColor }}>
+                                {isLocating ? '正在获取位置...' : hasLocationPermission ? locationLabel : '点击获取位置信息'}
+                            </TextX>
+                        </Pressable>
+                    </View>
+
+                    <View className="mt-3 flex-1">
+                        <Tabs value={editorTab} onValueChange={value => setEditorTab(value as EditorTabValue)} style={{ flex: 1 }}>
+                            <TabsList style={{ backgroundColor: mutedColor }}>
+                                <TabsTrigger value="remark">备注</TabsTrigger>
+                                <TabsTrigger value="transcript">实时转写</TabsTrigger>
+                                <TabsTrigger value="summary">智能总结</TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="remark">
-                                <View className="gap-3">
-                                    <EnrichedTextInput
-                                        ref={noteInputRef}
-                                        onFocus={() => setIsNoteFocused(true)}
-                                        onBlur={() => {
-                                            if (isToolbarPressingRef.current) {
-                                                return;
-                                            }
-                                            setIsNoteFocused(false);
-                                        }}
-                                        onChangeText={event => setNoteText(event.nativeEvent.value)}
-                                        onChangeSelection={event => setNoteSelection(event.nativeEvent)}
-                                        onChangeState={event => setNoteStyleState(event.nativeEvent)}
-                                        style={{
-                                            minHeight: 180,
-                                            borderWidth: 1,
-                                            borderColor,
-                                            borderRadius: 12,
-                                            paddingHorizontal: 12,
-                                            paddingVertical: 10,
-                                            fontSize: FONT_SIZE,
-                                            color: textColor,
-                                            textAlignVertical: 'top',
-                                        }}
-                                        placeholder="编辑录音备注"
-                                        placeholderTextColor={mutedTextColor}
-                                        selectionColor="rgba(0,0,0,0.1)"
-                                        htmlStyle={{
-                                            a: { color: primaryColor, textDecorationLine: 'underline' },
-                                            code: { color: textColor, backgroundColor: mutedColor },
-                                            h1: { fontSize: 20, bold: true },
-                                            ul: { marginLeft: 10, gapWidth: 6 },
-                                            ulCheckbox: { marginLeft: 10, gapWidth: 6 },
-                                        }}
-                                    />
-                                </View>
+                            <TabsContent value="remark" style={{ flex: 1 }}>
+                                <EnrichedTextInput
+                                    ref={noteInputRef}
+                                    onFocus={() => setIsNoteFocused(true)}
+                                    onBlur={() => {
+                                        if (isToolbarPressingRef.current) {
+                                            return;
+                                        }
+                                        setIsNoteFocused(false);
+                                    }}
+                                    onChangeText={event => setNoteText(event.nativeEvent.value)}
+                                    onChangeSelection={event => setNoteSelection(event.nativeEvent)}
+                                    onChangeState={event => setNoteStyleState(event.nativeEvent)}
+                                    style={{
+                                        flex: 1,
+                                        fontSize: FONT_SIZE,
+                                        color: textColor,
+                                    }}
+                                    placeholder="编辑录音备注"
+                                    placeholderTextColor={mutedTextColor}
+                                    selectionColor="rgba(0,0,0,0.3)"
+                                    htmlStyle={{
+                                        a: { color: primaryColor, textDecorationLine: 'underline' },
+                                        code: { color: textColor, backgroundColor: mutedColor },
+                                        h1: { fontSize: 20, bold: true },
+                                        ul: { marginLeft: 10, gapWidth: 6 },
+                                        ulCheckbox: { marginLeft: 10, gapWidth: 6 },
+                                    }}
+                                />
                             </TabsContent>
 
                             <TabsContent value="transcript">
-                                <View className="gap-2">
-                                    <TextX variant="subtitle">实时转写</TextX>
-                                    <TextX variant="description">稍后实现：展示录音过程中的实时文本。</TextX>
-                                </View>
+                                <TextX style={{ color: mutedTextColor }}>...</TextX>
                             </TabsContent>
 
                             <TabsContent value="summary">
-                                <View className="gap-2">
-                                    <TextX variant="subtitle">智能总结</TextX>
-                                    <TextX variant="description">稍后实现：展示 AI 生成的摘要与重点。</TextX>
-                                </View>
+                                <TextX style={{ color: mutedTextColor }}>...</TextX>
                             </TabsContent>
                         </Tabs>
                     </View>
-                </ScrollView>
+                </View>
 
                 <View className="flex-shrink-0">
                     <View
-                        className="flex-row items-center gap-3 p-3 pb-4 shadow"
+                        className="flex-row items-center gap-3 p-3 pb-4"
                         style={{
                             backgroundColor: cardColor,
                             borderStartStartRadius: BORDER_RADIUS,
                             borderEndStartRadius: BORDER_RADIUS,
                         }}>
-                        <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
-                            <View
-                                className="h-12 w-12 items-center justify-center rounded-full"
-                                style={{
-                                    backgroundColor: isMicVisualState ? primaryColor : Colors.light.background,
-                                    opacity: isStopping ? 0.5 : 1,
-                                }}>
-                                <LeftIcon size={22} color={isMicVisualState ? Colors.light.card : Colors.light.text} />
-                            </View>
-                        </BouncyPressable>
-
-                        <View className="flex-1 items-center justify-center">
-                            {isRecordingOrPaused ? (
-                                <TextX style={{ fontVariant: ['tabular-nums'], fontWeight: 'regular', fontSize: 24 }}>{elapsedText}</TextX>
-                            ) : (
-                                <TextX style={{ color: mutedTextColor }}>点击左侧开始录音</TextX>
-                            )}
-                        </View>
-
-                        {canStop ? (
+                        {isIdleLike ? (
+                            <Pressable onPress={() => navigation.goBack()} disabled={isStopping || actionLoading}>
+                                <View
+                                    className="h-12 w-12 items-center justify-center rounded-full"
+                                    style={{ backgroundColor: mutedColor, opacity: isStopping ? 0.5 : 1 }}>
+                                    <ArrowLeft size={20} color={textColor} />
+                                </View>
+                            </Pressable>
+                        ) : canStop ? (
                             <Pressable onPress={handleConfirmStop} disabled={isStopping}>
                                 <View
                                     className="h-12 w-12 items-center justify-center rounded-full"
                                     style={{ backgroundColor: destructiveColor, opacity: isStopping ? 0.5 : 1 }}>
-                                    <Square size={20} color={Colors.light.card} />
+                                    <Square size={20} color={destructiveForegroundColor} />
                                 </View>
                             </Pressable>
                         ) : (
-                            <View className="h-12 w-12" />
+                            <View
+                                className="h-12 w-12 items-center justify-center rounded-full"
+                                style={{ backgroundColor: mutedColor, opacity: 0.5 }}>
+                                <Square size={20} color={destructiveColor} />
+                            </View>
                         )}
+
+                        <View className="flex-1 items-center justify-center">
+                            {isIdleLike ? (
+                                <TextX style={{ color: mutedTextColor }}>点击右侧开始录制</TextX>
+                            ) : isRecordingOrPaused ? (
+                                <TextX style={{ fontVariant: ['tabular-nums'], fontSize: 24 }}>{elapsedText}</TextX>
+                            ) : (
+                                <TextX style={{ color: mutedTextColor }}>点击右侧开始录制</TextX>
+                            )}
+                        </View>
+
+                        <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
+                            <View
+                                className="h-12 w-12 items-center justify-center rounded-full"
+                                style={{
+                                    backgroundColor: isMicVisualState ? primaryColor : mutedColor,
+                                    opacity: isStopping ? 0.5 : 1,
+                                }}>
+                                <RecordActionIcon size={22} color={isMicVisualState ? primaryForegroundColor : textColor} />
+                            </View>
+                        </BouncyPressable>
                     </View>
                     <BottomSafeAreaSpacer />
                 </View>
             </View>
+
             {showKeyboardToolbar ? (
                 <View
                     className="absolute left-0 right-0 px-3 py-2"

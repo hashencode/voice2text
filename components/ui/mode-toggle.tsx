@@ -1,14 +1,16 @@
-import { ButtonSize, ButtonVariant, ButtonX } from '@/components/ui/buttonx';
+import { useColor } from '@/hooks/useColor';
 import { useModeToggle } from '@/hooks/useModeToggle';
 import { Moon, Sun } from 'lucide-react-native';
+import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 
-type Props = {
-    variant?: ButtonVariant;
-    size?: ButtonSize;
-};
-
-export const ModeToggle = ({ variant = 'outline', size = 'default' }: Props) => {
+export const ModeToggle = () => {
     const { toggleMode, isDark } = useModeToggle();
+    const iconColor = useColor('text');
+    const Icon = isDark ? Moon : Sun;
 
-    return <ButtonX icon={isDark ? Moon : Sun} variant={variant} size={size} onPress={toggleMode} />;
+    return (
+        <BouncyPressable onPress={toggleMode} hitSlop={8} className="p-3">
+            <Icon size={20} color={iconColor} />
+        </BouncyPressable>
+    );
 };

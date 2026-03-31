@@ -13,6 +13,12 @@
         "plugins": [
             "expo-router",
             "expo-localization",
+            [
+                "expo-location",
+                {
+                    "locationWhenInUsePermission": "允许访问位置信息，用于为录音标注地点。"
+                }
+            ],
             "./plugins/withSherpaOnnx",
             "expo-image",
             "expo-web-browser",

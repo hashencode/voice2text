@@ -23,7 +23,14 @@ async function readWavMeta(path: string): Promise<WavFileMeta> {
     const info = await SherpaOnnx.getWavInfo(path);
     const rawModifiedAt =
         'modificationTime' in fileInfo && typeof fileInfo.modificationTime === 'number' ? fileInfo.modificationTime : null;
-    const recordedAtMs = rawModifiedAt === null ? null : rawModifiedAt > 1e12 ? rawModifiedAt : rawModifiedAt * 1000;
+    const endedAtMs = rawModifiedAt === null ? null : rawModifiedAt > 1e12 ? rawModifiedAt : rawModifiedAt * 1000;
+    // 统一 recordedAtMs 语义为“录音开始时间”；恢复场景下文件修改时间更接近结束时间，所以减去时长回推。
+    const recordedAtMs =
+        endedAtMs === null
+            ? null
+            : info.durationMs !== null && info.durationMs > 0
+              ? Math.max(0, endedAtMs - info.durationMs)
+              : endedAtMs;
     return {
         path,
         sampleRate: info.sampleRate,
