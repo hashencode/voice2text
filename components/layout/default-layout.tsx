@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { PropsWithChildren, ReactNode } from 'react';
 import { ScrollView, StyleProp, View, ViewStyle } from 'react-native';
 import { SafeAreaView, SafeAreaViewProps, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
 
@@ -67,7 +68,7 @@ export const DefaultLayout = (props: IDefaultLayoutProps) => {
             </View>
 
             {/*底部安全区域*/}
-            <View className="absolute bottom-0 left-0 w-full" style={[{ height: insets.bottom }, styles.safeBottom]} />
+            <BottomSafeAreaSpacer className="absolute bottom-0 left-0" style={styles.safeBottom} />
         </SafeAreaView>
     );
 };

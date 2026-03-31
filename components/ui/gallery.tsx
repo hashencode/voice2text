@@ -1,3 +1,4 @@
+import { BottomSafeAreaSpacer } from '@/components/ui/bottom-safe-area-spacer';
 import { ButtonX } from '@/components/ui/buttonx';
 import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
@@ -9,6 +10,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Dimensions, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -326,6 +328,7 @@ export function Gallery({
     onShare,
     renderCustomOverlay,
 }: GalleryProps) {
+    const insets = useSafeAreaInsets();
     // State for the currently selected image index in fullscreen mode
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
     // State to control modal visibility
@@ -518,7 +521,7 @@ export function Gallery({
         return (
             <View style={styles.fullscreenControls} pointerEvents="box-none">
                 {/* Top controls (share, download, close) */}
-                <View style={[styles.topControls, { backgroundColor }]}>
+                <View style={[styles.topControls, { backgroundColor, paddingTop: 16 + insets.top }]}>
                     <View style={styles.topRightControls}>
                         <ButtonX size="sm" variant="ghost" onPress={handleDownload}>
                             <Download size={24} color={primary} />
@@ -581,6 +584,7 @@ export function Gallery({
                             index,
                         })}
                     />
+                    <BottomSafeAreaSpacer />
                 </View>
             </View>
         );
@@ -707,7 +711,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingTop: 56, // Adjust for safe area (notch, status bar)
         paddingHorizontal: 16,
         paddingBottom: 16,
     },
@@ -721,7 +724,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         padding: 16,
-        paddingBottom: 46, // Adjust for safe area (home indicator)
+        paddingBottom: 16,
     },
     thumbnailContainer: {
         paddingHorizontal: 16,

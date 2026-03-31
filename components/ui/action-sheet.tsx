@@ -1,3 +1,4 @@
+import { BottomSafeAreaSpacer } from '@/components/ui/bottom-safe-area-spacer';
 import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
@@ -149,6 +150,7 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
                             <TextX style={[styles.cancelText, { color: textColor }]}>{cancelButtonTitle}</TextX>
                         </TouchableOpacity>
                     </View>
+                    <BottomSafeAreaSpacer />
                 </View>
             </View>
         </ModalMask>
@@ -170,7 +172,6 @@ const styles = StyleSheet.create({
     sheet: {
         borderTopLeftRadius: BORDER_RADIUS,
         borderTopRightRadius: BORDER_RADIUS,
-        paddingBottom: 34, // Safe area bottom padding
         maxHeight: '80%',
     },
     header: {

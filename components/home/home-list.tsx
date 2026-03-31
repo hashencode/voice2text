@@ -15,6 +15,7 @@ import { useFolderActions } from '~/components/home/hooks/use-folder-actions';
 import { useFolderSelection } from '~/components/home/hooks/use-folder-selection';
 import { useItemActions } from '~/components/home/hooks/use-item-actions';
 import { AlertDialog } from '~/components/ui/alert-dialog';
+import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { ModalMask } from '~/components/ui/modal-mask';
 import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
 import { TextX } from '~/components/ui/textx';
@@ -499,9 +500,7 @@ export default function HomeList() {
                 { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
             ];
     const actionMenuContent = (
-        <View
-            className="border-t pt-4"
-            style={{ borderTopColor: borderColor, paddingBottom: 16 + insets.bottom }}>
+        <View className="border-t pt-4" style={{ borderTopColor: borderColor, paddingBottom: 16 }}>
             <View className="flex flex-row justify-between">
                 {actionMenuActions.map(action => (
                     <Pressable
@@ -517,6 +516,7 @@ export default function HomeList() {
                     </Pressable>
                 ))}
             </View>
+            <BottomSafeAreaSpacer />
         </View>
     );
     const actionMenuLayer = (

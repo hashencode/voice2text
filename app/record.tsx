@@ -3,9 +3,9 @@ import { Stack, useNavigation } from 'expo-router';
 import { Mic, Pause, Play, Square } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
+import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { ModeToggle } from '~/components/ui/mode-toggle';
 import { TextX } from '~/components/ui/textx';
@@ -34,7 +34,6 @@ function createRecordingPath(folderName?: string | null): string {
 }
 
 export default function RecordPage() {
-    const insets = useSafeAreaInsets();
     const [confirmDialogState, setConfirmDialogState] = React.useState<{
         isVisible: boolean;
         title: string;
@@ -192,14 +191,13 @@ export default function RecordPage() {
             <View className="flex flex-1">
                 <View className="flex-grow" />
 
-                <View className="flex-shrink-0" >
+                <View className="flex-shrink-0">
                     <View
-                        className="flex-row items-center gap-3 p-2 shadow"
+                        className="flex-row items-center gap-3 p-3 pb-4 shadow"
                         style={{
                             backgroundColor: cardColor,
                             borderStartStartRadius: BORDER_RADIUS,
                             borderEndStartRadius: BORDER_RADIUS,
-                            paddingBottom: insets.bottom,
                         }}>
                         <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
                             <View
@@ -234,6 +232,7 @@ export default function RecordPage() {
                             <View style={{ width: 48, height: 48 }} />
                         )}
                     </View>
+                    <BottomSafeAreaSpacer />
                 </View>
             </View>
             <AlertDialog
