@@ -181,7 +181,9 @@ export function ShareButton({
 
         return (
             <View className="flex-row items-center">
-                <ShareIcon size={iconSize} color={getButtonTextStyle().color} style={{ marginRight: 8 }} />
+                <View className="mr-2">
+                    <ShareIcon size={iconSize} color={getButtonTextStyle().color} />
+                </View>
                 {textContent}
             </View>
         );

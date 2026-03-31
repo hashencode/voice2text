@@ -500,7 +500,7 @@ export default function HomeList() {
                 { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
             ];
     const actionMenuContent = (
-        <View className="border-t pt-4" style={{ borderTopColor: borderColor, paddingBottom: 16 }}>
+        <View className="border-t pb-4 pt-4" style={{ borderTopColor: borderColor }}>
             <View className="flex flex-row justify-between">
                 {actionMenuActions.map(action => (
                     <Pressable
@@ -522,11 +522,8 @@ export default function HomeList() {
     const actionMenuLayer = (
         <View
             pointerEvents={shouldRenderActionMenu ? 'auto' : 'none'}
+            className="absolute bottom-0 left-0 right-0"
             style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 0,
                 backgroundColor: cardColor,
             }}>
             {actionMenuContent}

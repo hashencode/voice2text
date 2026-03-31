@@ -35,7 +35,7 @@ export const Input = forwardRef<TextInput, InputProps>(
             inputStyle,
             labelStyle,
             errorStyle,
-            variant = 'filled',
+            variant = 'outline',
             clearable = false,
             onClear,
             disabled = false,
@@ -72,7 +72,7 @@ export const Input = forwardRef<TextInput, InputProps>(
         const [internalValue, setInternalValue] = useState(typeof defaultValue === 'string' ? defaultValue : '');
 
         // Theme colors
-        const cardColor = useColor('secondary');
+        const cardColor = useColor('card');
         const textColor = useColor('text');
         const textMutedColor = useColor('textMuted');
         const mutedColor = useColor('muted');
@@ -106,7 +106,7 @@ export const Input = forwardRef<TextInput, InputProps>(
                         ...baseStyle,
                         borderWidth: 1,
                         borderColor: error ? danger : isFocused ? primary : borderColor,
-                        backgroundColor: 'transparent',
+                        backgroundColor: disabled ? textMutedColor + '20' : cardColor,
                     };
                 case 'filled':
                 default:
@@ -173,12 +173,8 @@ export const Input = forwardRef<TextInput, InputProps>(
                             hitSlop={8}
                             accessibilityRole="button"
                             accessibilityLabel="清除输入内容"
+                            className="h-6 w-6 items-center justify-center rounded-full"
                             style={{
-                                width: 24,
-                                height: 24,
-                                borderRadius: 999,
-                                alignItems: 'center',
-                                justifyContent: 'center',
                                 backgroundColor: mutedColor,
                             }}>
                             <X size={12} color={textMutedColor} />
@@ -205,22 +201,9 @@ export const Input = forwardRef<TextInput, InputProps>(
                         <>
                             {/* Header section with icon, label, and right component */}
                             {(icon || label || rightComponent || hasClearButton) && (
-                                <View
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        marginBottom: 8,
-                                        gap: 8,
-                                    }}>
+                                <View className="mb-2 flex-row items-center gap-2">
                                     {/* Left section - Icon + Label */}
-                                    <View
-                                        style={{
-                                            flex: 1,
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                        }}
-                                        pointerEvents="none">
+                                    <View className="flex-1 flex-row items-center gap-2" pointerEvents="none">
                                         {icon && <Icon name={icon} size={16} color={error ? danger : textMutedColor} />}
                                         {label && (
                                             <TextX
@@ -263,19 +246,13 @@ export const Input = forwardRef<TextInput, InputProps>(
                         </>
                     ) : (
                         // Input Layout (Row)
-                        <View
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: 8,
-                            }}>
+                        <View className="flex-row items-center gap-2">
                             {/* Left section - Icon + Label (fixed width to simulate grid column) */}
                             <View
+                                className="flex-row items-center gap-2"
                                 style={{
                                     width: label ? 120 : 'auto',
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    gap: 8,
+                                    paddingHorizontal: label ? 12 : 0,
                                 }}
                                 pointerEvents="none">
                                 {icon && <Icon name={icon} size={16} color={error ? danger : textMutedColor} />}
@@ -482,22 +459,9 @@ export const GroupedInputItem = forwardRef<TextInput, GroupedInputItemProps>(
                         <>
                             {/* Header section with icon, label, and right component */}
                             {(icon || label || rightComponent) && (
-                                <View
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        marginBottom: 8,
-                                        gap: 8,
-                                    }}>
+                                <View className="mb-2 flex-row items-center gap-2">
                                     {/* Icon & Label */}
-                                    <View
-                                        style={{
-                                            flex: 1,
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                        }}
-                                        pointerEvents="none">
+                                    <View className="flex-1 flex-row items-center gap-2" pointerEvents="none">
                                         {icon && <Icon name={icon} size={16} color={error ? danger : textMutedColor} />}
                                         {label && (
                                             <TextX
@@ -548,20 +512,12 @@ export const GroupedInputItem = forwardRef<TextInput, GroupedInputItemProps>(
                         </>
                     ) : (
                         // Input Layout (Row)
-                        <View
-                            style={{
-                                flex: 1,
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: 8,
-                            }}>
+                        <View className="flex-1 flex-row items-center gap-2">
                             {/* Icon & Label */}
                             <View
+                                className="flex-row items-center gap-2"
                                 style={{
                                     width: label ? 120 : 'auto',
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    gap: 8,
                                 }}
                                 pointerEvents="none">
                                 {icon && <Icon name={icon} size={16} color={error ? danger : textMutedColor} />}

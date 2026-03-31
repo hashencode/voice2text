@@ -219,13 +219,12 @@ export const InputOTP = forwardRef<InputOTPRef, InputOTPProps>(
                     maxLength={length}
                     editable={!disabled}
                     selectionColor="transparent"
-                    className="absolute opacity-0"
-                    style={{ left: -9999 }}
+                    className="absolute -left-[9999px] opacity-0"
                     {...textInputProps}
                 />
 
                 {/* OTP Slots */}
-                <View className="flex-row items-center justify-center" style={{ gap: separator ? 0 : 8 }}>
+                <View className={`flex-row items-center justify-center ${separator ? 'gap-0' : 'gap-2'}`}>
                     {slots}
                 </View>
 
@@ -255,7 +254,7 @@ InputOTP.displayName = 'InputOTP';
 
 // Optional: Export a preset with separator
 export const InputOTPWithSeparator = forwardRef<InputOTPRef, Omit<InputOTPProps, 'separator'>>((props, ref) => (
-    <InputOTP ref={ref} separator={<TextX style={{ fontSize: 18, color: useColor('textMuted') }}>-</TextX>} {...props} />
+    <InputOTP ref={ref} separator={<TextX className="text-[18px]" style={{ color: useColor('textMuted') }}>-</TextX>} {...props} />
 ));
 
 InputOTPWithSeparator.displayName = 'InputOTPWithSeparator';

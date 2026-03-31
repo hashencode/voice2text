@@ -208,15 +208,7 @@ export default function Setting() {
             };
 
             return (
-                <View
-                    key={modelId}
-                    style={{
-                        gap: 6,
-                        borderWidth: 1,
-                        borderColor: '#e5e7eb',
-                        borderRadius: 8,
-                        padding: 12,
-                    }}>
+                <View key={modelId} className="gap-1.5 rounded-lg border border-[#e5e7eb] p-3">
                     <View className="flex flex-row items-center justify-between gap-x-2">
                         <TextX variant="title">{modelId}</TextX>
                         <View className="flex flex-row items-center gap-x-2">
@@ -246,15 +238,7 @@ export default function Setting() {
         <DefaultLayout>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="p-4">
-                <View
-                    style={{
-                        gap: 10,
-                        borderWidth: 1,
-                        borderColor: '#e5e7eb',
-                        borderRadius: 8,
-                        padding: 12,
-                        marginBottom: 12,
-                    }}>
+                <View className="mb-3 gap-2.5 rounded-lg border border-[#e5e7eb] p-3">
                     <TextX variant="subtitle">识别配置</TextX>
                     <View className="flex flex-row items-center justify-between">
                         <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
@@ -264,17 +248,17 @@ export default function Setting() {
                         <TextX>降噪开关：{denoiseEnabled ? '开启' : '关闭'}</TextX>
                         <SwitchX value={denoiseEnabled} onValueChange={handleToggleDenoise} />
                     </View>
-                    <View style={{ gap: 8 }}>
+                    <View className="gap-2">
                         <TextX>识别语言配置</TextX>
                         <Tabs value={recognitionProfile} onValueChange={handleRecognitionProfileChange}>
                             <TabsList>
-                                <TabsTrigger value="zh-cn" style={{ width: 'auto' }}>
+                                <TabsTrigger value="zh-cn" className="w-auto">
                                     zh-cn
                                 </TabsTrigger>
-                                <TabsTrigger value="en" style={{ width: 'auto' }}>
+                                <TabsTrigger value="en" className="w-auto">
                                     en
                                 </TabsTrigger>
-                                <TabsTrigger value="universal" style={{ width: 'auto' }}>
+                                <TabsTrigger value="universal" className="w-auto">
                                     universal
                                 </TabsTrigger>
                             </TabsList>
