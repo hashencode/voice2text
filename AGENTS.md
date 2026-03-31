@@ -28,9 +28,9 @@ When an Expo skill matches the task, use it first:
 
 ## Additional Skills
 
-- `self-improving-for-codex`: Use when setting up or maintaining Codex memory loop (`PROFILE.md`, `ACTIVE.md`, `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`) or when wiring memory flow rules through `AGENTS.md`.
+- `compound-engineering`: Use when setting up or maintaining the Compound Engineering memory loop (`PROFILE.md`, `ACTIVE.md`, `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`) or when wiring memory flow rules through `AGENTS.md`.
 
-## Self-Improvement (Project Local)
+## Compound Engineering (Project Local)
 
 Use project-local memory directory:
 
