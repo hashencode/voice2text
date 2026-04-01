@@ -1,21 +1,24 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Location from 'expo-location';
 import { Stack, useNavigation } from 'expo-router';
+import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
 import {
     ArrowLeft,
     Bold,
     CalendarDays,
     Heading1,
+    Heading2,
+    Heading3,
     Italic,
-    Link,
     List,
+    ListOrdered,
     ListTodo,
-    MapPin,
     Mic,
     Pause,
     Play,
+    Quote,
     Square,
     Strikethrough,
+    Underline,
 } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
@@ -33,7 +36,7 @@ import { upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
 import { useKeyboardHeight } from '~/hooks/useKeyboardHeight';
 import { useWavRecording } from '~/hooks/useWavRecording';
-import { BORDER_RADIUS, FONT_SIZE } from '~/theme/globals';
+import { BORDER_RADIUS, BORDER_RADIUS_SM, BUTTON_ICON_LG, FONT_SIZE } from '~/theme/globals';
 
 function getRecordingsDir(folderName?: string | null): string {
     if (!FileSystem.documentDirectory) {
@@ -60,12 +63,8 @@ function formatRecordHeaderDate(ms: number): string {
     return `${month}-${day} ${hour}:${minute}`;
 }
 
-function formatLocationLabel(address: Location.LocationGeocodedAddress, fallback: string): string {
-    const lines = [address.city, address.district, address.street, address.name].filter(Boolean);
-    return lines.length > 0 ? lines.join(' ') : fallback;
-}
-
 type EditorTabValue = 'remark' | 'transcript' | 'summary';
+type ToolbarStateKey = keyof OnChangeStateEvent;
 const TOOLBAR_ICON_SIZE = 20;
 
 export default function RecordPage() {
@@ -85,14 +84,10 @@ export default function RecordPage() {
     });
     const [displayName, setDisplayName] = React.useState('新录音');
     const [, setNoteText] = React.useState('');
-    const [noteSelection, setNoteSelection] = React.useState({ start: 0, end: 0, text: '' });
     const [noteStyleState, setNoteStyleState] = React.useState<OnChangeStateEvent | null>(null);
     const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
     const [isNoteFocused, setIsNoteFocused] = React.useState(false);
     const [recordHeaderAtMs, setRecordHeaderAtMs] = React.useState(() => Date.now());
-    const [hasLocationPermission, setHasLocationPermission] = React.useState(false);
-    const [locationLabel, setLocationLabel] = React.useState('点击获取位置信息');
-    const [isLocating, setIsLocating] = React.useState(false);
     const noteInputRef = React.useRef<EnrichedTextInputInstance | null>(null);
     const isToolbarPressingRef = React.useRef(false);
     const recordingStartedAtRef = React.useRef<number | null>(null);
@@ -134,45 +129,6 @@ export default function RecordPage() {
             duration: 5000,
         });
     };
-
-    const fetchCurrentLocation = React.useCallback(async () => {
-        setIsLocating(true);
-        try {
-            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-            const fallback = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
-            const addresses = await Location.reverseGeocodeAsync({
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-            });
-            if (!addresses.length) {
-                setLocationLabel(fallback);
-                return;
-            }
-            setLocationLabel(formatLocationLabel(addresses[0], fallback));
-        } catch (error) {
-            console.warn('[record] fetchCurrentLocation failed', error);
-            setLocationLabel('位置获取失败，点击重试');
-        } finally {
-            setIsLocating(false);
-        }
-    }, []);
-
-    const handleLocationPress = React.useCallback(async () => {
-        if (isLocating) {
-            return;
-        }
-
-        if (!hasLocationPermission) {
-            const permission = await Location.requestForegroundPermissionsAsync();
-            const granted = permission.granted;
-            setHasLocationPermission(granted);
-            if (!granted) {
-                setLocationLabel('点击获取位置信息');
-                return;
-            }
-        }
-        await fetchCurrentLocation();
-    }, [fetchCurrentLocation, hasLocationPermission, isLocating]);
 
     const { phase, isPaused, actionLoading, elapsedText, startRecord, pauseRecord, resumeRecord, stopRecord } = useWavRecording({
         sampleRate: 16000,
@@ -268,77 +224,110 @@ export default function RecordPage() {
 
     const showKeyboardToolbar = editorTab === 'remark' && isKeyboardVisible && isNoteFocused;
     const RecordActionIcon = isIdleLike ? Mic : isPaused ? Play : Pause;
+    const isHeadingActive = Boolean(
+        noteStyleState?.h1.isActive ||
+        noteStyleState?.h2.isActive ||
+        noteStyleState?.h3.isActive ||
+        noteStyleState?.h4.isActive ||
+        noteStyleState?.h5.isActive ||
+        noteStyleState?.h6.isActive,
+    );
 
-    const handleLinkAction = React.useCallback(() => {
-        if (noteStyleState?.link.isActive) {
-            applyEditorAction(() => noteInputRef.current?.removeLink(noteSelection.start, noteSelection.end));
-            return;
-        }
-        if (!noteSelection.text || noteSelection.start === noteSelection.end) {
-            toast({ title: '请先选中要添加链接的文本', variant: 'error', duration: 2500 });
-            focusNoteInput();
-            return;
-        }
-        applyEditorAction(() =>
-            noteInputRef.current?.setLink(noteSelection.start, noteSelection.end, noteSelection.text, 'https://example.com'),
-        );
-    }, [
-        applyEditorAction,
-        focusNoteInput,
-        noteSelection.end,
-        noteSelection.start,
-        noteSelection.text,
-        noteStyleState?.link.isActive,
-        toast,
-    ]);
-
-    const toolbarItems = React.useMemo(
-        () => [
+    const toolbarItems = React.useMemo(() => {
+        const items: {
+            key: string;
+            stateKey: ToolbarStateKey;
+            icon: React.ComponentType<{ size?: number; color?: string }>;
+            active: boolean;
+            onPress: () => void;
+        }[] = [
             {
                 key: 'bold',
+                stateKey: 'bold',
                 icon: Bold,
                 active: noteStyleState?.bold.isActive ?? false,
                 onPress: () => applyEditorAction(() => noteInputRef.current?.toggleBold()),
             },
             {
                 key: 'italic',
+                stateKey: 'italic',
                 icon: Italic,
                 active: noteStyleState?.italic.isActive ?? false,
                 onPress: () => applyEditorAction(() => noteInputRef.current?.toggleItalic()),
             },
             {
+                key: 'underline',
+                stateKey: 'underline',
+                icon: Underline,
+                active: noteStyleState?.underline.isActive ?? false,
+                onPress: () => applyEditorAction(() => noteInputRef.current?.toggleUnderline()),
+            },
+            {
                 key: 'strike',
+                stateKey: 'strikeThrough',
                 icon: Strikethrough,
                 active: noteStyleState?.strikeThrough.isActive ?? false,
                 onPress: () => applyEditorAction(() => noteInputRef.current?.toggleStrikeThrough()),
             },
             {
                 key: 'h1',
+                stateKey: 'h1',
                 icon: Heading1,
                 active: noteStyleState?.h1.isActive ?? false,
                 onPress: () => applyEditorAction(() => noteInputRef.current?.toggleH1()),
             },
             {
+                key: 'h2',
+                stateKey: 'h2',
+                icon: Heading2,
+                active: noteStyleState?.h2.isActive ?? false,
+                onPress: () => applyEditorAction(() => noteInputRef.current?.toggleH2()),
+            },
+            {
+                key: 'h3',
+                stateKey: 'h3',
+                icon: Heading3,
+                active: noteStyleState?.h3.isActive ?? false,
+                onPress: () => applyEditorAction(() => noteInputRef.current?.toggleH3()),
+            },
+            {
+                key: 'blockquote',
+                stateKey: 'blockQuote',
+                icon: Quote,
+                active: noteStyleState?.blockQuote.isActive ?? false,
+                onPress: () => applyEditorAction(() => noteInputRef.current?.toggleBlockQuote()),
+            },
+            {
+                key: 'ol',
+                stateKey: 'orderedList',
+                icon: ListOrdered,
+                active: noteStyleState?.orderedList.isActive ?? false,
+                onPress: () => applyEditorAction(() => noteInputRef.current?.toggleOrderedList()),
+            },
+            {
                 key: 'ul',
+                stateKey: 'unorderedList',
                 icon: List,
                 active: noteStyleState?.unorderedList.isActive ?? false,
                 onPress: () => applyEditorAction(() => noteInputRef.current?.toggleUnorderedList()),
             },
             {
-                key: 'todo',
+                key: 'checkbox',
+                stateKey: 'checkboxList',
                 icon: ListTodo,
                 active: noteStyleState?.checkboxList.isActive ?? false,
                 onPress: () => applyEditorAction(() => noteInputRef.current?.toggleCheckboxList(false)),
             },
-            {
-                key: 'link',
-                icon: Link,
-                active: noteStyleState?.link.isActive ?? false,
-                onPress: handleLinkAction,
-            },
-        ],
-        [applyEditorAction, handleLinkAction, noteStyleState],
-    );
+        ];
+
+        return items.map(item => {
+            const styleState = noteStyleState?.[item.stateKey];
+            return {
+                ...item,
+                blocked: Boolean(isHeadingActive && styleState?.isBlocking),
+            };
+        });
+    }, [applyEditorAction, isHeadingActive, noteStyleState]);
 
     useEffect(() => {
         const unsubscribe = navigation.addListener('beforeRemove', event => {
@@ -369,23 +358,6 @@ export default function RecordPage() {
         return unsubscribe;
     }, [navigation, canStop, isStopping, stopRecord]);
 
-    useEffect(() => {
-        let isMounted = true;
-        void (async () => {
-            const permission = await Location.getForegroundPermissionsAsync();
-            if (!isMounted) {
-                return;
-            }
-            setHasLocationPermission(permission.granted);
-            if (permission.granted) {
-                void fetchCurrentLocation();
-            }
-        })();
-        return () => {
-            isMounted = false;
-        };
-    }, [fetchCurrentLocation]);
-
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
@@ -403,30 +375,35 @@ export default function RecordPage() {
                         style={{ color: textColor }}
                     />
 
-                    <View className="mt-3 flex-row items-center gap-5">
+                    <View className="mt-3 flex-row items-center">
                         <View className="flex-row items-center gap-1.5">
                             <CalendarDays size={14} color={mutedTextColor} />
                             <TextX style={{ color: mutedTextColor }}>{formatRecordHeaderDate(recordHeaderAtMs)}</TextX>
                         </View>
-                        <Pressable
-                            onPress={() => {
-                                void handleLocationPress();
-                            }}
-                            disabled={isLocating}
-                            className="flex-row items-center gap-1.5">
-                            <MapPin size={14} color={mutedTextColor} />
-                            <TextX style={{ color: mutedTextColor }}>
-                                {isLocating ? '正在获取位置...' : hasLocationPermission ? locationLabel : '点击获取位置信息'}
-                            </TextX>
-                        </Pressable>
                     </View>
 
                     <View className="mt-3 flex-1">
-                        <Tabs value={editorTab} onValueChange={value => setEditorTab(value as EditorTabValue)} style={{ flex: 1 }}>
-                            <TabsList style={{ backgroundColor: mutedColor }}>
-                                <TabsTrigger value="remark">备注</TabsTrigger>
-                                <TabsTrigger value="transcript">实时转写</TabsTrigger>
-                                <TabsTrigger value="summary">智能总结</TabsTrigger>
+                        <Tabs
+                            value={editorTab}
+                            onValueChange={value => setEditorTab(value as EditorTabValue)}
+                            contentSwitchDelayMs={180}
+                            style={{ flex: 1 }}>
+                            <TabsList radius={BORDER_RADIUS_SM} style={{ backgroundColor: mutedColor }}>
+                                <TabsTrigger
+                                    value="remark"
+                                    icon={DesignPencil}
+                                    iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
+                                    灵感速记
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="transcript"
+                                    icon={ChatBubbleTranslate}
+                                    iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
+                                    实时转写
+                                </TabsTrigger>
+                                <TabsTrigger value="summary" icon={Post} iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
+                                    智能总结
+                                </TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="remark" style={{ flex: 1 }}>
@@ -440,7 +417,6 @@ export default function RecordPage() {
                                         setIsNoteFocused(false);
                                     }}
                                     onChangeText={event => setNoteText(event.nativeEvent.value)}
-                                    onChangeSelection={event => setNoteSelection(event.nativeEvent)}
                                     onChangeState={event => setNoteStyleState(event.nativeEvent)}
                                     style={{
                                         flex: 1,
@@ -449,7 +425,7 @@ export default function RecordPage() {
                                     }}
                                     placeholder="编辑录音备注"
                                     placeholderTextColor={mutedTextColor}
-                                    selectionColor="rgba(0,0,0,0.3)"
+                                    selectionColor="rgba(0,0,0,0.1)"
                                     htmlStyle={{
                                         a: { color: primaryColor, textDecorationLine: 'underline' },
                                         code: { color: textColor, backgroundColor: mutedColor },
@@ -549,10 +525,26 @@ export default function RecordPage() {
                                             isToolbarPressingRef.current = false;
                                         });
                                     }}
-                                    onPress={item.onPress}
+                                    onPress={() => {
+                                        if (item.blocked) {
+                                            toast({
+                                                title: '当前标题样式下不可用',
+                                                description: '请先取消标题样式后再使用该格式',
+                                                variant: 'error',
+                                                duration: 2200,
+                                            });
+                                            return;
+                                        }
+                                        item.onPress();
+                                    }}
                                     hitSlop={8}>
-                                    <View className="h-[34px] w-[34px] items-center justify-center rounded-lg">
-                                        <IconComp size={TOOLBAR_ICON_SIZE} color={item.active ? primaryColor : textColor} />
+                                    <View
+                                        className="h-[34px] w-[34px] items-center justify-center rounded-lg"
+                                        style={{ opacity: item.blocked ? 0.35 : 1 }}>
+                                        <IconComp
+                                            size={TOOLBAR_ICON_SIZE}
+                                            color={item.blocked ? mutedTextColor : item.active ? primaryColor : textColor}
+                                        />
                                     </View>
                                 </Pressable>
                             );
