@@ -1,4 +1,5 @@
 import { Icon } from '@/components/ui/icon';
+import { GradientBackground } from '@/components/ui/gradient-background';
 import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
@@ -13,7 +14,6 @@ import {
     BUTTON_PADDING_HORIZON_SM,
     FONT_SIZE_SM,
 } from '@/theme/globals';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ScrollView, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
@@ -99,7 +99,6 @@ export function Picker({
     const cardColor = useColor('card');
     const danger = useColor('red');
     const primary = useColor('primary');
-    const indigo = useColor('indigo');
     const primaryForeground = useColor('primaryForeground');
     const textMutedColor = useColor('textMuted');
 
@@ -191,10 +190,8 @@ export function Picker({
                 disabled={option.disabled}
                 activeOpacity={optionActiveOpacity}>
                 {isSelected ? (
-                    <LinearGradient
-                        colors={[primary, indigo]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
+                    <GradientBackground
+                        baseColor={primary}
                         style={{ paddingVertical: BUTTON_PADDING_HORIZON_SM, paddingHorizontal: BUTTON_PADDING_HORIZON_LG }}>
                         <View className="w-full items-center">
                             <TextX
@@ -217,7 +214,7 @@ export function Picker({
                                 </TextX>
                             )}
                         </View>
-                    </LinearGradient>
+                    </GradientBackground>
                 ) : (
                     <View style={{ paddingVertical: BUTTON_PADDING_HORIZON_SM, paddingHorizontal: BUTTON_PADDING_HORIZON_LG }}>
                         <View className="w-full items-center">

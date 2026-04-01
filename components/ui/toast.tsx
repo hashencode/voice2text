@@ -1,5 +1,5 @@
 import { TextX } from '@/components/ui/textx';
-import { LinearGradient } from 'expo-linear-gradient';
+import { GradientBackground } from '~/components/ui/gradient-background';
 import type { LucideProps } from 'lucide-react-native';
 import { CircleCheck, CircleX, Info, TriangleAlert } from 'lucide-react-native';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -50,7 +50,7 @@ function getToastLayoutConfig(screenWidth: number): { compact: ToastLayoutConfig
     return {
         compact: {
             height: 40,
-            width: Math.max(screenWidth - 200, 140),
+            width: Math.round(screenWidth * 0.9),
             contentPaddingHorizontal: 12,
             contentPaddingVertical: 7,
             titleFontSize: FONT_SIZE,
@@ -106,22 +106,6 @@ const ABSOLUTE_FILL: ViewStyle = {
     bottom: 0,
     left: 0,
 };
-
-function clampColor(value: number): number {
-    return Math.max(0, Math.min(255, value));
-}
-
-function shiftHexColor(hex: string, amount: number): string {
-    const normalized = hex.replace('#', '');
-    if (normalized.length !== 6) {
-        return hex;
-    }
-    const r = clampColor(parseInt(normalized.slice(0, 2), 16) + amount);
-    const g = clampColor(parseInt(normalized.slice(2, 4), 16) + amount);
-    const b = clampColor(parseInt(normalized.slice(4, 6), 16) + amount);
-    const toHex = (v: number) => v.toString(16).padStart(2, '0');
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
 
 export function Toast({
     id,
@@ -263,7 +247,6 @@ export function Toast({
         top: getTopPosition(),
         zIndex: 1000 + index,
     };
-    const gradientColors: [string, string] = [shiftHexColor(variantBackgroundColor, -16), shiftHexColor(variantBackgroundColor, 22)];
     const glassIcon = renderGlassIcon();
     const inlineIcon = renderInlineIcon();
 
@@ -271,7 +254,7 @@ export function Toast({
         <GestureDetector gesture={panGesture}>
             <Animated.View className="absolute self-center shadow" style={[toastStyle, animatedContainerStyle]}>
                 <Animated.View className="rounded-full" style={animatedIslandStyle}>
-                    <LinearGradient colors={gradientColors} start={{ x: 0, y: 1 }} end={{ x: 1, y: 1 }} style={ABSOLUTE_FILL} />
+                    <GradientBackground baseColor={variantBackgroundColor} style={ABSOLUTE_FILL} />
 
                     {/* Expanded state - full content */}
                     {isExpanded && (
