@@ -194,6 +194,7 @@ export const SHERPA_MODEL_PRESETS = {
 export type SherpaModelId = keyof typeof SHERPA_MODEL_PRESETS;
 
 const SHERPA_CDN_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models';
+const ALLOWED_MODEL_DOWNLOAD_HOSTS = new Set(['pub-8a517913a3384e018c89aacd59a7b2db.r2.dev']);
 
 type DownloadModelOptions = {
     baseUrl?: string;
@@ -226,6 +227,22 @@ export type DownloadModelProgress = {
 
 function ensureTrailingSlash(input: string): string {
     return input.endsWith('/') ? input : `${input}/`;
+}
+
+function ensureTrustedModelBaseUrl(rawUrl: string): string {
+    let parsed: URL;
+    try {
+        parsed = new URL(rawUrl);
+    } catch {
+        throw new Error(`Invalid model baseUrl: ${rawUrl}`);
+    }
+    if (parsed.protocol !== 'https:') {
+        throw new Error(`Model baseUrl must use https: ${rawUrl}`);
+    }
+    if (!ALLOWED_MODEL_DOWNLOAD_HOSTS.has(parsed.host)) {
+        throw new Error(`Model baseUrl host is not in allowlist: ${parsed.host}`);
+    }
+    return ensureTrailingSlash(parsed.toString());
 }
 
 function ensureDocumentDirectory(): string {
@@ -679,7 +696,7 @@ export async function downloadModel(modelId: SherpaModelId, options: DownloadMod
             }
         }
 
-        const baseUrl = ensureTrailingSlash(options.baseUrl ?? SHERPA_CDN_BASE_URL);
+        const baseUrl = ensureTrustedModelBaseUrl(options.baseUrl ?? SHERPA_CDN_BASE_URL);
         let localMeta = await readLocalModelMeta(modelId);
         const localZipExists = (await FileSystem.getInfoAsync(getModelZipPath(modelId))).exists;
 

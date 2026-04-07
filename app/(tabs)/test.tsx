@@ -10,7 +10,9 @@ import { getCurrentModel } from '~/db/mmkv/model-selection';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
+import { pickRandomNewsSample } from '~/services/local-news-samples';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/scripts/utils';
+import { summarizeTextByRemoteApi, type RemoteSummaryProgress } from '~/services/remote-llm-service';
 
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
@@ -56,6 +58,12 @@ export default function Home() {
     const [vadSegments, setVadSegments] = useState<VadSegmentItem[]>([]);
     const [segmentRecognitionMap, setSegmentRecognitionMap] = useState<Record<string, SegmentRecognitionState>>({});
     const [playingVadPath, setPlayingVadPath] = useState<string | null>(null);
+    const [qwenStatusText, setQwenStatusText] = useState('待选择新闻样本');
+    const [selectedNews, setSelectedNews] = useState(() => pickRandomNewsSample());
+    const [qwenSummaryText, setQwenSummaryText] = useState('');
+    const [qwenProgress, setQwenProgress] = useState<RemoteSummaryProgress | null>(null);
+    const [qwenElapsedMs, setQwenElapsedMs] = useState<number | null>(null);
+    const [qwenRemoteModel, setQwenRemoteModel] = useState<string | null>(null);
     const vadPlayer = useAudioPlayer(null, { updateInterval: 200 });
     const vadPlayerStatus = useAudioPlayerStatus(vadPlayer);
     const pauseVadPlayer = useCallback(async () => {
@@ -237,6 +245,36 @@ export default function Home() {
         [denoiseEnabled, runRecognitionPreflight],
     );
 
+    const handleRandomNews = useCallback(() => {
+        setSelectedNews(pickRandomNewsSample());
+        setQwenSummaryText('');
+        setQwenElapsedMs(null);
+        setQwenStatusText('已随机抽取一条新闻样本');
+    }, []);
+
+    const handleSummarizeNews = useCallback(async () => {
+        setQwenSummaryText('');
+        setQwenElapsedMs(null);
+        setQwenRemoteModel(null);
+        setQwenProgress(null);
+        try {
+            const result = await summarizeTextByRemoteApi({
+                input: selectedNews.content,
+                onProgress: progress => {
+                    setQwenProgress(progress);
+                    setQwenStatusText(progress.message);
+                },
+            });
+            setQwenSummaryText(result.summaryText);
+            setQwenElapsedMs(result.elapsedMs);
+            setQwenRemoteModel(result.model);
+            setQwenStatusText('远程推理完成');
+        } catch (error) {
+            const message = (error as Error).message ?? 'unknown';
+            setQwenStatusText(`推理失败：${message}`);
+        }
+    }, [selectedNews.content]);
+
     useFocusEffect(
         useCallback(() => {
             checkCurrentModelVersions().catch(error => {
@@ -304,6 +342,47 @@ export default function Home() {
                             </View>
                         );
                     })}
+                </View>
+
+                <View className="gap-2 rounded-xl border border-[#e5e7eb] p-3">
+                    <TextX variant="title">远程 LLM 摘要（测试页）</TextX>
+                    <TextX variant="description">状态：{qwenStatusText}</TextX>
+                    <TextX variant="description">
+                        样本：{selectedNews.title}
+                    </TextX>
+                    <TextX numberOfLines={6} variant="description">
+                        {selectedNews.content}
+                    </TextX>
+                    <View className="flex-row items-center gap-2">
+                        <ButtonX size="sm" variant="outline" onPress={handleRandomNews}>
+                            随机新闻
+                        </ButtonX>
+                        <ButtonX size="sm" onPress={handleSummarizeNews} loading={qwenProgress?.stage === 'requesting'}>
+                            随机新闻总结
+                        </ButtonX>
+                    </View>
+
+                    {qwenProgress ? (
+                        <View className="gap-1">
+                            <TextX variant="description">
+                                阶段进度：{Math.round(qwenProgress.stageProgress * 100)}%
+                            </TextX>
+                            <TextX variant="description">阶段：{qwenProgress.stage}</TextX>
+                        </View>
+                    ) : null}
+
+                    {qwenSummaryText ? (
+                        <View className="gap-1 rounded-lg border border-[#e5e7eb] p-2">
+                            <TextX variant="subtitle">总结结果</TextX>
+                            <TextX>{qwenSummaryText}</TextX>
+                        </View>
+                    ) : null}
+
+                    <View className="gap-1">
+                        <TextX variant="description">远程模型：{qwenRemoteModel ?? '-'}</TextX>
+                        <TextX variant="description">远程耗时(ms)：{qwenElapsedMs ?? '-'}</TextX>
+                        <TextX variant="description">提示：请配置 `EXPO_PUBLIC_LLM_API_KEY` 后再使用</TextX>
+                    </View>
                 </View>
 
             </ScrollView>

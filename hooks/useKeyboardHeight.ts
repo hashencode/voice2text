@@ -23,13 +23,24 @@ export const useKeyboardHeight = (): UseKeyboardHeightReturn => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
         const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
+        const resolveKeyboardHeight = (event: KeyboardEvent): number => {
+            const windowHeight = Dimensions.get('window').height;
+            const end = event.endCoordinates;
+            const screenY = typeof end.screenY === 'number' ? end.screenY : windowHeight - end.height;
+            const calculated = Math.max(0, windowHeight - screenY);
+            if (calculated > 0) {
+                return calculated;
+            }
+            return Math.max(0, end.height || 0);
+        };
+
         // Handle keyboard show
         const handleKeyboardShow = (event: KeyboardEvent) => {
-            const { height } = event.endCoordinates;
+            const height = resolveKeyboardHeight(event);
             const duration = event.duration;
 
             // Validate height - sometimes we get invalid values
-            if (height && height > 0) {
+            if (height > 0) {
                 setKeyboardHeight(height);
                 setIsKeyboardVisible(true);
                 setKeyboardAnimationDuration(duration || 250); // Default duration if not provided

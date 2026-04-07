@@ -447,14 +447,14 @@ export default function RecordPage() {
                     </View>
                 </View>
 
-                <View className="flex-shrink-0">
-                    <View
-                        className="flex-row items-center gap-3 p-3 pb-4"
-                        style={{
-                            backgroundColor: cardColor,
-                            borderStartStartRadius: BORDER_RADIUS,
-                            borderEndStartRadius: BORDER_RADIUS,
-                        }}>
+                <View
+                    className="flex-shrink-0"
+                    style={{
+                        backgroundColor: cardColor,
+                        borderStartStartRadius: BORDER_RADIUS,
+                        borderEndStartRadius: BORDER_RADIUS,
+                    }}>
+                    <View className="flex-row items-center gap-3 p-3 pb-4">
                         {isIdleLike ? (
                             <Pressable onPress={() => navigation.goBack()} disabled={isStopping || actionLoading}>
                                 <View
