@@ -5,14 +5,14 @@ import { ScrollView, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
-import { getDenoiseEnabled, getSpeakerDiarizationEnabled } from '~/db/mmkv/app-config';
-import { getCurrentModel } from '~/db/mmkv/model-selection';
+import { getDenoiseEnabled, getSpeakerDiarizationEnabled, getVadEngine } from '~/data/mmkv/app-config';
+import { getCurrentModel } from '~/data/mmkv/model-selection';
 import { useFilePicker } from '~/hooks/useFilePicker';
 import SherpaOnnx, { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
-import { pickRandomNewsSample } from '~/services/local-news-samples';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/scripts/utils';
-import { summarizeTextByRemoteApi, type RemoteSummaryProgress } from '~/services/remote-llm-service';
+import { pickRandomNewsSample } from '~/features/test/data/news-samples';
+import { summarizeTextByRemoteApi, type RemoteSummaryProgress } from '~/integrations/llm/remote-summary';
 
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
@@ -29,6 +29,19 @@ type SegmentRecognitionState = {
     loading: boolean;
     text: string;
     error: string;
+};
+
+type FileRecognitionTiming = {
+    mainDecodeMs: number;
+    segmentDecodeTotalMs: number;
+    segmentCount: number;
+    segmentDecodeDetails: {
+        index: number;
+        durationMs: number;
+        path: string;
+    }[];
+    textAssembleMs: number;
+    totalMs: number;
 };
 
 function compareModelVersion(left: string, right: string): number {
@@ -52,6 +65,7 @@ function compareModelVersion(left: string, right: string): number {
 export default function Home() {
     const [conversionText, setConversionText] = useState('');
     const [conversionElapsedMs, setConversionElapsedMs] = useState<number | null>(null);
+    const [fileRecognitionTiming, setFileRecognitionTiming] = useState<FileRecognitionTiming | null>(null);
     const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabled] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabled] = useState(getDenoiseEnabled());
@@ -113,47 +127,50 @@ export default function Home() {
 
         setFileRecognitionStatusText('文件识别中...');
         setConversionElapsedMs(null);
+        setFileRecognitionTiming(null);
         try {
             const currentModelId = getCurrentModel();
-            const startedAt = Date.now();
+            const totalStartedAt = Date.now();
+            const mainDecodeStartedAt = Date.now();
             const result = await SherpaOnnx.transcribeWavByDownloadedModel(uri, currentModelId, {
                 enableDenoise: denoiseEnabled,
                 enableSpeakerDiarization: speakerDiarizationEnabled,
                 speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
                 speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
+                vadMaxSpeechDuration: 60,
+                vadEngine: getVadEngine(),
             });
+            const mainDecodeMs = Date.now() - mainDecodeStartedAt;
             const normalizedSegments = (result.vadSegments ?? []).filter(item => Boolean(item.path));
-            setConversionElapsedMs(Date.now() - startedAt);
             setVadSegments(normalizedSegments);
             setSegmentRecognitionMap({});
             setPlayingVadPath(null);
             void pauseVadPlayer();
 
-            if (normalizedSegments.length > 0) {
-                const recognizedTexts: string[] = [];
-                for (let index = 0; index < normalizedSegments.length; index += 1) {
-                    const segment = normalizedSegments[index];
-                    setFileRecognitionStatusText(`VAD 分段识别中 (${index + 1}/${normalizedSegments.length})...`);
-                    const segmentResult = await SherpaOnnx.transcribeWavByDownloadedModel(segment.path, currentModelId, {
-                        enableDenoise: false,
-                        enableVad: false,
-                        enableSpeakerDiarization: false,
-                    });
-                    const text = segmentResult.text.trim();
-                    if (text) {
-                        recognizedTexts.push(text);
-                    }
-                }
-                setConversionText(recognizedTexts.join('\n'));
-            } else {
-                setConversionText(result.text);
-            }
+            let segmentDecodeTotalMs = 0;
+            const segmentDecodeDetails: FileRecognitionTiming['segmentDecodeDetails'] = [];
+            const textAssembleStartedAt = Date.now();
+            // Avoid decoding every VAD segment again by default.
+            // The main decode already returns final text; per-segment decode remains available via "识别该段" button.
+            setConversionText(result.text);
+            const textAssembleMs = Date.now() - textAssembleStartedAt;
+            const totalMs = Date.now() - totalStartedAt;
+            setConversionElapsedMs(totalMs);
+            setFileRecognitionTiming({
+                mainDecodeMs,
+                segmentDecodeTotalMs,
+                segmentCount: normalizedSegments.length,
+                segmentDecodeDetails,
+                textAssembleMs,
+                totalMs,
+            });
 
             setFileRecognitionStatusText('文件识别完成');
             return true;
         } catch (error) {
             const message = (error as Error).message ?? 'unknown';
             setConversionElapsedMs(null);
+            setFileRecognitionTiming(null);
             setVadSegments([]);
             setSegmentRecognitionMap({});
             setFileRecognitionStatusText(`文件识别失败: ${message}`);
@@ -222,6 +239,7 @@ export default function Home() {
                     enableDenoise: denoiseEnabled,
                     enableVad: false,
                     enableSpeakerDiarization: false,
+                    vadEngine: getVadEngine(),
                 });
                 setSegmentRecognitionMap(prev => ({
                     ...prev,
@@ -305,6 +323,27 @@ export default function Home() {
                 <TextX>文件识别状态：{fileRecognitionStatusText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
                 {conversionElapsedMs === null ? null : <TextX>耗时：{(conversionElapsedMs / 1000).toFixed(2)} s</TextX>}
+                {fileRecognitionTiming ? (
+                    <View className="gap-1 rounded-lg border border-[#e5e7eb] p-3">
+                        <TextX variant="subtitle">识别分阶段耗时</TextX>
+                        <TextX variant="description">总耗时：{(fileRecognitionTiming.totalMs / 1000).toFixed(2)} s</TextX>
+                        <TextX variant="description">主识别（含VAD输出）：{(fileRecognitionTiming.mainDecodeMs / 1000).toFixed(2)} s</TextX>
+                        <TextX variant="description">
+                            分段识别总耗时：{(fileRecognitionTiming.segmentDecodeTotalMs / 1000).toFixed(2)} s
+                        </TextX>
+                        <TextX variant="description">分段数量：{fileRecognitionTiming.segmentCount}</TextX>
+                        <TextX variant="description">文本拼接与收尾：{(fileRecognitionTiming.textAssembleMs / 1000).toFixed(2)} s</TextX>
+                        {fileRecognitionTiming.segmentDecodeDetails.length > 0 ? (
+                            <View className="mt-1 gap-0.5">
+                                {fileRecognitionTiming.segmentDecodeDetails.map(detail => (
+                                    <TextX key={detail.path} variant="description">
+                                        段 {detail.index}：{(detail.durationMs / 1000).toFixed(2)} s
+                                    </TextX>
+                                ))}
+                            </View>
+                        ) : null}
+                    </View>
+                ) : null}
 
                 <View className="gap-2">
                     <TextX variant="description">
@@ -347,9 +386,7 @@ export default function Home() {
                 <View className="gap-2 rounded-xl border border-[#e5e7eb] p-3">
                     <TextX variant="title">远程 LLM 摘要（测试页）</TextX>
                     <TextX variant="description">状态：{qwenStatusText}</TextX>
-                    <TextX variant="description">
-                        样本：{selectedNews.title}
-                    </TextX>
+                    <TextX variant="description">样本：{selectedNews.title}</TextX>
                     <TextX numberOfLines={6} variant="description">
                         {selectedNews.content}
                     </TextX>
@@ -364,9 +401,7 @@ export default function Home() {
 
                     {qwenProgress ? (
                         <View className="gap-1">
-                            <TextX variant="description">
-                                阶段进度：{Math.round(qwenProgress.stageProgress * 100)}%
-                            </TextX>
+                            <TextX variant="description">阶段进度：{Math.round(qwenProgress.stageProgress * 100)}%</TextX>
                             <TextX variant="description">阶段：{qwenProgress.stage}</TextX>
                         </View>
                     ) : null}
@@ -384,7 +419,6 @@ export default function Home() {
                         <TextX variant="description">提示：请配置 `EXPO_PUBLIC_LLM_API_KEY` 后再使用</TextX>
                     </View>
                 </View>
-
             </ScrollView>
         </DefaultLayout>
     );

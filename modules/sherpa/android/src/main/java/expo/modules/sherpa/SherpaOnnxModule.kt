@@ -12,11 +12,13 @@ import com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuation
 import com.k2fsa.sherpa.onnx.OfflinePunctuationConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuationModelConfig
+import com.k2fsa.sherpa.onnx.OfflineQwen3AsrModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
 import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiser
 import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserDpdfNetModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserGtcrnModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarization
@@ -27,6 +29,7 @@ import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.FastClusteringConfig
+import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingManager
@@ -1428,6 +1431,13 @@ class SherpaOnnxModule : Module() {
     val llm = options?.getString("llm") ?: "llm.onnx"
     val embedding = options?.getString("embedding") ?: "embedding.onnx"
     val tokenizer = options?.getString("tokenizer") ?: "Qwen3-0.6B"
+    val convFrontend = options?.getString("convFrontend") ?: "conv_frontend.onnx"
+    val maxTotalLen = options?.getInt("maxTotalLen") ?: 4096
+    val maxNewTokens = options?.getInt("maxNewTokens") ?: 512
+    val temperature = options?.getFloat("temperature") ?: 0f
+    val topP = options?.getFloat("topP") ?: 1f
+    val seed = options?.getInt("seed") ?: 0
+    val hotwords = options?.getString("hotwords") ?: ""
     val tokens = options?.getString("tokens")
 
     val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
@@ -1443,6 +1453,7 @@ class SherpaOnnxModule : Module() {
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
     val vadModel = options?.getString("vadModel")
+    val vadEngine = options?.getString("vadEngine")?.lowercase()
     val enableVad = options?.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
     val enableSpeakerDiarization = options?.getBoolean("enableSpeakerDiarization") ?: false
 
@@ -1459,12 +1470,16 @@ class SherpaOnnxModule : Module() {
     var resolvedLlmPath = ""
     var resolvedEmbeddingPath = ""
     var resolvedTokenizerDirPath = ""
+    var resolvedQwen3ConvFrontendPath = ""
+    var resolvedQwen3EncoderPath = ""
+    var resolvedQwen3DecoderPath = ""
+    var resolvedQwen3TokenizerDirPath = ""
 
     val modelConfig = OfflineModelConfig().apply {
       resolvedTokensPath =
         if (!tokens.isNullOrBlank()) {
           modelContext.resolveModelPath(tokens)
-        } else if (modelType == "funasr_nano") {
+        } else if (modelType == "funasr_nano" || modelType == "qwen3_asr") {
           ""
         } else {
           modelContext.resolveModelPath("tokens.txt")
@@ -1522,6 +1537,31 @@ class SherpaOnnxModule : Module() {
         }
         modelConfig.modelType = "funasr_nano"
       }
+      "qwen3_asr" -> {
+        val tokenizerDir =
+          if (tokenizer.endsWith(".json")) {
+            File(tokenizer).parent ?: tokenizer
+          } else {
+            tokenizer
+          }
+        resolvedQwen3ConvFrontendPath = modelContext.resolveModelPath(convFrontend)
+        resolvedQwen3EncoderPath = modelContext.resolveModelPath(encoder)
+        resolvedQwen3DecoderPath = modelContext.resolveModelPath(decoder)
+        resolvedQwen3TokenizerDirPath = modelContext.resolveModelPath(tokenizerDir)
+        modelConfig.qwen3Asr = OfflineQwen3AsrModelConfig().apply {
+          this.convFrontend = resolvedQwen3ConvFrontendPath
+          this.encoder = resolvedQwen3EncoderPath
+          this.decoder = resolvedQwen3DecoderPath
+          this.tokenizer = resolvedQwen3TokenizerDirPath
+          this.maxTotalLen = maxTotalLen
+          this.maxNewTokens = maxNewTokens
+          this.temperature = temperature
+          this.topP = topP
+          this.seed = seed
+          this.hotwords = hotwords
+        }
+        modelConfig.modelType = "qwen3_asr"
+      }
       else -> {
         throw IllegalArgumentException("Unsupported modelType: $modelType")
       }
@@ -1559,6 +1599,14 @@ class SherpaOnnxModule : Module() {
         ensureModelPathReadable(modelContext, resolvedLlmPath, "llm")
         ensureModelPathReadable(modelContext, resolvedEmbeddingPath, "embedding")
         ensureModelPathReadable(modelContext, "$resolvedTokenizerDirPath/tokenizer.json", "tokenizer")
+      }
+      "qwen3_asr" -> {
+        ensureModelPathReadable(modelContext, resolvedQwen3ConvFrontendPath, "convFrontend")
+        ensureModelPathReadable(modelContext, resolvedQwen3EncoderPath, "encoder")
+        ensureModelPathReadable(modelContext, resolvedQwen3DecoderPath, "decoder")
+        ensureModelPathReadable(modelContext, "$resolvedQwen3TokenizerDirPath/tokenizer_config.json", "tokenizerConfig")
+        ensureModelPathReadable(modelContext, "$resolvedQwen3TokenizerDirPath/vocab.json", "tokenizerVocab")
+        ensureModelPathReadable(modelContext, "$resolvedQwen3TokenizerDirPath/merges.txt", "tokenizerMerges")
       }
     }
 
@@ -1603,6 +1651,16 @@ class SherpaOnnxModule : Module() {
           llmPath = resolvedLlmPath,
           embeddingPath = resolvedEmbeddingPath,
           tokenizerDirPath = resolvedTokenizerDirPath,
+          qwen3ConvFrontendPath = resolvedQwen3ConvFrontendPath,
+          qwen3EncoderPath = resolvedQwen3EncoderPath,
+          qwen3DecoderPath = resolvedQwen3DecoderPath,
+          qwen3TokenizerDirPath = resolvedQwen3TokenizerDirPath,
+          qwen3MaxTotalLen = maxTotalLen,
+          qwen3MaxNewTokens = maxNewTokens,
+          qwen3Temperature = temperature,
+          qwen3TopP = topP,
+          qwen3Seed = seed,
+          qwen3Hotwords = hotwords,
         )
       recognizer = acquireOfflineRecognizer(recognizerKey, modelContext.assetManager, recognizerConfig)
 
@@ -1616,27 +1674,67 @@ class SherpaOnnxModule : Module() {
         try {
           val vadModelPath = resolveVadModelPath(modelContext, vadModel)
           val normalizedVadPath = vadModelPath.lowercase()
-          val useTenVad = normalizedVadPath.contains("ten-vad")
-          if (!useTenVad) {
+          val resolvedVadEngine =
+            when {
+              vadEngine == "tenvad" || vadEngine == "silerovad" -> vadEngine
+              normalizedVadPath.contains("ten-vad") -> "tenvad"
+              normalizedVadPath.contains("silero") -> "silerovad"
+              else -> ""
+            }
+          if (resolvedVadEngine.isBlank()) {
             println("[sherpa] Unsupported offline VAD model file: $vadModelPath. Fallback without VAD.")
+            vad = null
           } else {
-            val vadThreshold = options?.getFloat("vadThreshold") ?: 0.25f
-            val vadMinSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
-            val vadMinSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.5f
-            val vadWindowSize = options?.getInt("vadWindowSize") ?: 256
-            val vadMaxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 6.0f
-            val vadModelConfig = VadModelConfig().apply {
-              this.sampleRate = sampleRate
-              this.numThreads = numThreads
-              this.provider = provider
-              this.debug = debug
-              this.tenVadModelConfig = TenVadModelConfig().apply {
+            val vadModelConfig: VadModelConfig
+            if (resolvedVadEngine == "tenvad") {
+              val vadThreshold = options?.getFloat("vadThreshold") ?: 0.5f
+              val vadMinSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
+              val vadMinSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.25f
+              val vadWindowSize = options?.getInt("vadWindowSize") ?: 256
+              val vadMaxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 20.0f
+              val tenVadConfig = TenVadModelConfig().apply {
                 this.model = vadModelPath
                 this.threshold = vadThreshold
                 this.minSilenceDuration = vadMinSilenceDuration
                 this.minSpeechDuration = vadMinSpeechDuration
                 this.windowSize = vadWindowSize
                 this.maxSpeechDuration = vadMaxSpeechDuration
+              }
+              vadModelConfig =
+                VadModelConfig(
+                  SileroVadModelConfig(),
+                  tenVadConfig,
+                  sampleRate,
+                  numThreads,
+                  provider,
+                  debug,
+                )
+            } else {
+              val vadThreshold = options?.getFloat("vadThreshold") ?: 0.2f
+              val vadMinSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
+              val vadMinSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.2f
+              val vadWindowSize = options?.getInt("vadWindowSize") ?: 512
+              val vadMaxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 20.0f
+              val vadNegThreshold = options?.getFloat("vadNegThreshold") ?: -1.0f
+              val sileroVadConfig = SileroVadModelConfig().apply {
+                this.model = vadModelPath
+                this.threshold = vadThreshold
+                this.minSilenceDuration = vadMinSilenceDuration
+                this.minSpeechDuration = vadMinSpeechDuration
+                this.windowSize = vadWindowSize
+                this.maxSpeechDuration = vadMaxSpeechDuration
+              }
+              vadModelConfig =
+                VadModelConfig(
+                  sileroVadConfig,
+                  TenVadModelConfig(),
+                  sampleRate,
+                  numThreads,
+                  provider,
+                  debug,
+                )
+              if (vadNegThreshold != -1.0f) {
+                println("[sherpa] silerovad neg_threshold is unsupported in current Android binding, ignored: $vadNegThreshold")
               }
             }
             vad = Vad(modelContext.assetManager, vadModelConfig)
@@ -1810,6 +1908,16 @@ class SherpaOnnxModule : Module() {
     llmPath: String,
     embeddingPath: String,
     tokenizerDirPath: String,
+    qwen3ConvFrontendPath: String,
+    qwen3EncoderPath: String,
+    qwen3DecoderPath: String,
+    qwen3TokenizerDirPath: String,
+    qwen3MaxTotalLen: Int,
+    qwen3MaxNewTokens: Int,
+    qwen3Temperature: Float,
+    qwen3TopP: Float,
+    qwen3Seed: Int,
+    qwen3Hotwords: String,
   ): String {
     return listOf(
       "ctxMode=${modelContext.useFileModelDir}",
@@ -1836,6 +1944,16 @@ class SherpaOnnxModule : Module() {
       "llm=$llmPath",
       "embedding=$embeddingPath",
       "tokenizerDir=$tokenizerDirPath",
+      "qwen3ConvFrontend=$qwen3ConvFrontendPath",
+      "qwen3Encoder=$qwen3EncoderPath",
+      "qwen3Decoder=$qwen3DecoderPath",
+      "qwen3TokenizerDir=$qwen3TokenizerDirPath",
+      "qwen3MaxTotalLen=$qwen3MaxTotalLen",
+      "qwen3MaxNewTokens=$qwen3MaxNewTokens",
+      "qwen3Temperature=$qwen3Temperature",
+      "qwen3TopP=$qwen3TopP",
+      "qwen3Seed=$qwen3Seed",
+      "qwen3Hotwords=$qwen3Hotwords",
     ).joinToString("|")
   }
 
@@ -1850,6 +1968,7 @@ class SherpaOnnxModule : Module() {
       OfflineSpeechDenoiserConfig(
         OfflineSpeechDenoiserModelConfig(
           OfflineSpeechDenoiserGtcrnModelConfig(modelContext.resolveModelPath(denoiseModel)),
+          OfflineSpeechDenoiserDpdfNetModelConfig(),
           numThreads,
           debug,
           provider,

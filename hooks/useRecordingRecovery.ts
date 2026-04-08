@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
-import { hasRecordingSession, upsertRecordingMeta } from '~/db/sqlite/services/recordings.service';
+import { hasRecordingSession, upsertRecordingMeta } from '~/data/sqlite/services/recordings.service';
 import SherpaOnnx, { type RecoverableWavRecording } from '~/modules/sherpa';
 
 type WavFileMeta = {

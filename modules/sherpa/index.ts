@@ -18,6 +18,13 @@ export type SherpaTranscribeOptions = {
     llm?: string;
     embedding?: string;
     tokenizer?: string;
+    convFrontend?: string;
+    maxTotalLen?: number;
+    maxNewTokens?: number;
+    temperature?: number;
+    topP?: number;
+    seed?: number;
+    hotwords?: string;
     tokens?: string;
     sampleRate?: number;
     featureDim?: number;
@@ -32,8 +39,10 @@ export type SherpaTranscribeOptions = {
     enablePunctuation?: boolean;
     punctuationModel?: string;
     enableVad?: boolean;
+    vadEngine?: 'tenvad' | 'silerovad' | string;
     vadModel?: string;
     vadThreshold?: number;
+    vadNegThreshold?: number;
     vadMinSilenceDuration?: number;
     vadMinSpeechDuration?: number;
     vadWindowSize?: number;
@@ -141,52 +150,86 @@ type SherpaModelPreset = SherpaTranscribeOptions & {
     requiredFiles: readonly string[];
 };
 
+type SherpaVadEngine = 'tenvad' | 'silerovad';
+
+const DEFAULT_VAD_ENGINE: SherpaVadEngine = 'tenvad';
+
+const VAD_ENGINE_DEFAULTS: Record<
+    SherpaVadEngine,
+    Required<
+        Pick<
+            SherpaTranscribeOptions,
+            | 'vadEngine'
+            | 'vadModel'
+            | 'vadThreshold'
+            | 'vadMinSilenceDuration'
+            | 'vadMinSpeechDuration'
+            | 'vadMaxSpeechDuration'
+            | 'vadWindowSize'
+        >
+    > &
+        Partial<Required<Pick<SherpaTranscribeOptions, 'vadNegThreshold'>>>
+> = {
+    tenvad: {
+        vadEngine: 'tenvad',
+        vadModel: 'sherpa/onnx/ten-vad.onnx',
+        vadThreshold: 0.5,
+        vadMinSilenceDuration: 0.5,
+        vadMinSpeechDuration: 0.25,
+        vadMaxSpeechDuration: 20,
+        vadWindowSize: 256,
+    },
+    silerovad: {
+        vadEngine: 'silerovad',
+        vadModel: 'sherpa/onnx/silero-vad.onnx',
+        vadThreshold: 0.2,
+        vadNegThreshold: -1,
+        vadMinSilenceDuration: 0.5,
+        vadMinSpeechDuration: 0.2,
+        vadMaxSpeechDuration: 20,
+        vadWindowSize: 512,
+    },
+};
+
+function resolveVadEngine(value: unknown): SherpaVadEngine {
+    if (value === 'silerovad' || value === 'tenvad') {
+        return value;
+    }
+    return DEFAULT_VAD_ENGINE;
+}
+
+function withVadEngineDefaults(options: SherpaTranscribeOptions): SherpaTranscribeOptions {
+    const vadEngine = resolveVadEngine(options.vadEngine);
+    const defaults = VAD_ENGINE_DEFAULTS[vadEngine];
+    const customVadModel = options.vadModel?.trim();
+    return {
+        ...defaults,
+        ...options,
+        vadEngine,
+        vadModel: customVadModel ? customVadModel : defaults.vadModel,
+    };
+}
+
 export const SHERPA_MODEL_PRESETS = {
-    zh: {
-        modelType: 'moonshine',
-        modelDirAsset: 'sherpa/asr/zh',
+    qwen3: {
+        modelType: 'qwen3_asr',
+        modelDirAsset: 'sherpa/asr/qwen3',
         enableDenoise: false,
         denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/onnx/punctuation.onnx',
         enableVad: true,
-        encoder: 'encoder_model.ort',
-        mergedDecoder: 'decoder_model_merged.ort',
-        tokens: 'tokens.txt',
-        requiredFiles: ['encoder_model.ort', 'decoder_model_merged.ort', 'tokens.txt'],
-    },
-    en: {
-        modelType: 'moonshine',
-        modelDirAsset: 'sherpa/asr/en',
-        enableDenoise: false,
-        denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
-        enablePunctuation: false,
-        punctuationModel: 'sherpa/onnx/punctuation.onnx',
-        enableVad: true,
-        encoder: 'encoder_model.ort',
-        mergedDecoder: 'decoder_model_merged.ort',
-        tokens: 'tokens.txt',
-        requiredFiles: ['encoder_model.ort', 'decoder_model_merged.ort', 'tokens.txt'],
-    },
-    universal: {
-        modelType: 'funasr_nano',
-        modelDirAsset: 'sherpa/asr/universal',
-        enableDenoise: false,
-        denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
-        enablePunctuation: false,
-        punctuationModel: 'sherpa/onnx/punctuation.onnx',
-        enableVad: true,
-        encoderAdaptor: 'encoder_adaptor.onnx',
-        llm: 'llm.onnx',
-        embedding: 'embedding.onnx',
-        tokenizer: 'Qwen3-0.6B',
+        convFrontend: 'conv_frontend.onnx',
+        encoder: 'encoder.onnx',
+        decoder: 'decoder.onnx',
+        tokenizer: 'tokenizer',
         requiredFiles: [
-            'embedding.onnx',
-            'encoder_adaptor.onnx',
-            'llm.onnx',
-            'Qwen3-0.6B/tokenizer.json',
-            'Qwen3-0.6B/merges.txt',
-            'Qwen3-0.6B/vocab.json',
+            'conv_frontend.onnx',
+            'decoder.onnx',
+            'encoder.onnx',
+            'tokenizer/merges.txt',
+            'tokenizer/tokenizer_config.json',
+            'tokenizer/vocab.json',
         ],
     },
 } as const satisfies Record<string, SherpaModelPreset>;
@@ -199,6 +242,10 @@ const ALLOWED_MODEL_DOWNLOAD_HOSTS = new Set(['pub-8a517913a3384e018c89aacd59a7b
 type DownloadModelOptions = {
     baseUrl?: string;
     force?: boolean;
+    onProgress?: (progress: DownloadModelProgress) => void;
+};
+
+type ImportModelZipForTestingOptions = {
     onProgress?: (progress: DownloadModelProgress) => void;
 };
 
@@ -792,6 +839,82 @@ export async function ensureModelReady(modelId: SherpaModelId, options: Download
     return downloadModel(modelId, options);
 }
 
+export async function importModelZipForTesting(
+    modelId: SherpaModelId,
+    zipFileUri: string,
+    options: ImportModelZipForTestingOptions = {},
+): Promise<string> {
+    return withModelLock(modelId, async () => {
+        const inputUri = zipFileUri.trim();
+        if (!inputUri) {
+            throw new Error('Local zip path is empty');
+        }
+
+        const modelDir = getDownloadedModelDir(modelId);
+        const tempDir = getModelExtractTempDir(modelId);
+        const stageDir = getModelExtractStageDir(modelId);
+        const importsDir = `${ensureDocumentDirectory()}sherpa/imports/`;
+        const importedZipPath = `${importsDir}${modelId}.zip`;
+        const requiredFiles = SHERPA_MODEL_PRESETS[modelId].requiredFiles;
+
+        await FileSystem.makeDirectoryAsync(getDownloadedModelsRootDir(), { intermediates: true });
+        await FileSystem.makeDirectoryAsync(importsDir, { intermediates: true });
+        await recoverInterruptedState(modelId);
+
+        options.onProgress?.({ modelId, phase: 'downloading-zip' });
+        await safeDelete(importedZipPath);
+        await FileSystem.copyAsync({
+            from: inputUri,
+            to: importedZipPath,
+        });
+        const zipInfo = await FileSystem.getInfoAsync(importedZipPath);
+        if (!zipInfo.exists || zipInfo.isDirectory || typeof zipInfo.size !== 'number' || zipInfo.size <= 0) {
+            throw new Error(`Imported zip is invalid for model: ${modelId}`);
+        }
+
+        options.onProgress?.({ modelId, phase: 'extracting' });
+        await safeDelete(tempDir);
+        await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
+        const unzipResult = await NativeSherpaOnnx.unzipFile(importedZipPath, tempDir);
+        if (!unzipResult.ok) {
+            throw new Error(`Unzip failed for model: ${modelId}`);
+        }
+
+        const sourceDir = await resolveExtractedSourceDir(tempDir, requiredFiles);
+        if (!sourceDir) {
+            throw new Error(`Imported zip missing required files for ${modelId}: ${requiredFiles.join(', ')}`);
+        }
+
+        await safeDelete(stageDir);
+        await FileSystem.makeDirectoryAsync(stageDir, { intermediates: true });
+        for (const file of requiredFiles) {
+            const from = `${sourceDir}${file}`;
+            const to = `${stageDir}${file}`;
+            const parent = to.split('/').slice(0, -1).join('/') + '/';
+            await FileSystem.makeDirectoryAsync(parent, { intermediates: true });
+            await FileSystem.copyAsync({ from, to });
+        }
+
+        // This testing-only import intentionally skips remote model json verification.
+        // We still persist a minimal valid metadata file so existing installed-version
+        // queries and "is installed" checks can work consistently.
+        const fakeMeta: ModelPackageMeta = {
+            version: 'local-import-test',
+            sha256: '0'.repeat(64),
+            files: {},
+        };
+        await FileSystem.writeAsStringAsync(`${stageDir}model.json`, JSON.stringify(fakeMeta, null, 2));
+
+        await safeDelete(modelDir);
+        await FileSystem.moveAsync({ from: stageDir, to: modelDir });
+        await safeDelete(tempDir);
+        await safeDelete(importedZipPath);
+        await removeModelPackageFiles(modelId);
+        options.onProgress?.({ modelId, phase: 'ready', percent: 1 });
+        return modelDir;
+    });
+}
+
 type InitializeBundledModelOptions = {
     overwritePackage?: boolean;
     onProgress?: (progress: DownloadModelProgress) => void;
@@ -854,11 +977,11 @@ export function getSherpaDownloadedModelOptions(modelId: SherpaModelId, override
         requiredFiles: _ignoredRequiredFiles,
         ...presetWithoutAssetPath
     } = SHERPA_MODEL_PRESETS[modelId];
-    return {
+    return withVadEngineDefaults({
         ...presetWithoutAssetPath,
         modelDir: getDownloadedModelDir(modelId),
         ...overrides,
-    };
+    });
 }
 
 async function ensureDownloadedAuxModelPath(
@@ -927,6 +1050,7 @@ const SherpaOnnx = {
     downloadModel,
     ensureModelReady,
     initializeBundledModel,
+    importModelZipForTesting,
     isModelDownloaded,
     getInstalledModelVersion,
     listLocalModels,

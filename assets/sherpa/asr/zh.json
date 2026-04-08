@@ -1,9 +1,0 @@
-{
-    "version": "2026.02.27",
-    "sha256": "0144bda4c05ad164f7a2d0d5793bc32ed4c0a1dbe3543fb3232ba75a63e5b854",
-    "files": {
-        "encoder_model.ort": "c725a24b58595905921ea2a47e2bcf0f18c78f4d171d96136f2dcbc8c77a58a6",
-        "decoder_model_merged.ort": "bf79fce626e123739ec37eceb2b2a010a93d720da266dd5d8ef9a47ef9a7dc36",
-        "tokens.txt": "2870d843e14c1e187bf1913a521562a63b53933814bd7f2145120468f494a049"
-    }
-}

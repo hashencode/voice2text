@@ -13,9 +13,19 @@ interface ProgressProps {
     onSeekStart?: () => void;
     onSeekEnd?: () => void;
     interactive?: boolean;
+    enableTapSeek?: boolean;
 }
 
-export function Progress({ value, style, height = 16, onValueChange, onSeekStart, onSeekEnd, interactive = false }: ProgressProps) {
+export function Progress({
+    value,
+    style,
+    height = 16,
+    onValueChange,
+    onSeekStart,
+    onSeekEnd,
+    interactive = false,
+    enableTapSeek = true,
+}: ProgressProps) {
     const primaryColor = useColor('primary');
     const mutedColor = useColor('muted');
 
@@ -68,7 +78,9 @@ export function Progress({ value, style, height = 16, onValueChange, onSeekStart
         });
 
     // Create tap gesture for direct seeking
-    const tapGesture = Gesture.Tap().onStart(event => {
+    const tapGesture = Gesture.Tap()
+        .enabled(enableTapSeek)
+        .onStart(event => {
         if (!interactive) return;
 
         runOnJS(handleSeekStart)();
@@ -83,7 +95,7 @@ export function Progress({ value, style, height = 16, onValueChange, onSeekStart
         setTimeout(() => {
             runOnJS(handleSeekEnd)();
         }, 200);
-    });
+        });
 
     // Combine gestures
     const combinedGesture = Gesture.Race(panGesture, tapGesture);

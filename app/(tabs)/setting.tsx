@@ -1,5 +1,6 @@
+import * as DocumentPicker from 'expo-document-picker';
 import { Stack } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView } from 'react-native';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { ButtonX } from '~/components/ui/buttonx';
@@ -9,19 +10,18 @@ import { TextX } from '~/components/ui/textx';
 import { View } from '~/components/ui/view';
 import {
     getDenoiseEnabled,
-    getRecognitionProfile,
     getSpeakerDiarizationEnabled,
+    getVadEngine,
     setDenoiseEnabled,
-    setRecognitionProfile,
     setSpeakerDiarizationEnabled,
-    type RecognitionProfileId,
-} from '~/db/mmkv/app-config';
-import { getCurrentModel, setCurrentModel } from '~/db/mmkv/model-selection';
+    setVadEngine,
+    type VadEngineId,
+} from '~/data/mmkv/app-config';
 import {
     ensureModelReady,
     getInstalledModelVersion,
+    importModelZipForTesting,
     isModelDownloaded,
-    SHERPA_MODEL_PRESETS,
     type DownloadModelProgress,
     type SherpaModelId,
 } from '~/modules/sherpa';
@@ -36,23 +36,7 @@ type ModelItemState = {
 };
 
 const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
-
-const PROFILE_MODEL_MAPPING: Record<
-    RecognitionProfileId,
-    {
-        model: SherpaModelId;
-    }
-> = {
-    'zh-cn': {
-        model: 'zh',
-    },
-    en: {
-        model: 'en',
-    },
-    universal: {
-        model: 'universal',
-    },
-};
+const QWEN3_MODEL_ID: SherpaModelId = 'qwen3';
 
 function phaseToText(progress: DownloadModelProgress): string {
     if (progress.phase === 'downloading-zip') {
@@ -72,61 +56,44 @@ function phaseToText(progress: DownloadModelProgress): string {
 }
 
 export default function Setting() {
-    const modelIds = useMemo(() => Object.keys(SHERPA_MODEL_PRESETS) as SherpaModelId[], []);
-    const [items, setItems] = useState<Record<string, ModelItemState>>({});
     const [refreshing, setRefreshing] = useState(false);
-    const [currentModel, setCurrentModelState] = useState<SherpaModelId | null>(null);
-    const [selectingModelId, setSelectingModelId] = useState<SherpaModelId | null>(null);
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabledState] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabledState] = useState(getDenoiseEnabled());
-    const [recognitionProfile, setRecognitionProfileState] = useState<RecognitionProfileId>(getRecognitionProfile());
+    const [vadEngine, setVadEngineState] = useState<VadEngineId>(getVadEngine());
+    const [modelItem, setModelItem] = useState<ModelItemState>({
+        installed: false,
+        version: null,
+        busy: false,
+        statusText: '',
+        errorText: '',
+    });
 
-    const setItem = useCallback((modelId: SherpaModelId, patch: Partial<ModelItemState>) => {
-        setItems(prev => {
-            const current: ModelItemState = prev[modelId] ?? {
-                installed: false,
-                version: null,
-                busy: false,
-                statusText: '',
-                errorText: '',
-            };
-            return {
-                ...prev,
-                [modelId]: { ...current, ...patch },
-            };
+    const refreshModel = useCallback(async () => {
+        const installed = await isModelDownloaded(QWEN3_MODEL_ID);
+        const installedVersion = installed ? await getInstalledModelVersion(QWEN3_MODEL_ID) : null;
+        const version = installedVersion ?? MIN_MODEL_VERSION_BY_MODEL_ID[QWEN3_MODEL_ID] ?? null;
+        setModelItem({
+            installed,
+            version,
+            busy: false,
+            statusText: installed ? '已安装' : '未安装',
+            errorText: '',
         });
     }, []);
-
-    const refreshOne = useCallback(
-        async (modelId: SherpaModelId) => {
-            const installed = await isModelDownloaded(modelId);
-            const installedVersion = installed ? await getInstalledModelVersion(modelId) : null;
-            const version = installedVersion ?? MIN_MODEL_VERSION_BY_MODEL_ID[modelId] ?? null;
-            setItem(modelId, {
-                installed,
-                version,
-                busy: false,
-                statusText: installed ? '已安装' : '未安装',
-                errorText: '',
-            });
-        },
-        [setItem],
-    );
 
     const refreshAll = useCallback(async () => {
         setRefreshing(true);
         try {
-            await Promise.all(modelIds.map(modelId => refreshOne(modelId)));
-            setCurrentModelState(getCurrentModel());
-            setRecognitionProfileState(getRecognitionProfile());
+            await refreshModel();
+            setVadEngineState(getVadEngine());
         } finally {
             setRefreshing(false);
         }
-    }, [modelIds, refreshOne]);
+    }, [refreshModel]);
 
     useEffect(() => {
         refreshAll().catch(error => {
-            console.error('[setting] refresh models failed', error);
+            console.error('[setting] refresh state failed', error);
         });
     }, [refreshAll]);
 
@@ -140,99 +107,73 @@ export default function Setting() {
         setDenoiseEnabledState(value);
     }, []);
 
-    const handleRecognitionProfileChange = useCallback((value: string) => {
-        if (value !== 'zh-cn' && value !== 'en' && value !== 'universal') {
+    const handleVadEngineChange = useCallback((value: string) => {
+        if (value !== 'tenvad' && value !== 'silerovad') {
             return;
         }
-        const profile = value as RecognitionProfileId;
-        const mapping = PROFILE_MODEL_MAPPING[profile];
-
-        setRecognitionProfile(profile);
-        setRecognitionProfileState(profile);
-        setCurrentModel(mapping.model);
-        setCurrentModelState(mapping.model);
+        const engine = value as VadEngineId;
+        setVadEngine(engine);
+        setVadEngineState(engine);
     }, []);
 
-    const handleInstall = useCallback(
-        async (modelId: SherpaModelId) => {
-            setItem(modelId, {
-                busy: true,
-                errorText: '',
-                statusText: '准备安装',
+    const handleInstallQwen3 = useCallback(async () => {
+        setModelItem(prev => ({
+            ...prev,
+            busy: true,
+            errorText: '',
+            statusText: '准备安装',
+        }));
+        try {
+            await ensureModelReady(QWEN3_MODEL_ID, {
+                baseUrl: MODEL_BASE_URL,
+                onProgress: progress => {
+                    setModelItem(prev => ({
+                        ...prev,
+                        statusText: phaseToText(progress),
+                    }));
+                },
             });
-            try {
-                await ensureModelReady(modelId, {
-                    baseUrl: MODEL_BASE_URL,
-                    onProgress: progress => {
-                        setItem(modelId, { statusText: phaseToText(progress) });
-                    },
-                });
-                await refreshOne(modelId);
-            } catch (error) {
-                setItem(modelId, {
-                    busy: false,
-                    errorText: `安装失败: ${(error as Error).message}`,
-                    statusText: '安装失败',
-                });
-            }
-        },
-        [refreshOne, setItem],
-    );
-
-    const handleSetCurrentModel = useCallback(
-        (modelId: SherpaModelId) => {
-            setSelectingModelId(modelId);
-            try {
-                setCurrentModel(modelId);
-                setCurrentModelState(modelId);
-            } catch (error) {
-                setItem(modelId, {
-                    errorText: `设置当前模型失败: ${(error as Error).message}`,
-                });
-            } finally {
-                setSelectingModelId(null);
-            }
-        },
-        [setItem],
-    );
-
-    const renderModelCard = useCallback(
-        (modelId: SherpaModelId) => {
-            const isCurrent = currentModel === modelId;
-            const item = items[modelId] ?? {
-                installed: false,
-                version: null,
+            await refreshModel();
+        } catch (error) {
+            setModelItem(prev => ({
+                ...prev,
                 busy: false,
-                statusText: '',
-                errorText: '',
-            };
+                errorText: `安装失败: ${(error as Error).message}`,
+                statusText: '安装失败',
+            }));
+        }
+    }, [refreshModel]);
 
-            return (
-                <View key={modelId} className="gap-1.5 rounded-lg border border-[#e5e7eb] p-3">
-                    <View className="flex flex-row items-center justify-between gap-x-2">
-                        <TextX variant="title">{modelId}</TextX>
-                        <View className="flex flex-row items-center gap-x-2">
-                            {item.installed ? (
-                                <ButtonX
-                                    variant={isCurrent ? 'primary' : 'secondary'}
-                                    onPress={() => handleSetCurrentModel(modelId)}
-                                    loading={selectingModelId === modelId}>
-                                    {isCurrent ? '已应用' : '应用'}
-                                </ButtonX>
-                            ) : (
-                                <ButtonX onPress={() => handleInstall(modelId)} loading={item.busy}>
-                                    安装
-                                </ButtonX>
-                            )}
-                        </View>
-                    </View>
+    const handleImportQwen3ZipForTesting = useCallback(async () => {
+        setModelItem(prev => ({
+            ...prev,
+            busy: true,
+            errorText: '',
+            statusText: '选择本地压缩包中',
+        }));
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
+                multiple: false,
+                copyToCacheDirectory: true,
+            });
+            if (result.canceled || !result.assets[0]?.uri) {
+                setModelItem(prev => ({ ...prev, busy: false, statusText: '已取消导入' }));
+                return;
+            }
 
-                    <View>{item.errorText ? <TextX lightColor="#dc2626">{item.errorText}</TextX> : null}</View>
-                </View>
-            );
-        },
-        [currentModel, handleInstall, handleSetCurrentModel, items, selectingModelId],
-    );
+            setModelItem(prev => ({ ...prev, statusText: '导入并解压中（测试接口）' }));
+            await importModelZipForTesting(QWEN3_MODEL_ID, result.assets[0].uri);
+            await refreshModel();
+        } catch (error) {
+            setModelItem(prev => ({
+                ...prev,
+                busy: false,
+                errorText: `导入失败: ${(error as Error).message}`,
+                statusText: '导入失败',
+            }));
+        }
+    }, [refreshModel]);
 
     return (
         <DefaultLayout>
@@ -249,26 +190,41 @@ export default function Setting() {
                         <SwitchX value={denoiseEnabled} onValueChange={handleToggleDenoise} />
                     </View>
                     <View className="gap-2">
-                        <TextX>识别语言配置</TextX>
-                        <Tabs value={recognitionProfile} onValueChange={handleRecognitionProfileChange}>
+                        <TextX>VAD 引擎</TextX>
+                        <Tabs value={vadEngine} onValueChange={handleVadEngineChange}>
                             <TabsList>
-                                <TabsTrigger value="zh-cn" className="w-auto">
-                                    zh-cn
+                                <TabsTrigger value="tenvad" className="w-auto">
+                                    tenvad
                                 </TabsTrigger>
-                                <TabsTrigger value="en" className="w-auto">
-                                    en
-                                </TabsTrigger>
-                                <TabsTrigger value="universal" className="w-auto">
-                                    universal
+                                <TabsTrigger value="silerovad" className="w-auto">
+                                    silerovad
                                 </TabsTrigger>
                             </TabsList>
                         </Tabs>
                     </View>
                 </View>
+
                 <ScrollView
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
                     contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
-                    {modelIds.map(modelId => renderModelCard(modelId))}
+                    <View className="gap-1.5 rounded-lg border border-[#e5e7eb] p-3">
+                        <View className="flex flex-row items-center justify-between gap-x-2">
+                            <TextX variant="title">qwen3</TextX>
+                            <TextX variant="description">{modelItem.statusText || '-'}</TextX>
+                        </View>
+
+                        <View className="flex flex-row items-center gap-x-2">
+                            <ButtonX onPress={handleInstallQwen3} loading={modelItem.busy}>
+                                {modelItem.installed ? '重新安装' : '安装'}
+                            </ButtonX>
+                            <ButtonX variant="secondary" onPress={handleImportQwen3ZipForTesting} loading={modelItem.busy}>
+                                导入本地 qwen3 zip（测试）
+                            </ButtonX>
+                        </View>
+
+                        <TextX variant="description">版本：{modelItem.version ?? '-'}</TextX>
+                        {modelItem.errorText ? <TextX lightColor="#dc2626">{modelItem.errorText}</TextX> : null}
+                    </View>
                 </ScrollView>
             </View>
         </DefaultLayout>
