@@ -4,12 +4,15 @@ import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
 import { ArrowLeft, CalendarDays, Mic, Square } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
+import type { EnrichedTextInputInstance, OnChangeStateEvent } from 'react-native-enriched';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
+import { useToast } from '~/components/ui/toast';
+import EditorKeyboardToolbar from '~/features/editor/editor-keyboard-toolbar';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
 import { useRecordSession } from '~/features/session-editor/hooks/use-record-session';
 import { formatHeaderDate } from '~/features/session-editor/services/time-format';
@@ -18,6 +21,9 @@ import { useColor } from '~/hooks/useColor';
 import { BORDER_RADIUS, BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
 
 export default function RecordPage() {
+    const [isNoteFocused, setIsNoteFocused] = React.useState(false);
+    const [noteStyleState, setNoteStyleState] = React.useState<OnChangeStateEvent | null>(null);
+    const noteInputRef = React.useRef<EnrichedTextInputInstance | null>(null);
     const {
         displayName,
         setDisplayName,
@@ -39,6 +45,7 @@ export default function RecordPage() {
         handleConfirmStop,
         handleBackPress,
     } = useRecordSession();
+    const { toast } = useToast();
 
     const primaryColor = useColor('primary');
     const primaryForegroundColor = useColor('primaryForeground');
@@ -48,6 +55,7 @@ export default function RecordPage() {
     const mutedTextColor = useColor('textMuted');
     const cardColor = useColor('card');
     const mutedColor = useColor('muted');
+    const showKeyboardToolbar = editorTab === 'remark' && isNoteFocused;
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
@@ -91,7 +99,12 @@ export default function RecordPage() {
                             </TabsList>
 
                             <TabsContent value="remark" style={{ flex: 1 }}>
-                                <RichNoteEditor placeholder="编辑录音备注" />
+                                <RichNoteEditor
+                                    placeholder="编辑录音备注"
+                                    inputRef={noteInputRef}
+                                    onFocusChange={setIsNoteFocused}
+                                    onStyleStateChange={setNoteStyleState}
+                                />
                             </TabsContent>
 
                             <TabsContent value="transcript">
@@ -163,6 +176,23 @@ export default function RecordPage() {
                     <BottomSafeAreaSpacer />
                 </View>
             </View>
+            <EditorKeyboardToolbar
+                visible={showKeyboardToolbar}
+                noteInputRef={noteInputRef}
+                noteStyleState={noteStyleState}
+                primaryColor={primaryColor}
+                textColor={textColor}
+                mutedColor={mutedColor}
+                mutedTextColor={mutedTextColor}
+                onBlocked={() => {
+                    toast({
+                        title: '当前标题样式下不可用',
+                        description: '请先取消标题样式后再使用该格式',
+                        variant: 'error',
+                        duration: 2200,
+                    });
+                }}
+            />
             <AlertDialog
                 isVisible={confirmDialogState.isVisible}
                 title={confirmDialogState.title}

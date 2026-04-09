@@ -4,6 +4,7 @@ import '~/i18n/translation';
 
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ToastProvider } from '~/components/ui/toast';
 import { useRecordingRecovery } from '~/hooks/useRecordingRecovery';
 import '~/scripts/interop';
@@ -14,13 +15,15 @@ export default function RootLayout() {
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
-            <ToastProvider maxToasts={3}>
-                <ThemeProvider>
-                    <Stack>
-                        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                    </Stack>
-                </ThemeProvider>
-            </ToastProvider>
+            <KeyboardProvider>
+                <ToastProvider maxToasts={3}>
+                    <ThemeProvider>
+                        <Stack>
+                            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                        </Stack>
+                    </ThemeProvider>
+                </ToastProvider>
+            </KeyboardProvider>
         </GestureHandlerRootView>
     );
 }

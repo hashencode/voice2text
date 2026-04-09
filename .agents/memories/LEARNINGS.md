@@ -17,3 +17,4 @@
 - 2026-04-07：Expo Android 真机构建若在 qwen/llama.cpp 的 armeabi-v7a 目标报 `vld1q_f16/vld1_f16 undeclared`，根因是 ARMv7 不支持该半精度 NEON intrinsic。修复：在 `modules/qwen/android/build.gradle` 的 `defaultConfig.ndk` 显式限制 `abiFilters "arm64-v8a"`，并使用 `-PreactNativeArchitectures=arm64-v8a` 构建。
 
 - 2026-04-07：Android 原生层若用 `File(modelPath)` 直接校验 Expo 下载返回的 `file://` URI，会误判文件不存在。应先将 URI 解析为真实路径（如 `Uri.parse(path).path`）再 `exists/isFile/length` 校验，并把解析后的路径传入 JNI。
+- 2026-04-09: 用户要求后续避免使用 `runOnJS`（视为弃用阶段）；键盘相关显隐逻辑优先采用不依赖 `runOnJS` 的实现。
