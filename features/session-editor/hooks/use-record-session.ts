@@ -2,17 +2,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useNavigation } from 'expo-router';
 import React, { useCallback, useEffect } from 'react';
 import { useToast } from '~/components/ui/toast';
-import {
-    getCurrentRecordingFolderName,
-    getFinalTranscribeUseSpeakerDiarization,
-    getFinalTranscribeUseVad,
-} from '~/data/mmkv/app-config';
+import { getCurrentRecordingFolderName } from '~/data/mmkv/app-config';
 import { getCurrentModel } from '~/data/mmkv/model-selection';
 import { upsertRecordingMeta } from '~/data/sqlite/services/recordings.service';
 import { useWavRecording } from '~/features/record/hooks/useWavRecording';
 import type { EditorTabValue } from '~/features/session-editor/types';
-import { buildDefaultTranscribeOptions, transcribeFileWithTiming } from '~/integrations/sherpa/recognition-service';
 import SherpaOnnx from '~/modules/sherpa';
+import { getSherpaDownloadedModelOptions } from '~/modules/sherpa';
 
 type ConfirmButtonVariant = 'primary' | 'destructive';
 
@@ -43,6 +39,20 @@ function createRecordingPath(folderName?: string | null): string {
 }
 
 export function useRecordSession() {
+    const REALTIME_RECORD_MODE = 'official_simulated_vad' as const;
+    const realtimeModelId = React.useRef(getCurrentModel()).current;
+    const realtimeOptions = React.useMemo(
+        () =>
+            getSherpaDownloadedModelOptions(realtimeModelId, {
+                debug: true,
+                enableDenoise: false,
+                enableVad: true,
+                enableSpeakerDiarization: false,
+                wavReadMode: 'streaming',
+            }),
+        [realtimeModelId],
+    );
+
     const [confirmDialogState, setConfirmDialogState] = React.useState<ConfirmDialogState>({
         isVisible: false,
         title: '',
@@ -53,10 +63,6 @@ export function useRecordSession() {
     const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
     const [headerAtMs, setHeaderAtMs] = React.useState(() => Date.now());
     const [activeRecordingPath, setActiveRecordingPath] = React.useState<string | null>(null);
-    const [finalTranscribeUseVad, setFinalTranscribeUseVad] = React.useState(() => getFinalTranscribeUseVad());
-    const [finalTranscribeUseSpeakerDiarization, setFinalTranscribeUseSpeakerDiarization] = React.useState(() =>
-        getFinalTranscribeUseSpeakerDiarization(),
-    );
     const [liveTranscriptText, setLiveTranscriptText] = React.useState('');
     const [liveTranscriptStatusText, setLiveTranscriptStatusText] = React.useState('待开始录音');
     const [liveTranscriptUpdatedAtMs, setLiveTranscriptUpdatedAtMs] = React.useState<number | null>(null);
@@ -90,8 +96,6 @@ export function useRecordSession() {
             recordingStartedAtRef.current = startedAt;
             setHeaderAtMs(startedAt);
             setActiveRecordingPath(startResult.path);
-            setFinalTranscribeUseVad(getFinalTranscribeUseVad());
-            setFinalTranscribeUseSpeakerDiarization(getFinalTranscribeUseSpeakerDiarization());
             setLiveTranscriptText('');
             setLiveTranscriptUpdatedAtMs(null);
             setLiveTranscriptStatusText('实时转写进行中...');
@@ -128,19 +132,10 @@ export function useRecordSession() {
                         setLiveTranscriptText(realtimeSnapshot.text.trim());
                     }
                     await SherpaOnnx.stopRealtimeAsr();
-                    const { transcribe } = await transcribeFileWithTiming({
-                        filePath: wavResult.path,
-                        modelId: getCurrentModel(),
-                        overrides: {
-                            enableVad: finalTranscribeUseVad,
-                            enableSpeakerDiarization: finalTranscribeUseSpeakerDiarization,
-                        },
-                    });
-                    setLiveTranscriptText(transcribe.result.text.trim());
-                    setLiveTranscriptStatusText('最终转写已完成');
+                    setLiveTranscriptStatusText('实时转写已结束');
                 } catch (error) {
-                    console.warn('[record] final transcribe failed', error);
-                    setLiveTranscriptStatusText('实时转写已结束（最终转写失败）');
+                    console.warn('[record] stop realtime asr failed', error);
+                    setLiveTranscriptStatusText('实时转写已结束');
                 }
             } catch (error) {
                 console.error('[record] upsertRecordingMeta failed', error);
@@ -157,12 +152,8 @@ export function useRecordSession() {
             console.error('[record] recording error', error);
             showRecordError(error.message || '录音过程中发生错误');
         },
-        realtimeMode: 'official_simulated_vad',
-        realtimeOptions: buildDefaultTranscribeOptions(undefined, {
-            enableVad: true,
-            enableSpeakerDiarization: false,
-            wavReadMode: 'streaming',
-        }),
+        realtimeMode: REALTIME_RECORD_MODE,
+        realtimeOptions,
     });
 
     const isRecordingOrPaused = phase === 'recording' || phase === 'paused' || phase === 'stopping';

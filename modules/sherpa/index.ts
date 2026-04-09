@@ -5,7 +5,7 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?: 'transducer' | 'moonshine' | 'funasr_nano' | string;
+    modelType?: 'paraformer' | 'moonshine' | string;
     encoder?: string;
     decoder?: string;
     joiner?: string;
@@ -309,26 +309,30 @@ function withVadEngineDefaults(options: SherpaTranscribeOptions): SherpaTranscri
 }
 
 export const SHERPA_MODEL_PRESETS = {
-    qwen3: {
-        modelType: 'qwen3_asr',
-        modelDirAsset: 'sherpa/asr/qwen3',
+    'moonshine-zh': {
+        modelType: 'moonshine',
+        modelDirAsset: 'sherpa/asr/moonshine-zh',
         enableDenoise: false,
         denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/onnx/punctuation.onnx',
         enableVad: true,
-        convFrontend: 'conv_frontend.onnx',
-        encoder: 'encoder.onnx',
-        decoder: 'decoder.onnx',
-        tokenizer: 'tokenizer',
-        requiredFiles: [
-            'conv_frontend.onnx',
-            'decoder.onnx',
-            'encoder.onnx',
-            'tokenizer/merges.txt',
-            'tokenizer/tokenizer_config.json',
-            'tokenizer/vocab.json',
-        ],
+        encoder: 'encoder_model.ort',
+        mergedDecoder: 'decoder_model_merged.ort',
+        tokens: 'tokens.txt',
+        requiredFiles: ['encoder_model.ort', 'decoder_model_merged.ort', 'tokens.txt'],
+    },
+    'paraformer-zh': {
+        modelType: 'paraformer',
+        modelDirAsset: 'sherpa/asr/paraformer-zh',
+        enableDenoise: false,
+        denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
+        enablePunctuation: false,
+        punctuationModel: 'sherpa/onnx/punctuation.onnx',
+        enableVad: true,
+        model: 'model.int8.onnx',
+        tokens: 'tokens.txt',
+        requiredFiles: ['model.int8.onnx', 'tokens.txt'],
     },
 } as const satisfies Record<string, SherpaModelPreset>;
 
@@ -1460,6 +1464,9 @@ const SherpaOnnx = {
     copyAssetFile: NativeSherpaOnnx.copyAssetFile,
     downloadModel,
     ensureModelReady,
+    async prepareRuntimeTranscribeOptions(options: SherpaTranscribeOptions): Promise<SherpaTranscribeOptions> {
+        return ensureDownloadedRuntimeModelPaths(options);
+    },
     initializeBundledModel,
     importModelZipForTesting,
     isModelDownloaded,

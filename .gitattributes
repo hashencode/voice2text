@@ -1,1 +1,2 @@
-assets/sherpa/asr/qwen3.zip filter=lfs diff=lfs merge=lfs -text
+assets/sherpa/asr/paraformer-zh.zip filter=lfs diff=lfs merge=lfs -text
+assets/sherpa/asr/moonshine-zh.zip filter=lfs diff=lfs merge=lfs -text

@@ -13,6 +13,7 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuation
 import com.k2fsa.sherpa.onnx.OfflinePunctuationConfig
 import com.k2fsa.sherpa.onnx.OfflinePunctuationModelConfig
@@ -1813,7 +1814,11 @@ class SherpaOnnxModule : Module() {
   private fun transcribeWave(waveData: WaveData, options: Map<String, Any?>?): Map<String, Any?> {
     val modelContext = resolveModelContext(options)
 
-    val modelType = options?.getString("modelType") ?: "transducer"
+    val modelType = options?.getString("modelType") ?: "paraformer"
+    if (modelType != "paraformer" && modelType != "moonshine" && modelType != "funasr_nano" && modelType != "qwen3_asr") {
+      throw IllegalArgumentException("Unsupported modelType: $modelType")
+    }
+    val model = options?.getString("model") ?: "model.int8.onnx"
     val encoder = options?.getString("encoder") ?: "encoder.onnx"
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
     val joiner = options?.getString("joiner") ?: "joiner.onnx"
@@ -1912,6 +1917,13 @@ class SherpaOnnxModule : Module() {
         }
         modelConfig.modelType = "moonshine"
       }
+      "paraformer" -> {
+        resolvedEncoderPath = modelContext.resolveModelPath(model)
+        modelConfig.paraformer = OfflineParaformerModelConfig().apply {
+          this.model = resolvedEncoderPath
+        }
+        modelConfig.modelType = "paraformer"
+      }
       "funasr_nano" -> {
         val tokenizerDir =
           if (tokenizer.endsWith(".json")) {
@@ -1987,6 +1999,10 @@ class SherpaOnnxModule : Module() {
           ),
           "moonshineDecoder",
         )
+      }
+      "paraformer" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedEncoderPath, "model")
       }
       "funasr_nano" -> {
         ensureModelPathReadable(modelContext, resolvedEncoderAdaptorPath, "encoderAdaptor")
@@ -2258,7 +2274,11 @@ class SherpaOnnxModule : Module() {
 
     val modelContext = resolveModelContext(options)
 
-    val modelType = options?.getString("modelType") ?: "transducer"
+    val modelType = options?.getString("modelType") ?: "paraformer"
+    if (modelType != "paraformer" && modelType != "moonshine" && modelType != "funasr_nano" && modelType != "qwen3_asr") {
+      throw IllegalArgumentException("Unsupported modelType: $modelType")
+    }
+    val model = options?.getString("model") ?: "model.int8.onnx"
     val encoder = options?.getString("encoder") ?: "encoder.onnx"
     val decoder = options?.getString("decoder") ?: "decoder.onnx"
     val joiner = options?.getString("joiner") ?: "joiner.onnx"
@@ -2377,6 +2397,13 @@ class SherpaOnnxModule : Module() {
         }
         modelConfig.modelType = "moonshine"
       }
+      "paraformer" -> {
+        resolvedEncoderPath = modelContext.resolveModelPath(model)
+        modelConfig.paraformer = OfflineParaformerModelConfig().apply {
+          this.model = resolvedEncoderPath
+        }
+        modelConfig.modelType = "paraformer"
+      }
       "funasr_nano" -> {
         val tokenizerDir =
           if (tokenizer.endsWith(".json")) {
@@ -2452,6 +2479,10 @@ class SherpaOnnxModule : Module() {
           ),
           "moonshineDecoder",
         )
+      }
+      "paraformer" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedEncoderPath, "model")
       }
       "funasr_nano" -> {
         ensureModelPathReadable(modelContext, resolvedEncoderAdaptorPath, "encoderAdaptor")

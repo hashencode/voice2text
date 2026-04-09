@@ -1,0 +1,9 @@
+{
+  "version": "2026.04.09-moonshine-v2",
+  "sha256": "c22ddb0ef36f2db0ed14840377712fa41659921d93f52f415f088d7ab731f516",
+  "files": {
+    "encoder_model.ort": "c725a24b58595905921ea2a47e2bcf0f18c78f4d171d96136f2dcbc8c77a58a6",
+    "decoder_model_merged.ort": "bf79fce626e123739ec37eceb2b2a010a93d720da266dd5d8ef9a47ef9a7dc36",
+    "tokens.txt": "2870d843e14c1e187bf1913a521562a63b53933814bd7f2145120468f494a049"
+  }
+}

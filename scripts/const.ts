@@ -1,3 +1,4 @@
 export const MIN_MODEL_VERSION_BY_MODEL_ID = {
-    qwen3: '2026.04.08',
+    'moonshine-zh': '2026.04.09-moonshine-v2',
+    'paraformer-zh': '2025.10.07',
 } as const;

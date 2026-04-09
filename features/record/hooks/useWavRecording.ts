@@ -116,11 +116,15 @@ export function useWavRecording({
             }
 
             const targetPath = await createTargetPath();
+            const preparedRealtimeOptions =
+                realtimeMode && realtimeMode !== 'disabled' && realtimeOptions
+                    ? await SherpaOnnx.prepareRuntimeTranscribeOptions(realtimeOptions)
+                    : realtimeOptions;
             const startResult = await SherpaOnnx.startWavRecording({
                 sampleRate,
                 path: targetPath,
                 realtimeMode,
-                realtimeOptions,
+                realtimeOptions: preparedRealtimeOptions,
             });
             startTimer(true);
             setPhase('recording');

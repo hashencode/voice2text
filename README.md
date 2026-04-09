@@ -2,6 +2,8 @@
 
 基于 Expo + React Native 的语音转文字项目，内置离线 ASR、标点恢复、说话人识别与说话人分离能力。
 
+当前默认 ASR 模型：`moonshine-zh`（`moonshine-v2`）。
+
 
 
 ## 技术栈
@@ -18,9 +20,8 @@
 
 | Type | Name | Source |
 | --- | --- | --- |
-| `en` | `moonshine-v2-en` | [Link](https://k2-fsa.github.io/sherpa/onnx/moonshine/models-v2.html#sherpa-onnx-moonshine-base-en-quantized-2026-02-27-english) |
-| `universal` | `funasr-nano-int8` | [Hugging Face](https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30) |
-| `zh` | `moonshine-v2-zh` | [Link](https://k2-fsa.github.io/sherpa/onnx/moonshine/models-v2.html#sherpa-onnx-moonshine-base-zh-quantized-2026-02-27-chinese) |
+| `moonshine-zh` | `moonshine-v2-zh` | Bundled in project (`assets/sherpa/asr/moonshine-zh`) |
+| `paraformer-zh` | `paraformer-zh-int8` | [Release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models) |
 
 
 
@@ -35,7 +36,7 @@
 ### Speaker Embedding Models（说话人向量）
 
 | Type | Name | Source |
-| --- | --- | --- |
+| --- | --- | --- |           
 | `speaker-recognition.onnx` | `3dspeaker_speech_campplus_sv_zh-en_16k-common.onnx` | [Release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) |
 
 

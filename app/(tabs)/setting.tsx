@@ -21,6 +21,7 @@ import {
     setVadEngine,
     type VadEngineId,
 } from '~/data/mmkv/app-config';
+import { getCurrentModel, setCurrentModel } from '~/data/mmkv/model-selection';
 import {
     ensureModelReady,
     getInstalledModelVersion,
@@ -40,7 +41,21 @@ type ModelItemState = {
 };
 
 const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
-const QWEN3_MODEL_ID: SherpaModelId = 'qwen3';
+const MODEL_IDS: SherpaModelId[] = ['moonshine-zh', 'paraformer-zh'];
+
+function createDefaultModelItemState(): ModelItemState {
+    return {
+        installed: false,
+        version: null,
+        busy: false,
+        statusText: '',
+        errorText: '',
+    };
+}
+
+function isSherpaModelId(value: string): value is SherpaModelId {
+    return MODEL_IDS.includes(value as SherpaModelId);
+}
 
 function phaseToText(progress: DownloadModelProgress): string {
     if (progress.phase === 'downloading-zip') {
@@ -68,31 +83,35 @@ export default function Setting() {
     const [finalTranscribeUseSpeakerDiarization, setFinalTranscribeUseSpeakerDiarizationState] = useState(
         getFinalTranscribeUseSpeakerDiarization(),
     );
-    const [modelItem, setModelItem] = useState<ModelItemState>({
-        installed: false,
-        version: null,
-        busy: false,
-        statusText: '',
-        errorText: '',
+    const [currentModelId, setCurrentModelId] = useState<SherpaModelId>(getCurrentModel());
+    const [modelItems, setModelItems] = useState<Record<SherpaModelId, ModelItemState>>({
+        'moonshine-zh': createDefaultModelItemState(),
+        'paraformer-zh': createDefaultModelItemState(),
     });
+    const modelItem = modelItems[currentModelId];
 
-    const refreshModel = useCallback(async () => {
-        const installed = await isModelDownloaded(QWEN3_MODEL_ID);
-        const installedVersion = installed ? await getInstalledModelVersion(QWEN3_MODEL_ID) : null;
-        const version = installedVersion ?? MIN_MODEL_VERSION_BY_MODEL_ID[QWEN3_MODEL_ID] ?? null;
-        setModelItem({
-            installed,
-            version,
-            busy: false,
-            statusText: installed ? '已安装' : '未安装',
-            errorText: '',
-        });
+    const refreshModel = useCallback(async (modelId: SherpaModelId) => {
+        const installed = await isModelDownloaded(modelId);
+        const installedVersion = installed ? await getInstalledModelVersion(modelId) : null;
+        const version = installedVersion ?? MIN_MODEL_VERSION_BY_MODEL_ID[modelId] ?? null;
+        setModelItems(prev => ({
+            ...prev,
+            [modelId]: {
+                installed,
+                version,
+                busy: false,
+                statusText: installed ? '已安装' : '未安装',
+                errorText: '',
+            },
+        }));
     }, []);
 
     const refreshAll = useCallback(async () => {
         setRefreshing(true);
         try {
-            await refreshModel();
+            const nextModelId = getCurrentModel();
+            setCurrentModelId(nextModelId);
+            await Promise.all(MODEL_IDS.map(modelId => refreshModel(modelId)));
             setVadEngineState(getVadEngine());
             setFinalTranscribeUseVadState(getFinalTranscribeUseVad());
             setFinalTranscribeUseSpeakerDiarizationState(getFinalTranscribeUseSpeakerDiarization());
@@ -136,40 +155,62 @@ export default function Setting() {
         setFinalTranscribeUseSpeakerDiarizationState(value);
     }, []);
 
-    const handleInstallQwen3 = useCallback(async () => {
-        setModelItem(prev => ({
+    const handleModelChange = useCallback((value: string) => {
+        if (!isSherpaModelId(value)) {
+            return;
+        }
+        setCurrentModel(value);
+        setCurrentModelId(value);
+    }, []);
+
+    const handleInstallCurrentModel = useCallback(async () => {
+        const modelId = currentModelId;
+        setModelItems(prev => ({
             ...prev,
-            busy: true,
-            errorText: '',
-            statusText: '准备安装',
+            [modelId]: {
+                ...prev[modelId],
+                busy: true,
+                errorText: '',
+                statusText: '准备安装',
+            },
         }));
         try {
-            await ensureModelReady(QWEN3_MODEL_ID, {
+            await ensureModelReady(modelId, {
                 baseUrl: MODEL_BASE_URL,
                 onProgress: progress => {
-                    setModelItem(prev => ({
+                    setModelItems(prev => ({
                         ...prev,
-                        statusText: phaseToText(progress),
+                        [modelId]: {
+                            ...prev[modelId],
+                            statusText: phaseToText(progress),
+                        },
                     }));
                 },
             });
-            await refreshModel();
+            await refreshModel(modelId);
         } catch (error) {
-            setModelItem(prev => ({
+            setModelItems(prev => ({
                 ...prev,
-                busy: false,
-                errorText: `安装失败: ${(error as Error).message}`,
-                statusText: '安装失败',
+                [modelId]: {
+                    ...prev[modelId],
+                    busy: false,
+                    errorText: `安装失败: ${(error as Error).message}`,
+                    statusText: '安装失败',
+                },
             }));
         }
-    }, [refreshModel]);
+    }, [currentModelId, refreshModel]);
 
-    const handleImportQwen3ZipForTesting = useCallback(async () => {
-        setModelItem(prev => ({
+    const handleImportCurrentModelZipForTesting = useCallback(async () => {
+        const modelId = currentModelId;
+        setModelItems(prev => ({
             ...prev,
-            busy: true,
-            errorText: '',
-            statusText: '选择本地压缩包中',
+            [modelId]: {
+                ...prev[modelId],
+                busy: true,
+                errorText: '',
+                statusText: '选择本地压缩包中',
+            },
         }));
         try {
             const result = await DocumentPicker.getDocumentAsync({
@@ -178,22 +219,38 @@ export default function Setting() {
                 copyToCacheDirectory: true,
             });
             if (result.canceled || !result.assets[0]?.uri) {
-                setModelItem(prev => ({ ...prev, busy: false, statusText: '已取消导入' }));
+                setModelItems(prev => ({
+                    ...prev,
+                    [modelId]: {
+                        ...prev[modelId],
+                        busy: false,
+                        statusText: '已取消导入',
+                    },
+                }));
                 return;
             }
 
-            setModelItem(prev => ({ ...prev, statusText: '导入并解压中（测试接口）' }));
-            await importModelZipForTesting(QWEN3_MODEL_ID, result.assets[0].uri);
-            await refreshModel();
-        } catch (error) {
-            setModelItem(prev => ({
+            setModelItems(prev => ({
                 ...prev,
-                busy: false,
-                errorText: `导入失败: ${(error as Error).message}`,
-                statusText: '导入失败',
+                [modelId]: {
+                    ...prev[modelId],
+                    statusText: '导入并解压中（测试接口）',
+                },
+            }));
+            await importModelZipForTesting(modelId, result.assets[0].uri);
+            await refreshModel(modelId);
+        } catch (error) {
+            setModelItems(prev => ({
+                ...prev,
+                [modelId]: {
+                    ...prev[modelId],
+                    busy: false,
+                    errorText: `导入失败: ${(error as Error).message}`,
+                    statusText: '导入失败',
+                },
             }));
         }
-    }, [refreshModel]);
+    }, [currentModelId, refreshModel]);
 
     return (
         <DefaultLayout>
@@ -201,6 +258,19 @@ export default function Setting() {
             <View className="p-4">
                 <View className="mb-3 gap-2.5 rounded-lg border border-[#e5e7eb] p-3">
                     <TextX variant="subtitle">识别配置</TextX>
+                    <View className="gap-2">
+                        <TextX>当前识别模型</TextX>
+                        <Tabs value={currentModelId} onValueChange={handleModelChange}>
+                            <TabsList>
+                                <TabsTrigger value="moonshine-zh" className="w-auto">
+                                    moonshine-v2
+                                </TabsTrigger>
+                                <TabsTrigger value="paraformer-zh" className="w-auto">
+                                    paraformer
+                                </TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </View>
                     <View className="flex flex-row items-center justify-between">
                         <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
                         <SwitchX value={speakerDiarizationEnabled} onValueChange={handleToggleSpeakerDiarization} />
@@ -240,16 +310,16 @@ export default function Setting() {
                     contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
                     <View className="gap-1.5 rounded-lg border border-[#e5e7eb] p-3">
                         <View className="flex flex-row items-center justify-between gap-x-2">
-                            <TextX variant="title">qwen3</TextX>
+                            <TextX variant="title">{currentModelId}</TextX>
                             <TextX variant="description">{modelItem.statusText || '-'}</TextX>
                         </View>
 
                         <View className="flex flex-row items-center gap-x-2">
-                            <ButtonX onPress={handleInstallQwen3} loading={modelItem.busy}>
+                            <ButtonX onPress={handleInstallCurrentModel} loading={modelItem.busy}>
                                 {modelItem.installed ? '重新安装' : '安装'}
                             </ButtonX>
-                            <ButtonX variant="secondary" onPress={handleImportQwen3ZipForTesting} loading={modelItem.busy}>
-                                导入本地 qwen3 zip（测试）
+                            <ButtonX variant="secondary" onPress={handleImportCurrentModelZipForTesting} loading={modelItem.busy}>
+                                导入本地 {currentModelId} zip（测试）
                             </ButtonX>
                         </View>
 
