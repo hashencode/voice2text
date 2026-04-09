@@ -37,6 +37,7 @@
             "bundleIdentifier": "com.voice2text.beta"
         },
         "android": {
+            "largeHeap": true,
             "adaptiveIcon": {
                 "foregroundImage": "./assets/adaptive-icon.png",
                 "backgroundColor": "#ffffff"

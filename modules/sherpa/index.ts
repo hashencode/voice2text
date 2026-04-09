@@ -29,7 +29,7 @@ export type SherpaTranscribeOptions = {
     sampleRate?: number;
     featureDim?: number;
     numThreads?: number;
-    provider?: 'cpu' | 'xnnpack' | string;
+    provider?: 'nnapi' | 'xnnpack' | 'cpu' | string;
     debug?: boolean;
     decodingMethod?: 'greedy_search' | 'modified_beam_search' | string;
     maxActivePaths?: number;
@@ -55,6 +55,9 @@ export type SherpaTranscribeOptions = {
     speakerNumClusters?: number;
     speakerClusteringThreshold?: number;
     speakerSimilarityThreshold?: number;
+    wavReadMode?: 'streaming' | 'direct';
+    streamingStartOffsetBytes?: number;
+    streamingExistingText?: string;
 };
 
 export type SherpaTranscribeResult = {
@@ -76,10 +79,43 @@ export type SherpaTranscribeResult = {
     }[];
 };
 
+export type SherpaRuntimePathPrepareStep = {
+    key: 'denoiseModel' | 'punctuationModel' | 'vadModel' | 'speakerSegmentationModel' | 'speakerEmbeddingModel';
+    sourcePath: string;
+    destinationPath: string;
+    copied: boolean;
+    elapsedMs: number;
+    skipped: boolean;
+    skipReason?: 'empty' | 'non_asset_path' | 'missing_file_name';
+};
+
+export type SherpaRuntimePathPrepareReport = {
+    totalMs: number;
+    steps: SherpaRuntimePathPrepareStep[];
+};
+
+export type SherpaDownloadedModelTranscribeTiming = {
+    prepareRuntimePathsMs: number;
+    nativeTranscribeMs: number;
+    totalMs: number;
+    provider: string;
+    numThreads: number;
+    availableProcessors: number;
+    performanceTier: 'low' | 'high';
+    runtimePathPrepare: SherpaRuntimePathPrepareReport;
+};
+
+export type SherpaDownloadedModelTranscribeWithTiming = {
+    result: SherpaTranscribeResult;
+    timing: SherpaDownloadedModelTranscribeTiming;
+};
+
 export type WavRecordingStartOptions = {
     path?: string;
     sampleRate?: number;
     chunkDurationMs?: number;
+    realtimeMode?: 'official_simulated_vad' | 'disabled' | string;
+    realtimeOptions?: SherpaTranscribeOptions;
 };
 
 export type WavRecordingStartResult = {
@@ -126,14 +162,59 @@ export type WavFileInfo = {
     durationMs: number;
 };
 
+export type RealtimeAsrSnapshot = {
+    active: boolean;
+    mode: string;
+    sampleRate: number;
+    text: string;
+    committedText: string;
+    partialText: string;
+    updatedAtMs: number;
+};
+
+export type SherpaRuntimeProfile = {
+    availableProcessors: number;
+    isLowRamDevice: boolean;
+    recommendedNumThreads: number;
+    performanceTier: 'low' | 'high';
+};
+
+export type SherpaProviderDiagnostics = {
+    autoProviders: string[];
+    nnapi: { supported: boolean; reason: string };
+    xnnpack: { supported: boolean; reason: string };
+};
+
+export type SherpaProviderSelfCheck = {
+    abi: string[];
+    hardware: string;
+    board: string;
+    product: string;
+    manufacturer: string;
+    model: string;
+    sdkInt: number;
+    nativeLibDir: string;
+    nativeLibDirReady: boolean;
+    availableProviders: string[];
+    libs: { name: string; exists: boolean }[];
+};
+
 type SherpaOnnxNative = {
     hello(): string;
+    getRuntimeProfile(): SherpaRuntimeProfile;
+    getAutoProviders(): string[];
+    getProviderDiagnostics(): SherpaProviderDiagnostics;
+    getProviderSelfCheck(): SherpaProviderSelfCheck;
     isWavRecording(): boolean;
     isWavRecordingPaused(): boolean;
     startWavRecording(options?: WavRecordingStartOptions): Promise<WavRecordingStartResult>;
     stopWavRecording(): Promise<WavRecordingStopResult>;
     pauseWavRecording(): Promise<{ ok: boolean; paused: boolean }>;
     resumeWavRecording(): Promise<{ ok: boolean; paused: boolean }>;
+    startRealtimeAsr(options?: SherpaTranscribeOptions & { realtimeMode?: string; sampleRate?: number }): Promise<{ ok: boolean }>;
+    appendRealtimeAsrPcm(samples: number[], sampleRate?: number): Promise<{ ok: boolean }>;
+    stopRealtimeAsr(): Promise<{ ok: boolean }>;
+    getRealtimeAsrSnapshot(): RealtimeAsrSnapshot;
     recoverWavRecordings(): Promise<RecoveredWavRecording[]>;
     listRecoverableWavRecordings(): Promise<RecoverableWavRecording[]>;
     recoverWavRecordingSession(sessionId: string): Promise<RecoveredWavRecording | null>;
@@ -153,6 +234,23 @@ type SherpaModelPreset = SherpaTranscribeOptions & {
 type SherpaVadEngine = 'tenvad' | 'silerovad';
 
 const DEFAULT_VAD_ENGINE: SherpaVadEngine = 'tenvad';
+const AUTO_PROVIDER_ORDER = ['nnapi', 'xnnpack', 'cpu'] as const;
+const SHERPA_RUNTIME_SELECTION_KEY = 'sherpa:runtime:selection:v1';
+const DEFAULT_RUNTIME_PROFILE: SherpaRuntimeProfile = {
+    availableProcessors: 2,
+    isLowRamDevice: false,
+    recommendedNumThreads: 2,
+    performanceTier: 'low',
+};
+
+type SherpaRuntimeSelection = {
+    provider: string;
+    numThreads: number;
+    updatedAt: number;
+};
+
+let hasLoggedProviderDiagnostics = false;
+let hasLoggedProviderSelfCheck = false;
 
 const VAD_ENGINE_DEFAULTS: Record<
     SherpaVadEngine,
@@ -1018,6 +1116,86 @@ async function ensureDownloadedAuxModelPath(
     };
 }
 
+async function ensureDownloadedAuxModelPathWithReport(
+    options: SherpaTranscribeOptions,
+    key: 'denoiseModel' | 'punctuationModel' | 'vadModel' | 'speakerSegmentationModel' | 'speakerEmbeddingModel',
+    subDir: string,
+): Promise<{ options: SherpaTranscribeOptions; step: SherpaRuntimePathPrepareStep | null }> {
+    const startedAt = Date.now();
+    const modelPath = options[key]?.trim();
+    if (!modelPath) {
+        return {
+            options,
+            step: {
+                key,
+                sourcePath: '',
+                destinationPath: '',
+                copied: false,
+                elapsedMs: Date.now() - startedAt,
+                skipped: true,
+                skipReason: 'empty',
+            },
+        };
+    }
+
+    const isAssetPath = modelPath.startsWith('sherpa/') || modelPath.startsWith('models/');
+    if (!isAssetPath) {
+        return {
+            options,
+            step: {
+                key,
+                sourcePath: modelPath,
+                destinationPath: modelPath,
+                copied: false,
+                elapsedMs: Date.now() - startedAt,
+                skipped: true,
+                skipReason: 'non_asset_path',
+            },
+        };
+    }
+
+    const fileName = modelPath.split('/').filter(Boolean).pop();
+    if (!fileName) {
+        return {
+            options,
+            step: {
+                key,
+                sourcePath: modelPath,
+                destinationPath: '',
+                copied: false,
+                elapsedMs: Date.now() - startedAt,
+                skipped: true,
+                skipReason: 'missing_file_name',
+            },
+        };
+    }
+
+    const rootDir = `${ensureDocumentDirectory()}sherpa/${subDir}/`;
+    const destPath = `${rootDir}${fileName}`;
+    await FileSystem.makeDirectoryAsync(rootDir, { intermediates: true });
+    const info = await FileSystem.getInfoAsync(destPath);
+    let copied = false;
+    if (!info.exists || info.isDirectory || typeof info.size !== 'number' || info.size <= 0) {
+        await NativeSherpaOnnx.copyAssetFile(modelPath, destPath);
+        copied = true;
+    }
+
+    return {
+        options: {
+            ...options,
+            [key]: destPath,
+        },
+        step: {
+            key,
+            sourcePath: modelPath,
+            destinationPath: destPath,
+            copied,
+            elapsedMs: Date.now() - startedAt,
+            skipped: false,
+        },
+    };
+}
+
 async function ensureDownloadedRuntimeModelPaths(options: SherpaTranscribeOptions): Promise<SherpaTranscribeOptions> {
     let resolved = await ensureDownloadedAuxModelPath(options, 'denoiseModel', 'speech-enhancement');
     resolved = await ensureDownloadedAuxModelPath(resolved, 'punctuationModel', 'punctuation');
@@ -1027,16 +1205,249 @@ async function ensureDownloadedRuntimeModelPaths(options: SherpaTranscribeOption
     return resolved;
 }
 
+async function ensureDownloadedRuntimeModelPathsWithReport(
+    options: SherpaTranscribeOptions,
+): Promise<{ options: SherpaTranscribeOptions; report: SherpaRuntimePathPrepareReport }> {
+    const totalStartedAt = Date.now();
+    const steps: SherpaRuntimePathPrepareStep[] = [];
+    let resolved = options;
+
+    const denoise = await ensureDownloadedAuxModelPathWithReport(resolved, 'denoiseModel', 'speech-enhancement');
+    resolved = denoise.options;
+    if (denoise.step) {
+        steps.push(denoise.step);
+    }
+
+    const punctuation = await ensureDownloadedAuxModelPathWithReport(resolved, 'punctuationModel', 'punctuation');
+    resolved = punctuation.options;
+    if (punctuation.step) {
+        steps.push(punctuation.step);
+    }
+
+    const vad = await ensureDownloadedAuxModelPathWithReport(resolved, 'vadModel', 'vad');
+    resolved = vad.options;
+    if (vad.step) {
+        steps.push(vad.step);
+    }
+
+    const speakerSegmentation = await ensureDownloadedAuxModelPathWithReport(resolved, 'speakerSegmentationModel', 'speaker-diarization');
+    resolved = speakerSegmentation.options;
+    if (speakerSegmentation.step) {
+        steps.push(speakerSegmentation.step);
+    }
+
+    const speakerEmbedding = await ensureDownloadedAuxModelPathWithReport(resolved, 'speakerEmbeddingModel', 'speaker-recognition');
+    resolved = speakerEmbedding.options;
+    if (speakerEmbedding.step) {
+        steps.push(speakerEmbedding.step);
+    }
+
+    return {
+        options: resolved,
+        report: {
+            totalMs: Date.now() - totalStartedAt,
+            steps,
+        },
+    };
+}
+
+function normalizeProvider(provider?: string): string | null {
+    const normalized = provider?.trim().toLowerCase();
+    return normalized ? normalized : null;
+}
+
+function getSafeProviderDiagnostics(): SherpaProviderDiagnostics | null {
+    try {
+        return NativeSherpaOnnx.getProviderDiagnostics();
+    } catch {
+        return null;
+    }
+}
+
+function getSafeProviderSelfCheck(): SherpaProviderSelfCheck | null {
+    try {
+        return NativeSherpaOnnx.getProviderSelfCheck();
+    } catch {
+        return null;
+    }
+}
+
+function buildProviderCandidates(explicitProvider?: string, modelType?: string): string[] {
+    const normalized = normalizeProvider(explicitProvider);
+    if (normalized) {
+        return [normalized];
+    }
+    const diagnostics = getSafeProviderDiagnostics();
+    if (diagnostics && diagnostics.autoProviders.length > 0) {
+        return diagnostics.autoProviders.map(item => normalizeProvider(item)).filter((item): item is string => Boolean(item));
+    }
+    try {
+        const nativeProviders = NativeSherpaOnnx.getAutoProviders();
+        const normalizedProviders = nativeProviders
+            .map(item => normalizeProvider(item))
+            .filter((item): item is string => Boolean(item));
+        if (normalizedProviders.length > 0) {
+            return normalizedProviders;
+        }
+    } catch {
+        // ignore and fallback to JS defaults
+    }
+    return [...AUTO_PROVIDER_ORDER];
+}
+
+function getSafeRuntimeProfile(): SherpaRuntimeProfile {
+    try {
+        const profile = NativeSherpaOnnx.getRuntimeProfile();
+        const recommendedNumThreads = profile.recommendedNumThreads >= 4 ? 4 : 2;
+        const performanceTier = recommendedNumThreads >= 4 ? 'high' : 'low';
+        return {
+            availableProcessors: Math.max(1, Math.round(profile.availableProcessors || DEFAULT_RUNTIME_PROFILE.availableProcessors)),
+            isLowRamDevice: Boolean(profile.isLowRamDevice),
+            recommendedNumThreads,
+            performanceTier,
+        };
+    } catch {
+        return DEFAULT_RUNTIME_PROFILE;
+    }
+}
+
+function normalizeNumThreads(value: number): number {
+    if (!Number.isFinite(value)) {
+        return DEFAULT_RUNTIME_PROFILE.recommendedNumThreads;
+    }
+    return Math.max(1, Math.min(16, Math.round(value)));
+}
+
+async function readRuntimeSelection(): Promise<SherpaRuntimeSelection | null> {
+    try {
+        const raw = await AsyncStorage.getItem(SHERPA_RUNTIME_SELECTION_KEY);
+        if (!raw) {
+            return null;
+        }
+        const parsed = JSON.parse(raw) as Partial<SherpaRuntimeSelection>;
+        const provider = normalizeProvider(parsed.provider);
+        if (!provider || typeof parsed.numThreads !== 'number') {
+            return null;
+        }
+        return {
+            provider,
+            numThreads: normalizeNumThreads(parsed.numThreads),
+            updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
+        };
+    } catch {
+        return null;
+    }
+}
+
+async function writeRuntimeSelection(provider: string, numThreads: number): Promise<void> {
+    const normalizedProvider = normalizeProvider(provider);
+    if (!normalizedProvider) {
+        return;
+    }
+    const payload: SherpaRuntimeSelection = {
+        provider: normalizedProvider,
+        numThreads: normalizeNumThreads(numThreads),
+        updatedAt: Date.now(),
+    };
+    await AsyncStorage.setItem(SHERPA_RUNTIME_SELECTION_KEY, JSON.stringify(payload));
+}
+
+async function clearRuntimeSelection(): Promise<void> {
+    await AsyncStorage.removeItem(SHERPA_RUNTIME_SELECTION_KEY);
+}
+
+async function transcribeWavWithAutoProvider(
+    path: string,
+    baseOptions: SherpaTranscribeOptions,
+): Promise<{ result: SherpaTranscribeResult; provider: string; numThreads: number; runtimeProfile: SherpaRuntimeProfile }> {
+    const runtimeProfile = getSafeRuntimeProfile();
+    const diagnostics = getSafeProviderDiagnostics();
+    const selfCheck = getSafeProviderSelfCheck();
+    if (!hasLoggedProviderSelfCheck && selfCheck) {
+        hasLoggedProviderSelfCheck = true;
+        const missingLibs = selfCheck.libs.filter(item => !item.exists).map(item => item.name);
+        console.info(
+            `[sherpa][provider-self-check] abi=${selfCheck.abi.join(',')} device=${selfCheck.manufacturer} ${selfCheck.model} sdk=${selfCheck.sdkInt} hw=${selfCheck.hardware}/${selfCheck.board}/${selfCheck.product} nativeLibDirReady=${selfCheck.nativeLibDirReady} availableProviders=${selfCheck.availableProviders.join(',') || 'none'} missingLibs=${missingLibs.join(',') || 'none'}`,
+        );
+    }
+    if (!hasLoggedProviderDiagnostics && diagnostics) {
+        hasLoggedProviderDiagnostics = true;
+        const unsupportedReasons = [
+            diagnostics.nnapi.supported ? null : `nnapi: ${diagnostics.nnapi.reason}`,
+            diagnostics.xnnpack.supported ? null : `xnnpack: ${diagnostics.xnnpack.reason}`,
+        ].filter((item): item is string => Boolean(item));
+        if (unsupportedReasons.length > 0) {
+            console.info(`[sherpa][provider-diagnostics] autoProviders=${diagnostics.autoProviders.join(',')} unsupported=${unsupportedReasons.join(' | ')}`);
+        } else {
+            console.info(`[sherpa][provider-diagnostics] autoProviders=${diagnostics.autoProviders.join(',')} all-accelerators-supported`);
+        }
+    }
+    const explicitProvider = normalizeProvider(baseOptions.provider);
+    const explicitNumThreads = typeof baseOptions.numThreads === 'number' ? normalizeNumThreads(baseOptions.numThreads) : null;
+    const cachedSelection = !explicitProvider && explicitNumThreads === null ? await readRuntimeSelection() : null;
+    if (cachedSelection) {
+        try {
+            const cachedOptions = {
+                ...baseOptions,
+                provider: cachedSelection.provider,
+                numThreads: cachedSelection.numThreads,
+            };
+            const cachedResult = await NativeSherpaOnnx.transcribeWav(path, cachedOptions);
+            return {
+                result: cachedResult,
+                provider: cachedSelection.provider,
+                numThreads: cachedSelection.numThreads,
+                runtimeProfile,
+            };
+        } catch {
+            await clearRuntimeSelection();
+        }
+    }
+    const numThreads = explicitNumThreads ?? runtimeProfile.recommendedNumThreads;
+    const providerCandidates = buildProviderCandidates(explicitProvider ?? undefined, baseOptions.modelType);
+    let lastError: unknown = null;
+
+    for (let index = 0; index < providerCandidates.length; index += 1) {
+        const provider = providerCandidates[index];
+        const options = {
+            ...baseOptions,
+            provider,
+            numThreads,
+        };
+        try {
+            const result = await NativeSherpaOnnx.transcribeWav(path, options);
+            await writeRuntimeSelection(provider, numThreads);
+            return { result, provider, numThreads, runtimeProfile };
+        } catch (error) {
+            lastError = error;
+            const hasNext = index < providerCandidates.length - 1;
+            if (!hasNext || explicitProvider !== null) {
+                throw error;
+            }
+        }
+    }
+
+    throw (lastError as Error);
+}
+
 const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
 
 const SherpaOnnx = {
     hello: NativeSherpaOnnx.hello,
+    getRuntimeProfile: NativeSherpaOnnx.getRuntimeProfile,
+    getAutoProviders: NativeSherpaOnnx.getAutoProviders,
+    getProviderDiagnostics: NativeSherpaOnnx.getProviderDiagnostics,
+    getProviderSelfCheck: NativeSherpaOnnx.getProviderSelfCheck,
     isWavRecording: NativeSherpaOnnx.isWavRecording,
     isWavRecordingPaused: NativeSherpaOnnx.isWavRecordingPaused,
     startWavRecording: NativeSherpaOnnx.startWavRecording,
     stopWavRecording: NativeSherpaOnnx.stopWavRecording,
     pauseWavRecording: NativeSherpaOnnx.pauseWavRecording,
     resumeWavRecording: NativeSherpaOnnx.resumeWavRecording,
+    startRealtimeAsr: NativeSherpaOnnx.startRealtimeAsr,
+    appendRealtimeAsrPcm: NativeSherpaOnnx.appendRealtimeAsrPcm,
+    stopRealtimeAsr: NativeSherpaOnnx.stopRealtimeAsr,
+    getRealtimeAsrSnapshot: NativeSherpaOnnx.getRealtimeAsrSnapshot,
     recoverWavRecordings: NativeSherpaOnnx.recoverWavRecordings,
     listRecoverableWavRecordings: NativeSherpaOnnx.listRecoverableWavRecordings,
     recoverWavRecordingSession: NativeSherpaOnnx.recoverWavRecordingSession,
@@ -1058,7 +1469,35 @@ const SherpaOnnx = {
     getDownloadedModelDir,
     async transcribeWavByDownloadedModel(path: string, modelId: SherpaModelId, overrides: SherpaTranscribeOptions = {}) {
         const options = await ensureDownloadedRuntimeModelPaths(getSherpaDownloadedModelOptions(modelId, overrides));
-        return NativeSherpaOnnx.transcribeWav(path, options);
+        const transcribed = await transcribeWavWithAutoProvider(path, options);
+        return transcribed.result;
+    },
+    async transcribeWavByDownloadedModelWithTiming(
+        path: string,
+        modelId: SherpaModelId,
+        overrides: SherpaTranscribeOptions = {},
+    ): Promise<SherpaDownloadedModelTranscribeWithTiming> {
+        const totalStartedAt = Date.now();
+        const prepareStartedAt = Date.now();
+        const prepared = await ensureDownloadedRuntimeModelPathsWithReport(getSherpaDownloadedModelOptions(modelId, overrides));
+        const prepareRuntimePathsMs = Date.now() - prepareStartedAt;
+        const nativeStartedAt = Date.now();
+        const transcribed = await transcribeWavWithAutoProvider(path, prepared.options);
+        const nativeTranscribeMs = Date.now() - nativeStartedAt;
+        const totalMs = Date.now() - totalStartedAt;
+        return {
+            result: transcribed.result,
+            timing: {
+                prepareRuntimePathsMs,
+                nativeTranscribeMs,
+                totalMs,
+                provider: transcribed.provider,
+                numThreads: transcribed.numThreads,
+                availableProcessors: transcribed.runtimeProfile.availableProcessors,
+                performanceTier: transcribed.runtimeProfile.performanceTier,
+                runtimePathPrepare: prepared.report,
+            },
+        };
     },
 };
 

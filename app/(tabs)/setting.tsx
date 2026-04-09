@@ -10,9 +10,13 @@ import { TextX } from '~/components/ui/textx';
 import { View } from '~/components/ui/view';
 import {
     getDenoiseEnabled,
+    getFinalTranscribeUseSpeakerDiarization,
+    getFinalTranscribeUseVad,
     getSpeakerDiarizationEnabled,
     getVadEngine,
     setDenoiseEnabled,
+    setFinalTranscribeUseSpeakerDiarization,
+    setFinalTranscribeUseVad,
     setSpeakerDiarizationEnabled,
     setVadEngine,
     type VadEngineId,
@@ -60,6 +64,10 @@ export default function Setting() {
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabledState] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabledState] = useState(getDenoiseEnabled());
     const [vadEngine, setVadEngineState] = useState<VadEngineId>(getVadEngine());
+    const [finalTranscribeUseVad, setFinalTranscribeUseVadState] = useState(getFinalTranscribeUseVad());
+    const [finalTranscribeUseSpeakerDiarization, setFinalTranscribeUseSpeakerDiarizationState] = useState(
+        getFinalTranscribeUseSpeakerDiarization(),
+    );
     const [modelItem, setModelItem] = useState<ModelItemState>({
         installed: false,
         version: null,
@@ -86,6 +94,8 @@ export default function Setting() {
         try {
             await refreshModel();
             setVadEngineState(getVadEngine());
+            setFinalTranscribeUseVadState(getFinalTranscribeUseVad());
+            setFinalTranscribeUseSpeakerDiarizationState(getFinalTranscribeUseSpeakerDiarization());
         } finally {
             setRefreshing(false);
         }
@@ -114,6 +124,16 @@ export default function Setting() {
         const engine = value as VadEngineId;
         setVadEngine(engine);
         setVadEngineState(engine);
+    }, []);
+
+    const handleToggleFinalTranscribeUseVad = useCallback((value: boolean) => {
+        setFinalTranscribeUseVad(value);
+        setFinalTranscribeUseVadState(value);
+    }, []);
+
+    const handleToggleFinalTranscribeUseSpeakerDiarization = useCallback((value: boolean) => {
+        setFinalTranscribeUseSpeakerDiarization(value);
+        setFinalTranscribeUseSpeakerDiarizationState(value);
     }, []);
 
     const handleInstallQwen3 = useCallback(async () => {
@@ -201,6 +221,17 @@ export default function Setting() {
                                 </TabsTrigger>
                             </TabsList>
                         </Tabs>
+                    </View>
+                    <View className="flex flex-row items-center justify-between">
+                        <TextX>最终转写启用 VAD：{finalTranscribeUseVad ? '开启' : '关闭'}</TextX>
+                        <SwitchX value={finalTranscribeUseVad} onValueChange={handleToggleFinalTranscribeUseVad} />
+                    </View>
+                    <View className="flex flex-row items-center justify-between">
+                        <TextX>最终转写启用说话人分离：{finalTranscribeUseSpeakerDiarization ? '开启' : '关闭'}</TextX>
+                        <SwitchX
+                            value={finalTranscribeUseSpeakerDiarization}
+                            onValueChange={handleToggleFinalTranscribeUseSpeakerDiarization}
+                        />
                     </View>
                 </View>
 

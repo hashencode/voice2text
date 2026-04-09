@@ -1,10 +1,14 @@
 package expo.modules.sherpa
 
+import android.app.ActivityManager
+import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
@@ -53,6 +57,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipFile
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -109,7 +114,10 @@ class SherpaOnnxModule : Module() {
   private var wavAudioManager: AudioManager? = null
 
   private val wavLock = Any()
+  private val realtimeLock = Any()
   private val offlineCacheLock = Any()
+  private val nativeLibProbeLock = Any()
+  private val nativeLibProbeCache = mutableMapOf<String, Boolean>()
   private val wavChunkList = mutableListOf<WavChunkMeta>()
 
   private val wavAudioFocusChangeListener =
@@ -127,6 +135,24 @@ class SherpaOnnxModule : Module() {
 
   @Volatile
   private var cachedOfflineRecognizerKey: String? = null
+
+  @Volatile
+  private var activeRealtimeSession: RealtimeAsrSession? = null
+
+  private data class RealtimeAsrSession(
+    val mode: String,
+    val sampleRate: Int,
+    val decodeOptions: Map<String, Any?>,
+    val vad: Vad?,
+    var committedText: String = "",
+    var partialText: String = "",
+    var speechBuffer: ArrayList<Float> = arrayListOf(),
+    var speechOffset: Int = 0,
+    var speechStarted: Boolean = false,
+    var speechStartOffset: Int = 0,
+    var lastPartialDecodeAtMs: Long = 0L,
+    var updatedAtMs: Long = 0L,
+  )
 
   private data class WavChunkMeta(
     val index: Int,
@@ -155,11 +181,17 @@ class SherpaOnnxModule : Module() {
     val chunks: List<WavChunkMeta>,
   )
 
+  private data class ProviderCheckResult(
+    val supported: Boolean,
+    val reason: String,
+  )
+
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
 
     OnDestroy {
       stopWavRecordingInternal(STOP_REASON_MODULE_DESTROYED, interruptedBySystem = true)
+      stopRealtimeAsrInternal()
       clearOfflineRecognizerCache()
       executor.shutdownNow()
       wavRecordExecutor.shutdownNow()
@@ -167,6 +199,99 @@ class SherpaOnnxModule : Module() {
 
     Function("hello") {
       "Sherpa ready"
+    }
+
+    Function("getRuntimeProfile") {
+      val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+      val activityManager = appContext.reactContext?.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+      val isLowRamDevice = activityManager?.isLowRamDevice ?: false
+      val recommendedNumThreads = 2
+      val performanceTier = "low"
+      mapOf(
+        "availableProcessors" to cores,
+        "isLowRamDevice" to isLowRamDevice,
+        "recommendedNumThreads" to recommendedNumThreads,
+        "performanceTier" to performanceTier,
+      )
+    }
+
+    Function("getAutoProviders") {
+      val providers = mutableListOf<String>()
+      if (checkNnapiSupport().supported) {
+        providers.add("nnapi")
+      }
+      if (checkXnnpackSupport().supported) {
+        providers.add("xnnpack")
+      }
+      providers.add("cpu")
+      providers
+    }
+
+    Function("getProviderDiagnostics") {
+      val nnapiCheck = checkNnapiSupport()
+      val xnnpackCheck = checkXnnpackSupport()
+
+      val providers = mutableListOf<String>()
+      if (nnapiCheck.supported) {
+        providers.add("nnapi")
+      }
+      if (xnnpackCheck.supported) {
+        providers.add("xnnpack")
+      }
+      providers.add("cpu")
+
+      mapOf(
+        "autoProviders" to providers,
+        "nnapi" to mapOf(
+          "supported" to nnapiCheck.supported,
+          "reason" to nnapiCheck.reason,
+        ),
+        "xnnpack" to mapOf(
+          "supported" to xnnpackCheck.supported,
+          "reason" to xnnpackCheck.reason,
+        ),
+      )
+    }
+
+    Function("getProviderSelfCheck") {
+      val autoProviders = buildProviderListForSelfCheck()
+      val reactContext = appContext.reactContext
+      val nativeLibDirPath = reactContext?.applicationInfo?.nativeLibraryDir
+      val nativeLibDir = if (nativeLibDirPath.isNullOrBlank()) null else File(nativeLibDirPath)
+      val nativeLibDirReady = nativeLibDir?.exists() == true && nativeLibDir.isDirectory
+
+      fun checkLib(name: String): Map<String, Any?> {
+        val exists = isBundledNativeLibraryAvailable(name)
+        val inNativeLibDir = if (nativeLibDirReady) File(nativeLibDir, name).exists() else false
+        val inApk = hasNativeLibraryInApk(name)
+        return mapOf(
+          "name" to name,
+          "exists" to exists,
+          "inNativeLibDir" to inNativeLibDir,
+          "inApk" to inApk,
+        )
+      }
+
+      val requiredLibs =
+        listOf(
+          "libsherpa-onnx-jni.so",
+          "libonnxruntime.so",
+          "libonnxruntime4j_jni.so",
+        )
+
+      mapOf(
+        "abi" to Build.SUPPORTED_ABIS.toList(),
+        "hardware" to Build.HARDWARE,
+        "board" to Build.BOARD,
+        "product" to Build.PRODUCT,
+        "manufacturer" to Build.MANUFACTURER,
+        "model" to Build.MODEL,
+        "sdkInt" to Build.VERSION.SDK_INT,
+        "nativeLibDir" to (nativeLibDirPath ?: ""),
+        "nativeLibDirReady" to nativeLibDirReady,
+        "availableProviders" to autoProviders,
+        "libs" to requiredLibs.map { checkLib(it) },
+      )
     }
 
     Function("isWavRecording") {
@@ -187,6 +312,8 @@ class SherpaOnnxModule : Module() {
         try {
           val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
           val chunkDurationMs = (options?.getInt("chunkDurationMs") ?: DEFAULT_WAV_CHUNK_DURATION_MS).coerceIn(250, 5000)
+          val realtimeMode = options?.getString("realtimeMode")?.trim()?.ifBlank { null }
+          val realtimeOptions = options?.get("realtimeOptions") as? Map<String, Any?>
           val outputPath =
             options?.getString("path")?.removePrefix("file://")
               ?: run {
@@ -221,6 +348,16 @@ class SherpaOnnxModule : Module() {
           wavStopLatch = CountDownLatch(1)
           persistCurrentWavSessionMeta()
           requestWavAudioFocus()
+
+          if (!realtimeMode.isNullOrBlank() && realtimeMode != REALTIME_MODE_DISABLED) {
+            val mergedRealtimeOptions = HashMap<String, Any?>()
+            if (realtimeOptions != null) {
+              mergedRealtimeOptions.putAll(realtimeOptions)
+            }
+            mergedRealtimeOptions["realtimeMode"] = realtimeMode
+            mergedRealtimeOptions["sampleRate"] = sampleRate
+            startRealtimeAsrInternal(mergedRealtimeOptions)
+          }
 
           wavRecordExecutor.execute {
             runWavRecordingLoop(outFile, audioRecord, sampleRate, sessionDir)
@@ -307,6 +444,75 @@ class SherpaOnnxModule : Module() {
       }
     }
 
+    AsyncFunction("startRealtimeAsr") { options: Map<String, Any?>?, promise: Promise ->
+      executor.execute {
+        try {
+          startRealtimeAsrInternal(options)
+          promise.resolve(mapOf("ok" to true))
+        } catch (e: Throwable) {
+          promise.reject("ERR_REALTIME_ASR_START", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("appendRealtimeAsrPcm") { samples: List<Double>, sampleRate: Int?, promise: Promise ->
+      executor.execute {
+        try {
+          val pcm = FloatArray(samples.size) { index ->
+            samples[index].toFloat()
+          }
+          appendRealtimeAsrSamplesInternal(pcm, sampleRate ?: DEFAULT_SAMPLE_RATE)
+          promise.resolve(mapOf("ok" to true))
+        } catch (e: Throwable) {
+          promise.reject("ERR_REALTIME_ASR_APPEND", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("stopRealtimeAsr") { promise: Promise ->
+      executor.execute {
+        try {
+          stopRealtimeAsrInternal()
+          promise.resolve(mapOf("ok" to true))
+        } catch (e: Throwable) {
+          promise.reject("ERR_REALTIME_ASR_STOP", e.message, e)
+        }
+      }
+    }
+
+    Function("getRealtimeAsrSnapshot") {
+      synchronized(realtimeLock) {
+        val session = activeRealtimeSession
+        if (session == null) {
+          mapOf(
+            "active" to false,
+            "mode" to "",
+            "sampleRate" to DEFAULT_SAMPLE_RATE,
+            "text" to "",
+            "committedText" to "",
+            "partialText" to "",
+            "updatedAtMs" to 0.0,
+          )
+        } else {
+          val text =
+            if (session.partialText.isNotBlank()) {
+              mergePieceText(session.committedText, session.partialText).trim()
+            } else {
+              session.committedText
+            }
+          mapOf(
+            "active" to true,
+            "mode" to session.mode,
+            "sampleRate" to session.sampleRate,
+            "text" to text,
+            "committedText" to session.committedText,
+            "partialText" to session.partialText,
+            "updatedAtMs" to session.updatedAtMs.toDouble(),
+          )
+        }
+      }
+    }
+
     AsyncFunction("recoverWavRecordings") { promise: Promise ->
       executor.execute {
         try {
@@ -381,13 +587,19 @@ class SherpaOnnxModule : Module() {
         try {
           val cleanPath = wavPath.removePrefix("file://")
           val file = File(cleanPath)
-          if (!file.exists()) {
+          if (!file.exists() || !file.isFile) {
             throw IllegalArgumentException("WAV file does not exist: $cleanPath")
           }
-
-          val waveData = WaveReader.Companion.readWave(cleanPath)
-          promise.resolve(transcribeWave(waveData, options))
-        } catch (e: Exception) {
+          val readMode = (options?.get("wavReadMode") as? String)?.trim()?.lowercase() ?: WAV_READ_MODE_STREAMING
+          if (readMode == WAV_READ_MODE_DIRECT) {
+            println("[sherpa] transcribeWav mode=direct sizeBytes=${file.length()} path=$cleanPath")
+            val waveData = WaveReader.Companion.readWave(cleanPath)
+            promise.resolve(transcribeWave(waveData, options))
+            return@execute
+          }
+          println("[sherpa] transcribeWav mode=streaming sizeBytes=${file.length()} path=$cleanPath")
+          promise.resolve(transcribeWavStreaming(cleanPath, options))
+        } catch (e: Throwable) {
           promise.reject("ERR_SHERPA_TRANSCRIBE", e.message, e)
         }
       }
@@ -400,7 +612,7 @@ class SherpaOnnxModule : Module() {
             appContext.reactContext?.assets ?: throw IllegalStateException("React context is not available")
           val waveData = WaveReader.Companion.readWave(assetManager, wavAssetPath)
           promise.resolve(transcribeWave(waveData, options))
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
           promise.reject("ERR_SHERPA_TRANSCRIBE_ASSET", e.message, e)
         }
       }
@@ -550,6 +762,182 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun startRealtimeAsrInternal(options: Map<String, Any?>?) {
+    val mode = options?.getString("realtimeMode")?.trim()?.ifBlank { REALTIME_MODE_OFFICIAL_SIMULATED_VAD } ?: REALTIME_MODE_OFFICIAL_SIMULATED_VAD
+    val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
+    val decodeOptions = HashMap<String, Any?>()
+    if (options != null) {
+      decodeOptions.putAll(options)
+    }
+    decodeOptions["sampleRate"] = sampleRate
+    decodeOptions["enableVad"] = false
+    decodeOptions["enableSpeakerDiarization"] = false
+    decodeOptions["includeVerboseResult"] = false
+    decodeOptions["wavReadMode"] = WAV_READ_MODE_STREAMING
+
+    val vad =
+      if (mode == REALTIME_MODE_OFFICIAL_SIMULATED_VAD) {
+        createRealtimeVad(options, sampleRate)
+      } else {
+        null
+      }
+
+    synchronized(realtimeLock) {
+      activeRealtimeSession?.vad?.release()
+      activeRealtimeSession = RealtimeAsrSession(mode = mode, sampleRate = sampleRate, decodeOptions = decodeOptions, vad = vad)
+    }
+  }
+
+  private fun stopRealtimeAsrInternal() {
+    synchronized(realtimeLock) {
+      activeRealtimeSession?.vad?.release()
+      activeRealtimeSession = null
+    }
+  }
+
+  private fun appendRealtimeAsrSamplesInternal(samples: FloatArray, sampleRate: Int) {
+    if (samples.isEmpty()) {
+      return
+    }
+    synchronized(realtimeLock) {
+      val session = activeRealtimeSession ?: return
+      if (session.sampleRate != sampleRate) {
+        return
+      }
+      val vad = session.vad
+      if (vad == null) {
+        val text = decodeRealtimeText(session, samples)
+        if (text.isNotBlank()) {
+          session.committedText = mergePieceText(session.committedText, text).trim()
+          session.updatedAtMs = System.currentTimeMillis()
+        }
+        return
+      }
+
+      session.speechBuffer.addAll(samples.toList())
+      while (session.speechOffset + STREAMING_VAD_WINDOW_SIZE_SAMPLES < session.speechBuffer.size) {
+        vad.acceptWaveform(
+          session.speechBuffer
+            .subList(session.speechOffset, session.speechOffset + STREAMING_VAD_WINDOW_SIZE_SAMPLES)
+            .toFloatArray(),
+        )
+        session.speechOffset += STREAMING_VAD_WINDOW_SIZE_SAMPLES
+        if (!session.speechStarted && vad.isSpeechDetected()) {
+          session.speechStarted = true
+          session.speechStartOffset = maxOf(session.speechOffset - STREAMING_SPEECH_START_OFFSET_SAMPLES, 0)
+          session.lastPartialDecodeAtMs = 0L
+        }
+      }
+
+      val nowMs = System.currentTimeMillis()
+      if (
+        session.speechStarted &&
+        session.speechOffset > session.speechStartOffset &&
+        nowMs - session.lastPartialDecodeAtMs >= STREAMING_PARTIAL_DECODE_INTERVAL_MS
+      ) {
+        val partialSamples = session.speechBuffer.subList(session.speechStartOffset, session.speechOffset).toFloatArray()
+        val partialText = decodeRealtimeText(session, partialSamples)
+        session.partialText = partialText
+        session.lastPartialDecodeAtMs = nowMs
+        if (partialText.isNotBlank()) {
+          session.updatedAtMs = nowMs
+        }
+      }
+
+      while (!vad.empty()) {
+        val segment = vad.front()
+        vad.pop()
+        val segmentText = decodeRealtimeText(session, segment.samples)
+        if (segmentText.isNotBlank()) {
+          session.committedText = mergePieceText(session.committedText, segmentText).trim()
+          session.updatedAtMs = System.currentTimeMillis()
+        }
+        session.partialText = ""
+        session.speechStarted = false
+        session.speechBuffer = arrayListOf()
+        session.speechOffset = 0
+        session.speechStartOffset = 0
+        session.lastPartialDecodeAtMs = 0L
+      }
+    }
+  }
+
+  private fun decodeRealtimeText(session: RealtimeAsrSession, samples: FloatArray): String {
+    if (samples.isEmpty()) {
+      return ""
+    }
+    return try {
+      val result = transcribeWave(WaveData(samples, session.sampleRate), session.decodeOptions)
+      result["text"] as? String ?: ""
+    } catch (_: Throwable) {
+      ""
+    }.trim()
+  }
+
+  private fun createRealtimeVad(options: Map<String, Any?>?, sampleRate: Int): Vad? {
+    return try {
+      val modelContext = resolveModelContext(options)
+      val vadModel = options?.getString("vadModel")
+      val vadEngine = options?.getString("vadEngine")?.lowercase()
+      val vadModelPath = resolveVadModelPath(modelContext, vadModel)
+      val normalizedVadPath = vadModelPath.lowercase()
+      val resolvedVadEngine =
+        when {
+          vadEngine == "tenvad" || vadEngine == "silerovad" -> vadEngine
+          normalizedVadPath.contains("ten-vad") -> "tenvad"
+          normalizedVadPath.contains("silero") -> "silerovad"
+          else -> ""
+        }
+      if (resolvedVadEngine.isBlank()) {
+        return null
+      }
+      val numThreads = options?.getInt("numThreads") ?: DEFAULT_NUM_THREADS
+      val provider = options?.getString("provider") ?: "cpu"
+      val debug = options?.getBoolean("debug") ?: false
+      val config =
+        if (resolvedVadEngine == "tenvad") {
+          val tenVadConfig =
+            TenVadModelConfig().apply {
+              this.model = vadModelPath
+              this.threshold = options?.getFloat("vadThreshold") ?: 0.5f
+              this.minSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
+              this.minSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.25f
+              this.windowSize = options?.getInt("vadWindowSize") ?: 256
+              this.maxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 20.0f
+            }
+          VadModelConfig(
+            SileroVadModelConfig(),
+            tenVadConfig,
+            sampleRate,
+            numThreads,
+            provider,
+            debug,
+          )
+        } else {
+          val sileroVadConfig =
+            SileroVadModelConfig().apply {
+              this.model = vadModelPath
+              this.threshold = options?.getFloat("vadThreshold") ?: 0.2f
+              this.minSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
+              this.minSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.2f
+              this.windowSize = options?.getInt("vadWindowSize") ?: 512
+              this.maxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 20.0f
+            }
+          VadModelConfig(
+            sileroVadConfig,
+            TenVadModelConfig(),
+            sampleRate,
+            numThreads,
+            provider,
+            debug,
+          )
+        }
+      Vad(modelContext.assetManager, config)
+    } catch (_: Throwable) {
+      null
+    }
+  }
+
   private fun stopWavRecordingInternal(reason: String, interruptedBySystem: Boolean) {
     if (!wavRecordingRunning) {
       return
@@ -626,6 +1014,12 @@ class SherpaOnnxModule : Module() {
         if (wavRecordingPaused) {
           continue
         }
+
+        val floatSamples = FloatArray(read)
+        for (i in 0 until read) {
+          floatSamples[i] = shortBuffer[i] / 32768.0f
+        }
+        appendRealtimeAsrSamplesInternal(floatSamples, sampleRate)
 
         var offset = 0
         for (i in 0 until read) {
@@ -1854,6 +2248,599 @@ class SherpaOnnxModule : Module() {
     return resultMap
   }
 
+  private fun transcribeWavStreaming(wavPath: String, options: Map<String, Any?>?): Map<String, Any?> {
+    val file = File(wavPath)
+    if (!file.exists() || !file.isFile) {
+      throw IllegalArgumentException("WAV file does not exist: $wavPath")
+    }
+    val wavInfo = readWavInfo(file)
+    val inputSampleRate = wavInfo.sampleRate
+
+    val modelContext = resolveModelContext(options)
+
+    val modelType = options?.getString("modelType") ?: "transducer"
+    val encoder = options?.getString("encoder") ?: "encoder.onnx"
+    val decoder = options?.getString("decoder") ?: "decoder.onnx"
+    val joiner = options?.getString("joiner") ?: "joiner.onnx"
+    val preprocessor = options?.getString("preprocessor") ?: ""
+    val uncachedDecoder = options?.getString("uncachedDecoder") ?: ""
+    val cachedDecoder = options?.getString("cachedDecoder") ?: ""
+    val mergedDecoder = options?.getString("mergedDecoder") ?: "decoder_model_merged.ort"
+    val encoderAdaptor = options?.getString("encoderAdaptor") ?: "encoder_adaptor.onnx"
+    val llm = options?.getString("llm") ?: "llm.onnx"
+    val embedding = options?.getString("embedding") ?: "embedding.onnx"
+    val tokenizer = options?.getString("tokenizer") ?: "Qwen3-0.6B"
+    val convFrontend = options?.getString("convFrontend") ?: "conv_frontend.onnx"
+    val maxTotalLen = options?.getInt("maxTotalLen") ?: 4096
+    val maxNewTokens = options?.getInt("maxNewTokens") ?: 512
+    val temperature = options?.getFloat("temperature") ?: 0f
+    val topP = options?.getFloat("topP") ?: 1f
+    val seed = options?.getInt("seed") ?: 0
+    val hotwords = options?.getString("hotwords") ?: ""
+    val tokens = options?.getString("tokens")
+
+    val sampleRate = inputSampleRate
+    val existingText = options?.getString("streamingExistingText")?.trim() ?: ""
+    val requestedStartOffsetBytes = options?.getLong("streamingStartOffsetBytes")
+    val safeStartOffsetBytes =
+      when {
+        requestedStartOffsetBytes == null -> WAV_HEADER_SIZE.toLong()
+        requestedStartOffsetBytes < WAV_HEADER_SIZE.toLong() -> WAV_HEADER_SIZE.toLong()
+        requestedStartOffsetBytes > file.length() -> file.length()
+        else -> requestedStartOffsetBytes
+      }
+    val baseProcessedSamples = ((safeStartOffsetBytes - WAV_HEADER_SIZE.toLong()).coerceAtLeast(0L)) / 2L
+    val featureDim = options?.getInt("featureDim") ?: DEFAULT_FEATURE_DIM
+    val numThreads = options?.getInt("numThreads") ?: DEFAULT_NUM_THREADS
+    val provider = options?.getString("provider") ?: "cpu"
+    val debug = options?.getBoolean("debug") ?: false
+    val denoiseModel = options?.getString("denoiseModel")
+    val enableDenoise = options?.getBoolean("enableDenoise") ?: !denoiseModel.isNullOrBlank()
+    val punctuationModel = options?.getString("punctuationModel")
+    val enablePunctuation = options?.getBoolean("enablePunctuation") ?: !punctuationModel.isNullOrBlank()
+    val decodingMethod = options?.getString("decodingMethod") ?: "greedy_search"
+    val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
+    val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
+    val vadModel = options?.getString("vadModel")
+    val vadEngine = options?.getString("vadEngine")?.lowercase()
+    val enableVad = options?.getBoolean("enableVad") ?: !vadModel.isNullOrBlank()
+    val enableSpeakerDiarization = options?.getBoolean("enableSpeakerDiarization") ?: false
+    val includeVerboseResult = options?.getBoolean("includeVerboseResult") ?: false
+
+    // TODO(dev): Add chunk-wise denoise with overlap-add so large files can stay streaming-only.
+    if (enableDenoise) {
+      throw IllegalArgumentException("Streaming transcribe does not support denoise yet")
+    }
+    // TODO(dev): Add two-stage speaker diarization (chunk embeddings + global clustering) for streaming mode.
+    if (enableSpeakerDiarization) {
+      throw IllegalArgumentException("Streaming transcribe does not support speaker diarization yet")
+    }
+
+    var resolvedTokensPath = ""
+    var resolvedEncoderPath = ""
+    var resolvedDecoderPath = ""
+    var resolvedJoinerPath = ""
+    var resolvedMoonshinePreprocessorPath = ""
+    var resolvedMoonshineEncoderPath = ""
+    var resolvedMoonshineUncachedDecoderPath = ""
+    var resolvedMoonshineCachedDecoderPath = ""
+    var resolvedMoonshineMergedDecoderPath = ""
+    var resolvedEncoderAdaptorPath = ""
+    var resolvedLlmPath = ""
+    var resolvedEmbeddingPath = ""
+    var resolvedTokenizerDirPath = ""
+    var resolvedQwen3ConvFrontendPath = ""
+    var resolvedQwen3EncoderPath = ""
+    var resolvedQwen3DecoderPath = ""
+    var resolvedQwen3TokenizerDirPath = ""
+
+    val modelConfig = OfflineModelConfig().apply {
+      resolvedTokensPath =
+        if (!tokens.isNullOrBlank()) {
+          modelContext.resolveModelPath(tokens)
+        } else if (modelType == "funasr_nano" || modelType == "qwen3_asr") {
+          ""
+        } else {
+          modelContext.resolveModelPath("tokens.txt")
+        }
+      this.tokens = resolvedTokensPath
+      this.numThreads = numThreads
+      this.provider = provider
+      this.debug = debug
+      this.modelType = modelType
+    }
+
+    when (modelType) {
+      "transducer" -> {
+        resolvedEncoderPath = modelContext.resolveModelPath(encoder)
+        resolvedDecoderPath = modelContext.resolveModelPath(decoder)
+        resolvedJoinerPath = modelContext.resolveModelPath(joiner)
+        modelConfig.transducer =
+          OfflineTransducerModelConfig(
+            resolvedEncoderPath,
+            resolvedDecoderPath,
+            resolvedJoinerPath,
+          )
+      }
+      "moonshine" -> {
+        resolvedMoonshinePreprocessorPath = if (preprocessor.isNotBlank()) modelContext.resolveModelPath(preprocessor) else ""
+        resolvedMoonshineEncoderPath = modelContext.resolveModelPath(encoder)
+        resolvedMoonshineUncachedDecoderPath = if (uncachedDecoder.isNotBlank()) modelContext.resolveModelPath(uncachedDecoder) else ""
+        resolvedMoonshineCachedDecoderPath = if (cachedDecoder.isNotBlank()) modelContext.resolveModelPath(cachedDecoder) else ""
+        resolvedMoonshineMergedDecoderPath = modelContext.resolveModelPath(mergedDecoder)
+        modelConfig.moonshine = OfflineMoonshineModelConfig().apply {
+          this.preprocessor = resolvedMoonshinePreprocessorPath
+          this.encoder = resolvedMoonshineEncoderPath
+          this.uncachedDecoder = resolvedMoonshineUncachedDecoderPath
+          this.cachedDecoder = resolvedMoonshineCachedDecoderPath
+          this.mergedDecoder = resolvedMoonshineMergedDecoderPath
+        }
+        modelConfig.modelType = "moonshine"
+      }
+      "funasr_nano" -> {
+        val tokenizerDir =
+          if (tokenizer.endsWith(".json")) {
+            File(tokenizer).parent ?: tokenizer
+          } else {
+            tokenizer
+          }
+        resolvedEncoderAdaptorPath = modelContext.resolveModelPath(encoderAdaptor)
+        resolvedLlmPath = modelContext.resolveModelPath(llm)
+        resolvedEmbeddingPath = modelContext.resolveModelPath(embedding)
+        resolvedTokenizerDirPath = modelContext.resolveModelPath(tokenizerDir)
+        modelConfig.funasrNano = OfflineFunAsrNanoModelConfig().apply {
+          this.encoderAdaptor = resolvedEncoderAdaptorPath
+          this.llm = resolvedLlmPath
+          this.embedding = resolvedEmbeddingPath
+          this.tokenizer = resolvedTokenizerDirPath
+        }
+        modelConfig.modelType = "funasr_nano"
+      }
+      "qwen3_asr" -> {
+        val tokenizerDir =
+          if (tokenizer.endsWith(".json")) {
+            File(tokenizer).parent ?: tokenizer
+          } else {
+            tokenizer
+          }
+        resolvedQwen3ConvFrontendPath = modelContext.resolveModelPath(convFrontend)
+        resolvedQwen3EncoderPath = modelContext.resolveModelPath(encoder)
+        resolvedQwen3DecoderPath = modelContext.resolveModelPath(decoder)
+        resolvedQwen3TokenizerDirPath = modelContext.resolveModelPath(tokenizerDir)
+        modelConfig.qwen3Asr = OfflineQwen3AsrModelConfig().apply {
+          this.convFrontend = resolvedQwen3ConvFrontendPath
+          this.encoder = resolvedQwen3EncoderPath
+          this.decoder = resolvedQwen3DecoderPath
+          this.tokenizer = resolvedQwen3TokenizerDirPath
+          this.maxTotalLen = maxTotalLen
+          this.maxNewTokens = maxNewTokens
+          this.temperature = temperature
+          this.topP = topP
+          this.seed = seed
+          this.hotwords = hotwords
+        }
+        modelConfig.modelType = "qwen3_asr"
+      }
+      else -> {
+        throw IllegalArgumentException("Unsupported modelType: $modelType")
+      }
+    }
+
+    when (modelType) {
+      "transducer" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedEncoderPath, "encoder")
+        ensureModelPathReadable(modelContext, resolvedDecoderPath, "decoder")
+        ensureModelPathReadable(modelContext, resolvedJoinerPath, "joiner")
+      }
+      "moonshine" -> {
+        ensureModelPathReadable(modelContext, resolvedTokensPath, "tokens")
+        ensureModelPathReadable(modelContext, resolvedMoonshineEncoderPath, "encoder")
+        if (
+          resolvedMoonshineMergedDecoderPath.isBlank() &&
+          resolvedMoonshineUncachedDecoderPath.isBlank() &&
+          resolvedMoonshineCachedDecoderPath.isBlank()
+        ) {
+          throw IllegalArgumentException("Moonshine decoder path is empty")
+        }
+        ensureAnyModelPathReadable(
+          modelContext,
+          listOf(
+            resolvedMoonshineMergedDecoderPath,
+            resolvedMoonshineUncachedDecoderPath,
+            resolvedMoonshineCachedDecoderPath,
+          ),
+          "moonshineDecoder",
+        )
+      }
+      "funasr_nano" -> {
+        ensureModelPathReadable(modelContext, resolvedEncoderAdaptorPath, "encoderAdaptor")
+        ensureModelPathReadable(modelContext, resolvedLlmPath, "llm")
+        ensureModelPathReadable(modelContext, resolvedEmbeddingPath, "embedding")
+        ensureModelPathReadable(modelContext, "$resolvedTokenizerDirPath/tokenizer.json", "tokenizer")
+      }
+      "qwen3_asr" -> {
+        ensureModelPathReadable(modelContext, resolvedQwen3ConvFrontendPath, "convFrontend")
+        ensureModelPathReadable(modelContext, resolvedQwen3EncoderPath, "encoder")
+        ensureModelPathReadable(modelContext, resolvedQwen3DecoderPath, "decoder")
+        ensureModelPathReadable(modelContext, "$resolvedQwen3TokenizerDirPath/tokenizer_config.json", "tokenizerConfig")
+        ensureModelPathReadable(modelContext, "$resolvedQwen3TokenizerDirPath/vocab.json", "tokenizerVocab")
+        ensureModelPathReadable(modelContext, "$resolvedQwen3TokenizerDirPath/merges.txt", "tokenizerMerges")
+      }
+    }
+
+    val recognizerConfig = OfflineRecognizerConfig().apply {
+      this.featConfig = FeatureConfig(sampleRate, featureDim, 0f)
+      this.modelConfig = modelConfig
+      this.decodingMethod = decodingMethod
+      this.maxActivePaths = maxActivePaths
+      this.blankPenalty = blankPenalty
+    }
+
+    var recognizer: OfflineRecognizer? = null
+    var punctuation: OfflinePunctuation? = null
+    var vad: Vad? = null
+    var stream: OfflineStream? = null
+    var resultMap = mutableMapOf<String, Any?>()
+    try {
+      val recognizerKey =
+        buildOfflineRecognizerCacheKey(
+          modelContext = modelContext,
+          modelType = modelType,
+          sampleRate = sampleRate,
+          featureDim = featureDim,
+          numThreads = numThreads,
+          provider = provider,
+          debug = debug,
+          decodingMethod = decodingMethod,
+          maxActivePaths = maxActivePaths,
+          blankPenalty = blankPenalty,
+          tokensPath = resolvedTokensPath,
+          encoderPath = resolvedEncoderPath,
+          decoderPath = resolvedDecoderPath,
+          joinerPath = resolvedJoinerPath,
+          moonshinePreprocessorPath = resolvedMoonshinePreprocessorPath,
+          moonshineEncoderPath = resolvedMoonshineEncoderPath,
+          moonshineUncachedDecoderPath = resolvedMoonshineUncachedDecoderPath,
+          moonshineCachedDecoderPath = resolvedMoonshineCachedDecoderPath,
+          moonshineMergedDecoderPath = resolvedMoonshineMergedDecoderPath,
+          encoderAdaptorPath = resolvedEncoderAdaptorPath,
+          llmPath = resolvedLlmPath,
+          embeddingPath = resolvedEmbeddingPath,
+          tokenizerDirPath = resolvedTokenizerDirPath,
+          qwen3ConvFrontendPath = resolvedQwen3ConvFrontendPath,
+          qwen3EncoderPath = resolvedQwen3EncoderPath,
+          qwen3DecoderPath = resolvedQwen3DecoderPath,
+          qwen3TokenizerDirPath = resolvedQwen3TokenizerDirPath,
+          qwen3MaxTotalLen = maxTotalLen,
+          qwen3MaxNewTokens = maxNewTokens,
+          qwen3Temperature = temperature,
+          qwen3TopP = topP,
+          qwen3Seed = seed,
+          qwen3Hotwords = hotwords,
+        )
+      recognizer = acquireOfflineRecognizer(recognizerKey, modelContext.assetManager, recognizerConfig)
+      if (enablePunctuation && !punctuationModel.isNullOrBlank()) {
+        punctuation = createOfflinePunctuation(modelContext, punctuationModel, numThreads, provider, debug)
+      }
+      if (enableVad) {
+        try {
+          val vadModelPath = resolveVadModelPath(modelContext, vadModel)
+          val normalizedVadPath = vadModelPath.lowercase()
+          val resolvedVadEngine =
+            when {
+              vadEngine == "tenvad" || vadEngine == "silerovad" -> vadEngine
+              normalizedVadPath.contains("ten-vad") -> "tenvad"
+              normalizedVadPath.contains("silero") -> "silerovad"
+              else -> ""
+            }
+          if (resolvedVadEngine.isBlank()) {
+            println("[sherpa] Unsupported offline VAD model file: $vadModelPath. Skip VAD in streaming mode.")
+            vad = null
+          } else {
+            val vadModelConfig: VadModelConfig
+            if (resolvedVadEngine == "tenvad") {
+              val vadThreshold = options?.getFloat("vadThreshold") ?: 0.5f
+              val vadMinSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
+              val vadMinSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.25f
+              val vadWindowSize = options?.getInt("vadWindowSize") ?: 256
+              val vadMaxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 20.0f
+              val tenVadConfig = TenVadModelConfig().apply {
+                this.model = vadModelPath
+                this.threshold = vadThreshold
+                this.minSilenceDuration = vadMinSilenceDuration
+                this.minSpeechDuration = vadMinSpeechDuration
+                this.windowSize = vadWindowSize
+                this.maxSpeechDuration = vadMaxSpeechDuration
+              }
+              vadModelConfig =
+                VadModelConfig(
+                  SileroVadModelConfig(),
+                  tenVadConfig,
+                  sampleRate,
+                  numThreads,
+                  provider,
+                  debug,
+                )
+            } else {
+              val vadThreshold = options?.getFloat("vadThreshold") ?: 0.2f
+              val vadMinSilenceDuration = options?.getFloat("vadMinSilenceDuration") ?: 0.5f
+              val vadMinSpeechDuration = options?.getFloat("vadMinSpeechDuration") ?: 0.2f
+              val vadWindowSize = options?.getInt("vadWindowSize") ?: 512
+              val vadMaxSpeechDuration = options?.getFloat("vadMaxSpeechDuration") ?: 20.0f
+              val sileroVadConfig = SileroVadModelConfig().apply {
+                this.model = vadModelPath
+                this.threshold = vadThreshold
+                this.minSilenceDuration = vadMinSilenceDuration
+                this.minSpeechDuration = vadMinSpeechDuration
+                this.windowSize = vadWindowSize
+                this.maxSpeechDuration = vadMaxSpeechDuration
+              }
+              vadModelConfig =
+                VadModelConfig(
+                  sileroVadConfig,
+                  TenVadModelConfig(),
+                  sampleRate,
+                  numThreads,
+                  provider,
+                  debug,
+                )
+            }
+            vad = Vad(modelContext.assetManager, vadModelConfig)
+          }
+        } catch (e: Exception) {
+          println("[sherpa] Offline VAD initialization failed in streaming mode: ${e.message}")
+          vad = null
+        }
+      }
+
+      if (includeVerboseResult) {
+        throw IllegalArgumentException("Streaming chunk mode does not support verbose result yet")
+      }
+
+      var totalSamples = 0L
+      val startedAtMs = System.currentTimeMillis()
+      var lastLoggedPercent = -1
+      var committedText = existingText
+      var partialText = ""
+      var lastChunkResult: OfflineRecognizerResult? = null
+      val vadSegments = mutableListOf<Map<String, Any?>>()
+      var segmentIndex = 0
+      var speechBuffer = arrayListOf<Float>()
+      var speechOffset = 0
+      var speechStarted = false
+      var speechStartOffset = 0
+      var lastPartialDecodeAtMs = 0L
+      val offlineVadSessionDir =
+        if (vad != null) {
+          try {
+            createOfflineVadSessionDir()
+          } catch (_: Exception) {
+            null
+          }
+        } else {
+          null
+        }
+
+      if (debug) {
+        println(
+          "[sherpa][streaming] start path=$wavPath sampleRate=$sampleRate estimatedSamples=${wavInfo.numSamples} vadEnabled=${vad != null} startOffsetBytes=$safeStartOffsetBytes",
+        )
+      }
+
+      RandomAccessFile(file, "r").use { raf ->
+        raf.seek(safeStartOffsetBytes)
+        val byteBuffer = ByteArray(STREAMING_WAV_READ_BUFFER_BYTES)
+        var chunkCount = 0
+        while (true) {
+          val bytesRead = raf.read(byteBuffer)
+          if (bytesRead <= 0) {
+            break
+          }
+          val sampleCount = bytesRead / 2
+          if (sampleCount <= 0) {
+            continue
+          }
+          val samples = pcm16LeToFloatSamples(byteBuffer, sampleCount)
+          totalSamples += sampleCount.toLong()
+          if (debug && wavInfo.numSamples > 0) {
+            val progress = ((totalSamples * 100L) / wavInfo.numSamples).toInt().coerceIn(0, 100)
+            if (progress >= lastLoggedPercent + STREAMING_LOG_STEP_PERCENT || progress == 100) {
+              lastLoggedPercent = progress
+              val processedSec = totalSamples.toDouble() / sampleRate.toDouble()
+              val estimatedSec = wavInfo.numSamples.toDouble() / sampleRate.toDouble()
+              println(
+                "[sherpa][streaming] progress=$progress% processedSec=${"%.2f".format(processedSec)} estimatedSec=${"%.2f".format(estimatedSec)}",
+              )
+            }
+          }
+          if (vad == null) {
+            chunkCount += 1
+            if (debug) {
+              println("[sherpa][streaming] chunk-decode-start index=$chunkCount samples=${samples.size}")
+            }
+            val chunkResult = decodeChunkResult(recognizer, samples, sampleRate)
+            lastChunkResult = chunkResult
+            val chunkText = chunkResult.text.trim()
+            if (chunkText.isNotBlank()) {
+              committedText = mergePieceText(committedText, chunkText).trim()
+            }
+            if (debug) {
+              println("[sherpa][streaming] chunk-decode-done index=$chunkCount textLength=${chunkText.length}")
+            }
+            continue
+          }
+
+          speechBuffer.addAll(samples.toList())
+          while (speechOffset + STREAMING_VAD_WINDOW_SIZE_SAMPLES < speechBuffer.size) {
+            vad.acceptWaveform(
+              speechBuffer
+                .subList(speechOffset, speechOffset + STREAMING_VAD_WINDOW_SIZE_SAMPLES)
+                .toFloatArray(),
+            )
+            speechOffset += STREAMING_VAD_WINDOW_SIZE_SAMPLES
+            if (!speechStarted && vad.isSpeechDetected()) {
+              speechStarted = true
+              speechStartOffset = maxOf(speechOffset - STREAMING_SPEECH_START_OFFSET_SAMPLES, 0)
+              lastPartialDecodeAtMs = 0L
+            }
+          }
+
+          val nowMs = System.currentTimeMillis()
+          if (speechStarted && speechOffset > speechStartOffset && nowMs - lastPartialDecodeAtMs >= STREAMING_PARTIAL_DECODE_INTERVAL_MS) {
+            val partialSamples = speechBuffer.subList(speechStartOffset, speechOffset).toFloatArray()
+            val partialResult = decodeChunkResult(recognizer, partialSamples, sampleRate)
+            lastChunkResult = partialResult
+            partialText = partialResult.text.trim()
+            lastPartialDecodeAtMs = nowMs
+          }
+
+          while (!vad.empty()) {
+            val segment = vad.front()
+            vad.pop()
+            segmentIndex += 1
+            val segmentFile = offlineVadSessionDir?.let { File(it, "seg-${segmentIndex.toString().padStart(6, '0')}.wav") }
+            try {
+              if (segmentFile != null) {
+                writeFloatSamplesToWav(segmentFile, segment.samples, sampleRate)
+              }
+            } catch (_: Exception) {
+            }
+            val segmentResult = decodeChunkResult(recognizer, segment.samples, sampleRate)
+            lastChunkResult = segmentResult
+            val segmentText = segmentResult.text.trim()
+            if (segmentText.isNotBlank()) {
+              committedText = mergePieceText(committedText, segmentText).trim()
+            }
+            partialText = ""
+
+            vadSegments.add(
+              mapOf(
+                "index" to segmentIndex,
+                "path" to (segmentFile?.absolutePath ?: ""),
+                "text" to segmentText,
+                "numSamples" to segment.samples.size,
+                "durationMs" to ((segment.samples.size.toDouble() / sampleRate.toDouble()) * 1000.0),
+              ),
+            )
+
+            speechStarted = false
+            speechBuffer = arrayListOf()
+            speechOffset = 0
+            speechStartOffset = 0
+            lastPartialDecodeAtMs = 0L
+          }
+        }
+      }
+
+      if (vad != null) {
+        vad.flush()
+        while (!vad.empty()) {
+          val segment = vad.front()
+          vad.pop()
+          segmentIndex += 1
+          val segmentFile = offlineVadSessionDir?.let { File(it, "seg-${segmentIndex.toString().padStart(6, '0')}.wav") }
+          try {
+            if (segmentFile != null) {
+              writeFloatSamplesToWav(segmentFile, segment.samples, sampleRate)
+            }
+          } catch (_: Exception) {
+          }
+          val segmentResult = decodeChunkResult(recognizer, segment.samples, sampleRate)
+          lastChunkResult = segmentResult
+          vadSegments.add(
+            mapOf(
+              "index" to segmentIndex,
+              "path" to (segmentFile?.absolutePath ?: ""),
+              "text" to segmentResult.text.trim(),
+              "numSamples" to segment.samples.size,
+              "durationMs" to ((segment.samples.size.toDouble() / sampleRate.toDouble()) * 1000.0),
+            ),
+          )
+          val segmentText = segmentResult.text.trim()
+          if (segmentText.isNotBlank()) {
+            committedText = mergePieceText(committedText, segmentText).trim()
+          }
+          partialText = ""
+        }
+      }
+
+      val mergedText =
+        if (partialText.isNotBlank()) {
+          mergePieceText(committedText, partialText).trim()
+        } else {
+          committedText
+        }
+      if (debug) {
+        println("[sherpa][streaming] map-result-start includeVerboseResult=$includeVerboseResult")
+      }
+      resultMap =
+        mapOf(
+          "text" to mergedText,
+          "tokens" to emptyList<String>(),
+          "timestamps" to emptyList<Double>(),
+          "durations" to emptyList<Double>(),
+          "lang" to (lastChunkResult?.lang ?: ""),
+          "emotion" to (lastChunkResult?.emotion ?: ""),
+          "event" to (lastChunkResult?.event ?: ""),
+          "sampleRate" to sampleRate,
+          "numSamples" to (baseProcessedSamples + totalSamples).toDouble(),
+        ).toMutableMap()
+      if (debug) {
+        println("[sherpa][streaming] map-result-done")
+      }
+      val rawText = resultMap["text"] as? String
+      if (!rawText.isNullOrBlank()) {
+        if (debug) {
+          println("[sherpa][streaming] punctuation-start")
+        }
+        resultMap["text"] = applyPunctuation(punctuation, rawText)
+        if (debug) {
+          println("[sherpa][streaming] punctuation-done")
+        }
+      }
+      if (vad != null) {
+        resultMap["vadSegments"] = vadSegments
+      }
+      if (debug) {
+        val totalElapsedMs = System.currentTimeMillis() - startedAtMs
+        println(
+          "[sherpa][streaming] done elapsedMs=$totalElapsedMs totalSamples=$totalSamples textLength=${(resultMap["text"] as? String)?.length ?: 0} vadSegments=${vadSegments.size}",
+        )
+      }
+    } finally {
+      punctuation?.release()
+      vad?.release()
+    }
+
+    return resultMap
+  }
+
+  private fun pcm16LeToFloatSamples(buffer: ByteArray, sampleCount: Int): FloatArray {
+    val samples = FloatArray(sampleCount)
+    var byteIndex = 0
+    for (index in 0 until sampleCount) {
+      val low = buffer[byteIndex].toInt() and 0xFF
+      val high = buffer[byteIndex + 1].toInt()
+      val pcm = ((high shl 8) or low).toShort()
+      samples[index] = pcm / 32768.0f
+      byteIndex += 2
+    }
+    return samples
+  }
+
+  private fun decodeChunkResult(recognizer: OfflineRecognizer, samples: FloatArray, sampleRate: Int): OfflineRecognizerResult {
+    var chunkStream: OfflineStream? = null
+    try {
+      chunkStream = recognizer.createStream()
+      chunkStream.acceptWaveform(samples, sampleRate)
+      recognizer.decode(chunkStream)
+      return recognizer.getResult(chunkStream)
+    } finally {
+      chunkStream?.release()
+    }
+  }
+
   private fun acquireOfflineRecognizer(
     key: String,
     assetManager: android.content.res.AssetManager?,
@@ -2126,16 +3113,20 @@ class SherpaOnnxModule : Module() {
   }
 
   private fun OfflineRecognizerResult.toMap(waveData: WaveData): Map<String, Any?> {
+    return toMap(waveData.sampleRate, waveData.samples.size.toLong(), true)
+  }
+
+  private fun OfflineRecognizerResult.toMap(sampleRate: Int, numSamples: Long, includeVerboseResult: Boolean): Map<String, Any?> {
     return mapOf(
       "text" to text,
-      "tokens" to tokens.toList(),
-      "timestamps" to timestamps.map { it.toDouble() },
-      "durations" to durations.map { it.toDouble() },
+      "tokens" to if (includeVerboseResult) tokens.toList() else emptyList<String>(),
+      "timestamps" to if (includeVerboseResult) timestamps.map { it.toDouble() } else emptyList<Double>(),
+      "durations" to if (includeVerboseResult) durations.map { it.toDouble() } else emptyList<Double>(),
       "lang" to lang,
       "emotion" to emotion,
       "event" to event,
-      "sampleRate" to waveData.sampleRate,
-      "numSamples" to waveData.samples.size,
+      "sampleRate" to sampleRate,
+      "numSamples" to numSamples.toDouble(),
     )
   }
 
@@ -2167,12 +3158,126 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun Map<String, Any?>.getLong(key: String): Long? {
+    val value = this[key]
+    return when (value) {
+      is Long -> value
+      is Int -> value.toLong()
+      is Double -> value.toLong()
+      is Float -> value.toLong()
+      else -> null
+    }
+  }
+
+  private fun checkNnapiSupport(): ProviderCheckResult {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+      return ProviderCheckResult(false, "Android 版本低于 9（API 28）")
+    }
+    val reactContext = appContext.reactContext ?: return ProviderCheckResult(false, "React context 不可用")
+    val pm: PackageManager = reactContext.packageManager ?: return ProviderCheckResult(false, "PackageManager 不可用")
+    if (!pm.hasSystemFeature("android.hardware.neuralnetworks")) {
+      return ProviderCheckResult(false, "系统未声明 android.hardware.neuralnetworks 特性")
+    }
+    return ProviderCheckResult(true, "ok")
+  }
+
+  private fun checkXnnpackSupport(): ProviderCheckResult {
+    val abiSet = Build.SUPPORTED_ABIS.map { it.lowercase() }.toSet()
+    if (abiSet.isEmpty()) {
+      return ProviderCheckResult(false, "设备 ABI 列表为空")
+    }
+
+    val hasSupportedAbi =
+      abiSet.any { abi ->
+        abi == "arm64-v8a" || abi == "armeabi-v7a" || abi == "x86_64" || abi == "x86"
+      }
+    if (!hasSupportedAbi) {
+      return ProviderCheckResult(false, "当前 ABI 不在 XNNPACK 支持列表")
+    }
+
+    // ORT CPU runtime must exist; otherwise xnnpack cannot be used.
+    if (!isBundledNativeLibraryAvailable("libonnxruntime.so")) {
+      return ProviderCheckResult(false, "缺少 libonnxruntime.so")
+    }
+    return ProviderCheckResult(true, "ok")
+  }
+
+  private fun buildProviderListForSelfCheck(): List<String> {
+    val providers = mutableListOf<String>()
+    if (checkNnapiSupport().supported) {
+      providers.add("nnapi")
+    }
+    if (checkXnnpackSupport().supported) {
+      providers.add("xnnpack")
+    }
+    providers.add("cpu")
+    return providers
+  }
+
+  private fun isBundledNativeLibraryAvailable(libName: String): Boolean {
+    synchronized(nativeLibProbeLock) {
+      nativeLibProbeCache[libName]?.let { return it }
+    }
+    val result = hasNativeLibraryInNativeLibDir(libName) || hasNativeLibraryInApk(libName)
+    synchronized(nativeLibProbeLock) {
+      nativeLibProbeCache[libName] = result
+    }
+    return result
+  }
+
+  private fun hasNativeLibraryInNativeLibDir(libName: String): Boolean {
+    val nativeLibDirPath = appContext.reactContext?.applicationInfo?.nativeLibraryDir ?: return false
+    val nativeLibDir = File(nativeLibDirPath)
+    if (!nativeLibDir.exists() || !nativeLibDir.isDirectory) {
+      return false
+    }
+    return File(nativeLibDir, libName).exists()
+  }
+
+  private fun hasNativeLibraryInApk(libName: String): Boolean {
+    val appInfo = appContext.reactContext?.applicationInfo ?: return false
+    val apkPaths = mutableListOf<String>()
+    appInfo.sourceDir?.takeIf { it.isNotBlank() }?.let { apkPaths.add(it) }
+    appInfo.splitSourceDirs?.forEach { splitPath ->
+      if (!splitPath.isNullOrBlank()) {
+        apkPaths.add(splitPath)
+      }
+    }
+    if (apkPaths.isEmpty()) {
+      return false
+    }
+    for (apkPath in apkPaths) {
+      try {
+        ZipFile(apkPath).use { zipFile ->
+          for (abi in Build.SUPPORTED_ABIS) {
+            val entryName = "lib/${abi}/${libName}"
+            if (zipFile.getEntry(entryName) != null) {
+              return true
+            }
+          }
+        }
+      } catch (_: Throwable) {
+        // ignore broken/unsupported split, continue scanning next apk
+      }
+    }
+    return false
+  }
+
   companion object {
     private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/asr/zh"
     private const val DEFAULT_SAMPLE_RATE = 16000
     private const val DEFAULT_FEATURE_DIM = 80
     private const val DEFAULT_NUM_THREADS = 2
     private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 512
+    private const val WAV_READ_MODE_STREAMING = "streaming"
+    private const val WAV_READ_MODE_DIRECT = "direct"
+    private const val REALTIME_MODE_DISABLED = "disabled"
+    private const val REALTIME_MODE_OFFICIAL_SIMULATED_VAD = "official_simulated_vad"
+    private const val STREAMING_WAV_READ_BUFFER_BYTES = 4 * 1024 * 1024
+    private const val STREAMING_LOG_STEP_PERCENT = 5
+    private const val STREAMING_VAD_WINDOW_SIZE_SAMPLES = 512
+    private const val STREAMING_PARTIAL_DECODE_INTERVAL_MS = 200L
+    private const val STREAMING_SPEECH_START_OFFSET_SAMPLES = 6400
     private const val WAV_HEADER_SIZE = 44
     private const val DEFAULT_VAD_MODEL_ASSET = "sherpa/onnx/ten-vad.onnx"
     private const val DEFAULT_RUNTIME_VAD_SUBDIR = "sherpa/vad"

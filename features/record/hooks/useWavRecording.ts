@@ -1,15 +1,17 @@
 import { AudioModule } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { WavRecordingStopResult } from '~/modules/sherpa';
+import type { SherpaTranscribeOptions, WavRecordingStartResult, WavRecordingStopResult } from '~/modules/sherpa';
 import SherpaOnnx from '~/modules/sherpa';
 
 type UseWavRecordingOptions = {
     sampleRate?: number;
     createTargetPath: () => Promise<string> | string;
-    onStart?: () => void;
+    onStart?: (result: WavRecordingStartResult) => void;
     onStop?: (result: WavRecordingStopResult) => Promise<void> | void;
     onPermissionDenied?: () => void;
     onError?: (error: Error) => void;
+    realtimeMode?: 'official_simulated_vad' | 'disabled' | string;
+    realtimeOptions?: SherpaTranscribeOptions;
 };
 
 type RecordingPhase = 'idle' | 'starting' | 'recording' | 'paused' | 'stopping' | 'error';
@@ -40,6 +42,8 @@ export function useWavRecording({
     onStop,
     onPermissionDenied,
     onError,
+    realtimeMode,
+    realtimeOptions,
 }: UseWavRecordingOptions) {
     const [phase, setPhase] = useState<RecordingPhase>('idle');
     const [elapsedMs, setElapsedMs] = useState(0);
@@ -112,10 +116,15 @@ export function useWavRecording({
             }
 
             const targetPath = await createTargetPath();
-            await SherpaOnnx.startWavRecording({ sampleRate, path: targetPath });
+            const startResult = await SherpaOnnx.startWavRecording({
+                sampleRate,
+                path: targetPath,
+                realtimeMode,
+                realtimeOptions,
+            });
             startTimer(true);
             setPhase('recording');
-            onStart?.();
+            onStart?.(startResult);
         } catch (error) {
             resetTimer();
             setPhase('error');
@@ -123,7 +132,7 @@ export function useWavRecording({
         } finally {
             actionInFlightRef.current = false;
         }
-    }, [createTargetPath, onError, onPermissionDenied, onStart, phase, sampleRate, startTimer, resetTimer]);
+    }, [createTargetPath, onError, onPermissionDenied, onStart, phase, sampleRate, startTimer, resetTimer, realtimeMode, realtimeOptions]);
 
     const pauseRecord = useCallback(async () => {
         if (actionInFlightRef.current || phase !== 'recording') {

@@ -1,8 +1,27 @@
 import { AudioModule } from 'expo-audio';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
-import { isModelDownloaded, type SherpaModelId } from '~/modules/sherpa';
+import { getInstalledModelVersion, isModelDownloaded, type SherpaModelId } from '~/modules/sherpa';
+import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 
 export type RecognitionPreflightKind = 'file' | 'recording';
+
+function compareModelVersion(left: string, right: string): number {
+    const leftParts = left.split('.').map(part => Number.parseInt(part, 10));
+    const rightParts = right.split('.').map(part => Number.parseInt(part, 10));
+    const hasNaN = [...leftParts, ...rightParts].some(Number.isNaN);
+    if (hasNaN) {
+        return left.localeCompare(right);
+    }
+    const maxLen = Math.max(leftParts.length, rightParts.length);
+    for (let index = 0; index < maxLen; index += 1) {
+        const leftValue = leftParts[index] ?? 0;
+        const rightValue = rightParts[index] ?? 0;
+        if (leftValue !== rightValue) {
+            return leftValue - rightValue;
+        }
+    }
+    return 0;
+}
 
 async function ensureFileAccessPermission(): Promise<boolean> {
     if (Platform.OS !== 'android') {
@@ -35,11 +54,28 @@ async function ensureMicrophonePermission(): Promise<boolean> {
 
 async function ensureModelInstalled(modelId: SherpaModelId): Promise<boolean> {
     const installed = await isModelDownloaded(modelId);
-    if (installed) {
+    if (!installed) {
+        Alert.alert('模型未安装', `当前模型 ${modelId} 未安装，请先到 Libs 页面安装后再试。`);
+        return false;
+    }
+
+    const installedVersion = await getInstalledModelVersion(modelId);
+    if (!installedVersion) {
+        Alert.alert('模型不可用', `当前模型 ${modelId} 的版本信息缺失或损坏，请重新安装后再试。`);
+        return false;
+    }
+
+    const minimumVersion = MIN_MODEL_VERSION_BY_MODEL_ID[modelId];
+    if (!minimumVersion) {
         return true;
     }
-    Alert.alert('模型未安装', `当前模型 ${modelId} 未安装，请先到 Libs 页面安装后再试。`);
-    return false;
+
+    if (compareModelVersion(installedVersion, minimumVersion) < 0) {
+        Alert.alert('模型版本过低', `当前模型 ${modelId} 版本为 ${installedVersion}，至少需要 ${minimumVersion}。请重新安装。`);
+        return false;
+    }
+
+    return true;
 }
 
 export async function runRecognitionPreflight(options: { kind: RecognitionPreflightKind; modelId: SherpaModelId }): Promise<boolean> {

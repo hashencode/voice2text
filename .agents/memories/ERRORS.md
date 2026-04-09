@@ -17,3 +17,5 @@
 - 2026-03-31: [并行命令竞态] 并行执行 `bun remove` 与删除 `postinstall` 目标脚本时触发 `MODULE_NOT_FOUND` -> `bun remove` 会触发项目 postinstall，依赖脚本必须先保留 -> 有依赖顺序的命令禁止并行，先改 `package.json` 再执行卸载。
 
 - 2026-04-08: 升级 sherpa-onnx AAR 到 v1.12.35 后，`OfflineSpeechDenoiserModelConfig` 构造签名从 `(gtcrn, numThreads, debug, provider)` 变为 `(gtcrn, dpdfnet, numThreads, debug, provider)`；若未补 `OfflineSpeechDenoiserDpdfNetModelConfig()` 会在 `:sherpa:compileDebugKotlin` 报参数类型错位。
+- 2026-04-09: [Android 闪退] 自动 provider 逻辑把 `qnn` 放在首位直接尝试，部分机型/模型组合在 native 初始化阶段触发 `Pure virtual function called` + `SIGABRT`，JS 无法捕获 -> 根因是“先试再回退”对 qnn 不安全 -> 改为原生先给可用 provider 列表，自动链路仅按可用列表尝试，并对 `qwen3_asr` 默认跳过 qnn 自动尝试（显式指定除外）。
+- 2026-04-09: [Android 启动识别即崩] `dlopen failed: cannot locate symbol "OrtGetApiBase"`（from `libsherpa-onnx-jni.so`）-> 根因是 `sherpa-onnx.aar` 依赖 ORT 符号版本 `VERS_1.23.2`，但项目引入了 `onnxruntime-android-qnn:1.24.3`（导出 `VERS_1.24.3`）-> 将 ORT 版本回退并对齐到 `1.23.2`。

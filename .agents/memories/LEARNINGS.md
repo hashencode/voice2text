@@ -18,3 +18,8 @@
 
 - 2026-04-07：Android 原生层若用 `File(modelPath)` 直接校验 Expo 下载返回的 `file://` URI，会误判文件不存在。应先将 URI 解析为真实路径（如 `Uri.parse(path).path`）再 `exists/isFile/length` 校验，并把解析后的路径传入 JNI。
 - 2026-04-09: 用户要求后续避免使用 `runOnJS`（视为弃用阶段）；键盘相关显隐逻辑优先采用不依赖 `runOnJS` 的实现。
+- 2026-04-09: 用户明确当前处于开发阶段：默认尽量减少兜底/降级代码、优先暴露问题；若兜底/降级合理，先记录 TODO（含触发条件）再决定实现。 #promote
+- 2026-04-09: 用户要求“止血/兜底类逻辑”必须先征得同意再实现，禁止未沟通先落地这类策略。 #promote
+- 2026-04-09: `com.microsoft.onnxruntime:onnxruntime-android-qnn:1.24.3` 的 AAR 仅提供 `arm64-v8a` 下完整 `libonnxruntime.so + libonnxruntime4j_jni.so`；其他 ABI 不完整，provider probing 在 arm64 设备上最可靠。 #promote
+- 2026-04-09: 预编译 `sherpa-onnx.aar` 与外部 ORT 组合时必须做符号版本对齐（如 `OrtGetApiBase@VERS_1.23.2`）；ORT 版本过高也会在 `dlopen` 阶段崩溃，不属于“可捕获异常”。 #promote
+- 2026-04-09: Android 新版本/部分打包策略下，so 可能不落盘到 `nativeLibraryDir`，仅通过 `File(nativeLibraryDir, *.so).exists()` 会误判“缺库”；需同时扫描 `sourceDir/splitSourceDirs` APK 内 `lib/<abi>/*.so`。 #promote

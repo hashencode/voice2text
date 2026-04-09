@@ -80,7 +80,7 @@ export interface UseFilePickerReturn {
 export function useFilePicker(options: UseFilePickerOptions = {}): UseFilePickerReturn {
     const {
         maxFiles = 10,
-        maxSizeBytes = 50 * 1024 * 1024, // 50MB default
+        maxSizeBytes,
         allowedExtensions,
         onError,
         onFilesSelected,
@@ -94,7 +94,7 @@ export function useFilePicker(options: UseFilePickerOptions = {}): UseFilePicker
     const validateFile = useCallback(
         (file: SelectedFile): string | null => {
             // Check file size
-            if (file.size && file.size > maxSizeBytes) {
+            if (typeof maxSizeBytes === 'number' && file.size && file.size > maxSizeBytes) {
                 return `File size exceeds ${(maxSizeBytes / (1024 * 1024)).toFixed(1)}MB limit`;
             }
 

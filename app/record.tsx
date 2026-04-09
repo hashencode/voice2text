@@ -15,7 +15,7 @@ import { useToast } from '~/components/ui/toast';
 import EditorKeyboardToolbar from '~/features/editor/editor-keyboard-toolbar';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
 import { useRecordSession } from '~/features/session-editor/hooks/use-record-session';
-import { formatHeaderDate } from '~/features/session-editor/services/time-format';
+import { formatHeaderDate, formatTime } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import { useColor } from '~/hooks/useColor';
 import { BORDER_RADIUS, BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
@@ -44,6 +44,9 @@ export default function RecordPage() {
         handleLeftAction,
         handleConfirmStop,
         handleBackPress,
+        liveTranscriptText,
+        liveTranscriptStatusText,
+        liveTranscriptUpdatedAtMs,
     } = useRecordSession();
     const { toast } = useToast();
 
@@ -108,7 +111,17 @@ export default function RecordPage() {
                             </TabsContent>
 
                             <TabsContent value="transcript">
-                                <TextX style={{ color: mutedTextColor }}>...</TextX>
+                                <View className="gap-3 py-2">
+                                    <TextX style={{ color: mutedTextColor }}>{liveTranscriptStatusText}</TextX>
+                                    {liveTranscriptUpdatedAtMs ? (
+                                        <TextX style={{ color: mutedTextColor }}>
+                                            最近更新：{formatTime(Math.floor((Date.now() - liveTranscriptUpdatedAtMs) / 1000))} 前
+                                        </TextX>
+                                    ) : null}
+                                    <TextX style={{ color: liveTranscriptText ? textColor : mutedTextColor }}>
+                                        {liveTranscriptText || '录音后这里会显示实时转写内容'}
+                                    </TextX>
+                                </View>
                             </TabsContent>
 
                             <TabsContent value="summary">
