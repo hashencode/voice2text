@@ -7,12 +7,20 @@ import { FONT_SIZE } from '~/theme/globals';
 type Props = {
     placeholder?: string;
     inputRef: React.RefObject<EnrichedTextInputInstance | null>;
+    initialText?: string;
+    onTextChange?: (text: string) => void;
     onFocusChange?: (focused: boolean) => void;
     onStyleStateChange?: (state: OnChangeStateEvent | null) => void;
 };
 
-export default function RichNoteEditor({ placeholder = '编辑备注', inputRef, onFocusChange, onStyleStateChange }: Props) {
-    const [noteText, setNoteText] = React.useState('');
+export default function RichNoteEditor({
+    placeholder = '编辑备注',
+    inputRef,
+    initialText = '',
+    onTextChange,
+    onFocusChange,
+    onStyleStateChange,
+}: Props) {
     const primaryColor = useColor('primary');
     const textColor = useColor('text');
     const mutedTextColor = useColor('textMuted');
@@ -24,7 +32,9 @@ export default function RichNoteEditor({ placeholder = '编辑备注', inputRef,
                 ref={inputRef}
                 onFocus={() => onFocusChange?.(true)}
                 onBlur={() => onFocusChange?.(false)}
-                onChangeText={event => setNoteText(event.nativeEvent.value)}
+                onChangeText={event => {
+                    onTextChange?.(event.nativeEvent.value);
+                }}
                 onChangeState={event => onStyleStateChange?.(event.nativeEvent)}
                 style={{
                     flex: 1,
@@ -34,7 +44,7 @@ export default function RichNoteEditor({ placeholder = '编辑备注', inputRef,
                 placeholder={placeholder}
                 placeholderTextColor={mutedTextColor}
                 selectionColor="rgba(0,0,0,0.1)"
-                defaultValue={noteText}
+                defaultValue={initialText}
                 htmlStyle={{
                     a: { color: primaryColor, textDecorationLine: 'underline' },
                     code: { color: textColor, backgroundColor: mutedColor },

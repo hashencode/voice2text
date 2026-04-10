@@ -14,8 +14,9 @@ import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
 import EditorKeyboardToolbar from '~/features/editor/editor-keyboard-toolbar';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
+import LiveTranscriptPanel from '~/features/session-editor/components/live-transcript-panel';
 import { useRecordSession } from '~/features/session-editor/hooks/use-record-session';
-import { formatHeaderDate, formatTime } from '~/features/session-editor/services/time-format';
+import { formatHeaderDate } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import { useColor } from '~/hooks/useColor';
 import { BORDER_RADIUS, BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
@@ -33,6 +34,7 @@ export default function RecordPage() {
         confirmDialogState,
         closeConfirmDialog,
         cancelConfirmDialog,
+        phase,
         actionLoading,
         elapsedText,
         isPaused,
@@ -44,9 +46,7 @@ export default function RecordPage() {
         handleLeftAction,
         handleConfirmStop,
         handleBackPress,
-        liveTranscriptText,
-        liveTranscriptStatusText,
-        liveTranscriptUpdatedAtMs,
+        recordingEndedAtMs,
     } = useRecordSession();
     const { toast } = useToast();
 
@@ -111,17 +111,13 @@ export default function RecordPage() {
                             </TabsContent>
 
                             <TabsContent value="transcript">
-                                <View className="gap-3 py-2">
-                                    <TextX style={{ color: mutedTextColor }}>{liveTranscriptStatusText}</TextX>
-                                    {liveTranscriptUpdatedAtMs ? (
-                                        <TextX style={{ color: mutedTextColor }}>
-                                            最近更新：{formatTime(Math.floor((Date.now() - liveTranscriptUpdatedAtMs) / 1000))} 前
-                                        </TextX>
-                                    ) : null}
-                                    <TextX style={{ color: liveTranscriptText ? textColor : mutedTextColor }}>
-                                        {liveTranscriptText || '录音后这里会显示实时转写内容'}
-                                    </TextX>
-                                </View>
+                                <LiveTranscriptPanel
+                                    phase={phase}
+                                    editorTab={editorTab}
+                                    recordingEndedAtMs={recordingEndedAtMs}
+                                    textColor={textColor}
+                                    mutedTextColor={mutedTextColor}
+                                />
                             </TabsContent>
 
                             <TabsContent value="summary">

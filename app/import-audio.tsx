@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
-import { ArrowLeft, CalendarDays, FastForward, Gauge, Rewind, RotateCcw } from 'lucide-react-native';
+import { ArrowLeft, CalendarDays, FastForward, Gauge, Rewind, RotateCcw, Square } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import type { EnrichedTextInputInstance, OnChangeStateEvent } from 'react-native-enriched';
 import Animated from 'react-native-reanimated';
 import { DefaultLayout } from '~/components/layout/default-layout';
+import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { Progress } from '~/components/ui/progress';
+import { LoadingOverlay } from '~/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
@@ -34,6 +36,13 @@ export default function ImportAudioPage() {
         editorTab,
         setEditorTab,
         headerAtMs,
+        remarkText,
+        handleRemarkTextChange,
+        transcriptText,
+        setTranscriptText,
+        summaryText,
+        setSummaryText,
+        noteEditorSeed,
         isPlaybackMode,
         playbackCompleted,
         playbackRate,
@@ -46,6 +55,7 @@ export default function ImportAudioPage() {
         handleRewind,
         handleFastForward,
         handleOpenPlaybackRateSheet,
+        handleStopPlayback,
         onProgressValueChange,
         onSeekStart,
         onSeekEnd,
@@ -54,11 +64,19 @@ export default function ImportAudioPage() {
         toolbarMainRowAnimatedStyle,
         ActionSheet,
         handleBackPress,
-    } = useImportAudioSession({ audioUri, audioName: params.name });
+        confirmDialogState,
+        closeConfirmDialog,
+        cancelConfirmDialog,
+        saveOverlayVisible,
+        saveOverlayLabel,
+        isPreparingSession,
+    } = useImportAudioSession({ audioUri, audioName: params.name, noteInputRef });
     const { toast } = useToast();
 
     const primaryColor = useColor('primary');
     const primaryForegroundColor = useColor('primaryForeground');
+    const destructiveColor = useColor('destructive');
+    const destructiveForegroundColor = useColor('destructiveForeground');
     const textColor = useColor('text');
     const mutedTextColor = useColor('textMuted');
     const cardColor = useColor('card');
@@ -115,19 +133,40 @@ export default function ImportAudioPage() {
 
                             <TabsContent value="remark" style={{ flex: 1 }}>
                                 <RichNoteEditor
+                                    key={`remark-${noteEditorSeed}`}
                                     placeholder="编辑音频备注"
                                     inputRef={noteInputRef}
+                                    initialText={remarkText}
+                                    onTextChange={handleRemarkTextChange}
                                     onFocusChange={setIsNoteFocused}
                                     onStyleStateChange={setNoteStyleState}
                                 />
                             </TabsContent>
 
                             <TabsContent value="transcript">
-                                <TextX style={{ color: mutedTextColor }}>...</TextX>
+                                <TextInput
+                                    value={transcriptText}
+                                    onChangeText={setTranscriptText}
+                                    placeholder="编辑语音识别内容"
+                                    placeholderTextColor={mutedTextColor}
+                                    multiline
+                                    textAlignVertical="top"
+                                    className="flex-1 p-0 text-base"
+                                    style={{ color: textColor }}
+                                />
                             </TabsContent>
 
                             <TabsContent value="summary">
-                                <TextX style={{ color: mutedTextColor }}>...</TextX>
+                                <TextInput
+                                    value={summaryText}
+                                    onChangeText={setSummaryText}
+                                    placeholder="编辑智能总结内容"
+                                    placeholderTextColor={mutedTextColor}
+                                    multiline
+                                    textAlignVertical="top"
+                                    className="flex-1 p-0 text-base"
+                                    style={{ color: textColor }}
+                                />
                             </TabsContent>
                         </Tabs>
                     </View>
@@ -143,27 +182,11 @@ export default function ImportAudioPage() {
                     <Animated.View className="p-3" style={toolbarAnimatedStyle}>
                         <Animated.View className="flex-row items-center gap-3" style={toolbarMainRowAnimatedStyle}>
                             {isPlaybackMode ? (
-                                <View className="flex-row items-center gap-2">
-                                    <Pressable onPress={handleRewind}>
-                                        <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
-                                            <Rewind size={20} strokeWidth={2} color={textColor} />
-                                        </View>
-                                    </Pressable>
-                                    <Pressable onPress={handleFastForward}>
-                                        <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
-                                            <FastForward size={20} strokeWidth={2} color={textColor} />
-                                        </View>
-                                    </Pressable>
-                                    <Pressable onPress={handleOpenPlaybackRateSheet}>
-                                        <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
-                                            {playbackRate === 1.0 ? (
-                                                <Gauge size={20} strokeWidth={2} color={textColor} />
-                                            ) : (
-                                                <TextX style={{ color: primaryColor }}>{speedLabel}x</TextX>
-                                            )}
-                                        </View>
-                                    </Pressable>
-                                </View>
+                                <Pressable onPress={() => void handleStopPlayback()}>
+                                    <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: destructiveColor }}>
+                                        <Square size={20} strokeWidth={2} color={destructiveForegroundColor} />
+                                    </View>
+                                </Pressable>
                             ) : (
                                 <Pressable onPress={handleBackPress}>
                                     <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
@@ -174,9 +197,29 @@ export default function ImportAudioPage() {
 
                             <View className="flex-1 items-center justify-center">
                                 {isPlaybackMode ? (
-                                    <TextX style={{ color: mutedTextColor }}>{isPlaying ? '正在播放' : '已暂停'}</TextX>
+                                    <View className="flex-row items-center gap-2">
+                                        <Pressable onPress={handleRewind}>
+                                            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
+                                                <Rewind size={20} strokeWidth={2} color={textColor} />
+                                            </View>
+                                        </Pressable>
+                                        <Pressable onPress={handleFastForward}>
+                                            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
+                                                <FastForward size={20} strokeWidth={2} color={textColor} />
+                                            </View>
+                                        </Pressable>
+                                        <Pressable onPress={handleOpenPlaybackRateSheet}>
+                                            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
+                                                {playbackRate === 1.0 ? (
+                                                    <Gauge size={20} strokeWidth={2} color={textColor} />
+                                                ) : (
+                                                    <TextX style={{ color: primaryColor }}>{speedLabel}x</TextX>
+                                                )}
+                                            </View>
+                                        </Pressable>
+                                    </View>
                                 ) : (
-                                    <TextX style={{ color: mutedTextColor }}>点击右侧开始播放</TextX>
+                                    <View className="h-12" />
                                 )}
                             </View>
 
@@ -230,6 +273,25 @@ export default function ImportAudioPage() {
                         duration: 2200,
                     });
                 }}
+            />
+            <AlertDialog
+                isVisible={confirmDialogState.isVisible}
+                title={confirmDialogState.title}
+                description={confirmDialogState.description}
+                confirmText={confirmDialogState.confirmText}
+                confirmButtonProps={confirmDialogState.confirmButtonProps}
+                cancelText="不保存"
+                onConfirm={confirmDialogState.onConfirm}
+                onClose={closeConfirmDialog}
+                onCancel={cancelConfirmDialog}
+                dismissible={false}
+            />
+            <LoadingOverlay
+                visible={isPreparingSession || saveOverlayVisible}
+                variant="bars"
+                size="lg"
+                showLabel
+                label={isPreparingSession ? '正在准备导入会话...' : saveOverlayLabel}
             />
             {ActionSheet}
         </DefaultLayout>

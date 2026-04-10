@@ -150,6 +150,7 @@ class SherpaOnnxModule : Module() {
     var speechStartOffset: Int = 0,
     var lastPartialDecodeAtMs: Long = 0L,
     var updatedAtMs: Long = 0L,
+    var lastEmittedText: String = "",
   )
 
   private data class WavChunkMeta(
@@ -225,6 +226,7 @@ class SherpaOnnxModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
+    Events(REALTIME_ASR_UPDATE_EVENT)
 
     OnDestroy {
       stopWavRecordingInternal(STOP_REASON_MODULE_DESTROYED, interruptedBySystem = true)
@@ -941,6 +943,7 @@ class SherpaOnnxModule : Module() {
     synchronized(realtimeLock) {
       activeRealtimeSession?.vad?.release()
       activeRealtimeSession = RealtimeAsrSession(mode = mode, sampleRate = sampleRate, decodeOptions = decodeOptions, vad = vad)
+      emitRealtimeAsrUpdate(activeRealtimeSession, force = true)
     }
   }
 
@@ -949,6 +952,7 @@ class SherpaOnnxModule : Module() {
       activeRealtimeSession?.vad?.release()
       activeRealtimeSession = null
     }
+    emitRealtimeAsrUpdate(null)
   }
 
   private fun appendRealtimeAsrSamplesInternal(samples: FloatArray, sampleRate: Int) {
@@ -966,6 +970,7 @@ class SherpaOnnxModule : Module() {
         if (text.isNotBlank()) {
           session.committedText = mergePieceText(session.committedText, text).trim()
           session.updatedAtMs = System.currentTimeMillis()
+          emitRealtimeAsrUpdate(session)
         }
         return
       }
@@ -998,6 +1003,7 @@ class SherpaOnnxModule : Module() {
         if (partialText.isNotBlank()) {
           session.updatedAtMs = nowMs
         }
+        emitRealtimeAsrUpdate(session)
       }
 
       while (!vad.empty()) {
@@ -1014,8 +1020,53 @@ class SherpaOnnxModule : Module() {
         session.speechOffset = 0
         session.speechStartOffset = 0
         session.lastPartialDecodeAtMs = 0L
+        emitRealtimeAsrUpdate(session)
       }
     }
+  }
+
+  private fun realtimeSessionText(session: RealtimeAsrSession): String {
+    return if (session.partialText.isNotBlank()) {
+      mergePieceText(session.committedText, session.partialText).trim()
+    } else {
+      session.committedText
+    }
+  }
+
+  private fun emitRealtimeAsrUpdate(session: RealtimeAsrSession?, force: Boolean = false) {
+    if (session == null) {
+      sendEvent(
+        REALTIME_ASR_UPDATE_EVENT,
+        mapOf(
+          "active" to false,
+          "mode" to "",
+          "sampleRate" to DEFAULT_SAMPLE_RATE,
+          "text" to "",
+          "committedText" to "",
+          "partialText" to "",
+          "updatedAtMs" to 0.0,
+        ),
+      )
+      return
+    }
+
+    val text = realtimeSessionText(session)
+    if (!force && text == session.lastEmittedText) {
+      return
+    }
+    session.lastEmittedText = text
+    sendEvent(
+      REALTIME_ASR_UPDATE_EVENT,
+      mapOf(
+        "active" to true,
+        "mode" to session.mode,
+        "sampleRate" to session.sampleRate,
+        "text" to text,
+        "committedText" to session.committedText,
+        "partialText" to session.partialText,
+        "updatedAtMs" to session.updatedAtMs.toDouble(),
+      ),
+    )
   }
 
   private fun decodeRealtimeText(session: RealtimeAsrSession, samples: FloatArray): String {
@@ -3113,6 +3164,7 @@ class SherpaOnnxModule : Module() {
     private const val STREAMING_VAD_WINDOW_SIZE_SAMPLES = 512
     private const val STREAMING_PARTIAL_DECODE_INTERVAL_MS = 200L
     private const val STREAMING_SPEECH_START_OFFSET_SAMPLES = 6400
+    private const val REALTIME_ASR_UPDATE_EVENT = "onRealtimeAsrUpdate"
     private const val WAV_HEADER_SIZE = 44
     private const val DEFAULT_VAD_MODEL_ASSET = "sherpa/onnx/ten-vad.onnx"
     private const val DEFAULT_RUNTIME_VAD_SUBDIR = "sherpa/vad"

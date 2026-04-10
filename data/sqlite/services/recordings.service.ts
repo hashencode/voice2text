@@ -1,5 +1,6 @@
 export {
     deleteRecordingMeta,
+    findRecordingMetaBySourceFileNameAndSha256,
     hasRecordingSession,
     listRecordingMeta,
     updateRecordingDisplayName,

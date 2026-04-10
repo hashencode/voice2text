@@ -158,6 +158,12 @@ export type RealtimeAsrSnapshot = {
     updatedAtMs: number;
 };
 
+export type RealtimeAsrUpdateEvent = RealtimeAsrSnapshot;
+
+export type RealtimeAsrSubscription = {
+    remove: () => void;
+};
+
 export type SherpaRuntimeProfile = {
     availableProcessors: number;
     isLowRamDevice: boolean;
@@ -250,6 +256,10 @@ type SherpaOnnxNative = {
     getFileSha256(filePath: string): Promise<{ size: number; sha256: string }>;
     unzipFile(zipPath: string, destDir: string): Promise<{ ok: boolean; destDir: string }>;
     copyAssetFile(assetPath: string, destPath: string): Promise<{ ok: boolean; destPath: string }>;
+};
+
+type SherpaOnnxNativeWithEvents = SherpaOnnxNative & {
+    addListener?: (eventName: string, listener: (event: RealtimeAsrUpdateEvent) => void) => RealtimeAsrSubscription;
 };
 
 type SherpaModelPreset = SherpaTranscribeOptions & {
@@ -1400,6 +1410,7 @@ async function transcribeWavWithAutoProvider(
 }
 
 const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
+const NativeSherpaOnnxWithEvents = NativeSherpaOnnx as SherpaOnnxNativeWithEvents;
 
 const SherpaOnnx = {
     hello: NativeSherpaOnnx.hello,
@@ -1417,6 +1428,12 @@ const SherpaOnnx = {
     appendRealtimeAsrPcm: NativeSherpaOnnx.appendRealtimeAsrPcm,
     stopRealtimeAsr: NativeSherpaOnnx.stopRealtimeAsr,
     getRealtimeAsrSnapshot: NativeSherpaOnnx.getRealtimeAsrSnapshot,
+    addRealtimeAsrListener(listener: (event: RealtimeAsrUpdateEvent) => void): RealtimeAsrSubscription {
+        if (typeof NativeSherpaOnnxWithEvents.addListener !== 'function') {
+            return { remove: () => {} };
+        }
+        return NativeSherpaOnnxWithEvents.addListener('onRealtimeAsrUpdate', listener);
+    },
     recoverWavRecordings: NativeSherpaOnnx.recoverWavRecordings,
     listRecoverableWavRecordings: NativeSherpaOnnx.listRecoverableWavRecordings,
     recoverWavRecordingSession: NativeSherpaOnnx.recoverWavRecordingSession,

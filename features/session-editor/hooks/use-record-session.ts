@@ -7,8 +7,7 @@ import { getCurrentModel } from '~/data/mmkv/model-selection';
 import { upsertRecordingMeta } from '~/data/sqlite/services/recordings.service';
 import { useWavRecording } from '~/features/record/hooks/useWavRecording';
 import type { EditorTabValue } from '~/features/session-editor/types';
-import SherpaOnnx from '~/modules/sherpa';
-import { getSherpaDownloadedModelOptions } from '~/modules/sherpa';
+import SherpaOnnx, { getSherpaDownloadedModelOptions } from '~/modules/sherpa';
 
 type ConfirmButtonVariant = 'primary' | 'destructive';
 
@@ -61,10 +60,7 @@ export function useRecordSession() {
     const [displayName, setDisplayName] = React.useState('新录音');
     const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
     const [headerAtMs, setHeaderAtMs] = React.useState(() => Date.now());
-    const [activeRecordingPath, setActiveRecordingPath] = React.useState<string | null>(null);
-    const [liveTranscriptText, setLiveTranscriptText] = React.useState('');
-    const [liveTranscriptStatusText, setLiveTranscriptStatusText] = React.useState('待开始录音');
-    const [liveTranscriptUpdatedAtMs, setLiveTranscriptUpdatedAtMs] = React.useState<number | null>(null);
+    const [recordingEndedAtMs, setRecordingEndedAtMs] = React.useState<number | null>(null);
     const recordingStartedAtRef = React.useRef<number | null>(null);
 
     const navigation = useNavigation();
@@ -90,14 +86,11 @@ export function useRecordSession() {
             await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
             return createRecordingPath(recordingFolderName);
         },
-        onStart: startResult => {
+        onStart: () => {
             const startedAt = Date.now();
             recordingStartedAtRef.current = startedAt;
             setHeaderAtMs(startedAt);
-            setActiveRecordingPath(startResult.path);
-            setLiveTranscriptText('');
-            setLiveTranscriptUpdatedAtMs(null);
-            setLiveTranscriptStatusText('实时转写进行中...');
+            setRecordingEndedAtMs(null);
         },
         onStop: async wavResult => {
             if (!wavResult.path) {
@@ -126,22 +119,16 @@ export function useRecordSession() {
                 });
 
                 try {
-                    const realtimeSnapshot = SherpaOnnx.getRealtimeAsrSnapshot();
-                    if (realtimeSnapshot.text.trim()) {
-                        setLiveTranscriptText(realtimeSnapshot.text.trim());
-                    }
                     await SherpaOnnx.stopRealtimeAsr();
-                    setLiveTranscriptStatusText('实时转写已结束');
                 } catch (error) {
                     console.warn('[record] stop realtime asr failed', error);
-                    setLiveTranscriptStatusText('实时转写已结束');
                 }
             } catch (error) {
                 console.error('[record] upsertRecordingMeta failed', error);
                 showRecordError('录音已生成，但保存元数据失败');
             } finally {
                 recordingStartedAtRef.current = null;
-                setActiveRecordingPath(null);
+                setRecordingEndedAtMs(Date.now());
             }
         },
         onPermissionDenied: () => {
@@ -160,33 +147,6 @@ export function useRecordSession() {
     const canStop = phase === 'recording' || phase === 'paused';
     const isIdleLike = phase === 'idle' || phase === 'error';
     const isMicVisualState = isIdleLike || isStopping;
-    React.useEffect(() => {
-        const shouldPoll = phase === 'recording' || phase === 'paused';
-        if (!shouldPoll) {
-            return;
-        }
-        const poll = () => {
-            try {
-                const snapshot = SherpaOnnx.getRealtimeAsrSnapshot();
-                const nextText = snapshot.text.trim();
-                setLiveTranscriptStatusText(phase === 'paused' ? '暂停中，正在收尾转写...' : '实时转写中...');
-                if (!nextText) {
-                    return;
-                }
-                setLiveTranscriptText(nextText);
-                setLiveTranscriptUpdatedAtMs(snapshot.updatedAtMs > 0 ? snapshot.updatedAtMs : Date.now());
-            } catch (error) {
-                console.warn('[record] poll realtime snapshot failed', error);
-                setLiveTranscriptStatusText('实时转写暂不可用，稍后重试');
-            }
-        };
-        void poll();
-        const timer = setInterval(poll, 220);
-        return () => {
-            clearInterval(timer);
-        };
-    }, [phase]);
-
     const handleLeftAction = useCallback(() => {
         if (isStopping || actionLoading) {
             return;
@@ -282,8 +242,6 @@ export function useRecordSession() {
         handleLeftAction,
         handleConfirmStop,
         handleBackPress,
-        liveTranscriptText,
-        liveTranscriptStatusText,
-        liveTranscriptUpdatedAtMs,
+        recordingEndedAtMs,
     };
 }
