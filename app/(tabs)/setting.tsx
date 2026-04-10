@@ -319,7 +319,7 @@ export default function Setting() {
                                 {modelItem.installed ? '重新安装' : '安装'}
                             </ButtonX>
                             <ButtonX variant="secondary" onPress={handleImportCurrentModelZipForTesting} loading={modelItem.busy}>
-                                导入本地 {currentModelId} zip（测试）
+                                导入本地 zip
                             </ButtonX>
                         </View>
 

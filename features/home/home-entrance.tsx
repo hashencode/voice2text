@@ -1,12 +1,12 @@
+import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
-import { DesignPencil, Microphone, MultiBubble, MusicDoubleNotePlus } from 'iconoir-react-native';
+import { MessageText, Microphone, MultiBubble, MusicDoubleNotePlus } from 'iconoir-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
-import { useFilePicker } from '~/hooks/useFilePicker';
 import { useColor } from '~/hooks/useColor';
-import * as FileSystem from 'expo-file-system/legacy';
+import { useFilePicker } from '~/hooks/useFilePicker';
 
 export default function HomeEntrance() {
     const router = useRouter();
@@ -63,9 +63,9 @@ export default function HomeEntrance() {
 
     const headTab = [
         { icon: <Microphone width={36} height={36} color={iconColor} />, label: '录音', onPress: () => router.push('/record') },
-        { icon: <DesignPencil width={36} height={36} color={iconColor} />, label: '灵感速记' },
-        { icon: <MultiBubble width={36} height={36} color={iconColor} />, label: '会议记录' },
         { icon: <MusicDoubleNotePlus width={36} height={36} color={iconColor} />, label: '导入音频', onPress: handleImportAudio },
+        { icon: <MultiBubble width={36} height={36} color={iconColor} />, label: '会议记录' },
+        { icon: <MessageText width={36} height={36} color={iconColor} />, label: '实时字幕' },
     ];
 
     return (

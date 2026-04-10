@@ -199,6 +199,49 @@ export type SherpaProviderSelfCheck = {
     libs: { name: string; exists: boolean }[];
 };
 
+export type SherpaAudioConvertOptions = {
+    sampleRate?: number;
+    bitRate?: number;
+    channels?: number;
+    sampleFormat?:
+        | 'u8'
+        | 's16'
+        | 's32'
+        | 'flt'
+        | 'dbl'
+        | 'u8p'
+        | 's16p'
+        | 's32p'
+        | 'fltp'
+        | 'dblp'
+        | string;
+    codec?: string;
+};
+
+export type SherpaAudioOutputFormat =
+    | 'wav'
+    | 'wav16k'
+    | 'mp3'
+    | 'flac'
+    | 'm4a'
+    | 'aac'
+    | 'opus'
+    | 'ogg'
+    | 'oggm'
+    | 'webm'
+    | 'mkv';
+
+export type SherpaDecodedAudio = {
+    samples: number[];
+    sampleRate: number;
+};
+
+export type SherpaAudioFileInfo = {
+    sampleRate: number;
+    channels: number;
+    durationMs: number;
+};
+
 type SherpaOnnxNative = {
     hello(): string;
     getRuntimeProfile(): SherpaRuntimeProfile;
@@ -222,6 +265,24 @@ type SherpaOnnxNative = {
     getWavInfo(path: string): Promise<WavFileInfo>;
     transcribeWav(path: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
     transcribeAssetWav(assetPath: string, options?: SherpaTranscribeOptions): Promise<SherpaTranscribeResult>;
+    convertAudioToWav16k(inputPath: string, outputPath: string): Promise<{ ok: boolean; outputPath: string }>;
+    convertAudioToFormat(
+        inputPath: string,
+        outputPath: string,
+        format: SherpaAudioOutputFormat,
+        options?: SherpaAudioConvertOptions,
+    ): Promise<{
+        ok: boolean;
+        outputPath: string;
+        format: SherpaAudioOutputFormat;
+        sampleRate: number;
+        bitRate: number;
+        channels: number;
+        sampleFormat: string;
+        codec: string;
+    }>;
+    decodeAudioFileToFloatSamples(inputPath: string, targetSampleRateHz?: number): Promise<SherpaDecodedAudio>;
+    getAudioFileInfo(inputPath: string): Promise<SherpaAudioFileInfo>;
     getFileSha256(filePath: string): Promise<{ size: number; sha256: string }>;
     unzipFile(zipPath: string, destDir: string): Promise<{ ok: boolean; destDir: string }>;
     copyAssetFile(assetPath: string, destPath: string): Promise<{ ok: boolean; destPath: string }>;
@@ -1459,6 +1520,10 @@ const SherpaOnnx = {
     getWavInfo: NativeSherpaOnnx.getWavInfo,
     transcribeWav: NativeSherpaOnnx.transcribeWav,
     transcribeAssetWav: NativeSherpaOnnx.transcribeAssetWav,
+    convertAudioToWav16k: NativeSherpaOnnx.convertAudioToWav16k,
+    convertAudioToFormat: NativeSherpaOnnx.convertAudioToFormat,
+    decodeAudioFileToFloatSamples: NativeSherpaOnnx.decodeAudioFileToFloatSamples,
+    getAudioFileInfo: NativeSherpaOnnx.getAudioFileInfo,
     getFileSha256: NativeSherpaOnnx.getFileSha256,
     unzipFile: NativeSherpaOnnx.unzipFile,
     copyAssetFile: NativeSherpaOnnx.copyAssetFile,

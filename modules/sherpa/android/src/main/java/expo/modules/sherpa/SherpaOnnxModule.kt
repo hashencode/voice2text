@@ -187,6 +187,14 @@ class SherpaOnnxModule : Module() {
     val reason: String,
   )
 
+  init {
+    try {
+      System.loadLibrary("sherpaaudio")
+    } catch (e: UnsatisfiedLinkError) {
+      println("[sherpa] sherpaaudio native lib is unavailable: ${e.message}")
+    }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
 
@@ -206,8 +214,8 @@ class SherpaOnnxModule : Module() {
       val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
       val activityManager = appContext.reactContext?.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
       val isLowRamDevice = activityManager?.isLowRamDevice ?: false
-      val recommendedNumThreads = 2
-      val performanceTier = "low"
+      val recommendedNumThreads = computeRecommendedNumThreads(cores, isLowRamDevice)
+      val performanceTier = if (recommendedNumThreads >= 4) "high" else "low"
       mapOf(
         "availableProcessors" to cores,
         "isLowRamDevice" to isLowRamDevice,
@@ -619,6 +627,163 @@ class SherpaOnnxModule : Module() {
       }
     }
 
+    AsyncFunction("convertAudioToWav16k") { inputPath: String, outputPath: String, promise: Promise ->
+      executor.execute {
+        try {
+          val input = inputPath.removePrefix("file://")
+          val output = outputPath.removePrefix("file://")
+          val err = nativeConvertAudioToWav16k(input, output)
+          if (err.isBlank()) {
+            promise.resolve(mapOf("ok" to true, "outputPath" to output))
+          } else {
+            promise.reject("ERR_AUDIO_CONVERT", err, null)
+          }
+        } catch (e: Exception) {
+          promise.reject("ERR_AUDIO_CONVERT", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("convertAudioToFormat") {
+      inputPath: String,
+      outputPath: String,
+      format: String,
+      options: Map<String, Any?>?,
+      promise: Promise,
+      ->
+      executor.execute {
+        try {
+          val normalizedFormat = normalizeAudioExportFormat(format)
+          if (normalizedFormat == null) {
+            promise.reject(
+              "ERR_AUDIO_CONVERT_FORMAT",
+              "Unsupported format: $format. Supported: ${SUPPORTED_AUDIO_EXPORT_FORMATS.joinToString()}",
+              null,
+            )
+            return@execute
+          }
+
+          val input = inputPath.removePrefix("file://")
+          val output = outputPath.removePrefix("file://")
+          val targetSampleRate = options?.getInt("sampleRate") ?: 0
+          val targetBitRate = options?.getInt("bitRate") ?: 0
+          val targetChannels = options?.getInt("channels") ?: 0
+          val targetSampleFormat = options?.getString("sampleFormat")?.trim()?.lowercase()?.ifBlank { null }
+          val targetCodec = options?.getString("codec")?.trim()?.ifBlank { null }
+
+          if (targetSampleRate < 0) {
+            promise.reject("ERR_AUDIO_CONVERT_FORMAT", "sampleRate must be >= 0", null)
+            return@execute
+          }
+          if (targetBitRate < 0) {
+            promise.reject("ERR_AUDIO_CONVERT_FORMAT", "bitRate must be >= 0", null)
+            return@execute
+          }
+          if (targetChannels < 0) {
+            promise.reject("ERR_AUDIO_CONVERT_FORMAT", "channels must be >= 0", null)
+            return@execute
+          }
+
+          val err =
+            nativeConvertAudioToFormat(
+              input,
+              output,
+              normalizedFormat,
+              targetSampleRate,
+              targetBitRate,
+              targetChannels,
+              targetSampleFormat,
+              targetCodec,
+            )
+          if (err.isBlank()) {
+            promise.resolve(
+              mapOf(
+                "ok" to true,
+                "outputPath" to output,
+                "format" to normalizedFormat,
+                "sampleRate" to targetSampleRate,
+                "bitRate" to targetBitRate,
+                "channels" to targetChannels,
+                "sampleFormat" to (targetSampleFormat ?: ""),
+                "codec" to (targetCodec ?: ""),
+              ),
+            )
+          } else {
+            promise.reject("ERR_AUDIO_CONVERT_FORMAT", err, null)
+          }
+        } catch (e: Exception) {
+          promise.reject("ERR_AUDIO_CONVERT_FORMAT", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("decodeAudioFileToFloatSamples") { inputPath: String, targetSampleRateHz: Double?, promise: Promise ->
+      executor.execute {
+        try {
+          val input = inputPath.removePrefix("file://")
+          val targetHz = (targetSampleRateHz ?: 0.0).toInt()
+          val result = nativeDecodeAudioFileToFloatSamples(input, targetHz)
+          if (result.isEmpty()) {
+            promise.reject("ERR_AUDIO_DECODE", "Unexpected decode result", null)
+            return@execute
+          }
+          if (result.size == 1 && result[0] is String) {
+            promise.reject("ERR_AUDIO_DECODE", result[0] as String, null)
+            return@execute
+          }
+          if (result.size != 2 || result[0] !is FloatArray || result[1] !is Number) {
+            promise.reject("ERR_AUDIO_DECODE", "Unexpected decode payload", null)
+            return@execute
+          }
+
+          val samples = result[0] as FloatArray
+          val sampleRate = (result[1] as Number).toInt()
+          val samplesArray = ArrayList<Double>(samples.size)
+          for (value in samples) {
+            samplesArray.add(value.toDouble())
+          }
+          promise.resolve(
+            mapOf(
+              "samples" to samplesArray,
+              "sampleRate" to sampleRate,
+            ),
+          )
+        } catch (e: Exception) {
+          promise.reject("ERR_AUDIO_DECODE", e.message, e)
+        }
+      }
+    }
+
+    AsyncFunction("getAudioFileInfo") { inputPath: String, promise: Promise ->
+      executor.execute {
+        try {
+          val input = inputPath.removePrefix("file://")
+          val result = nativeGetAudioFileInfo(input)
+          if (result.isEmpty()) {
+            promise.reject("ERR_AUDIO_INFO", "Unexpected audio info result", null)
+            return@execute
+          }
+          if (result.size == 1 && result[0] is String) {
+            promise.reject("ERR_AUDIO_INFO", result[0] as String, null)
+            return@execute
+          }
+          if (result.size != 3 || result[0] !is Number || result[1] !is Number || result[2] !is Number) {
+            promise.reject("ERR_AUDIO_INFO", "Unexpected audio info payload", null)
+            return@execute
+          }
+          promise.resolve(
+            mapOf(
+              "sampleRate" to (result[0] as Number).toInt(),
+              "channels" to (result[1] as Number).toInt(),
+              "durationMs" to (result[2] as Number).toLong().toDouble(),
+            ),
+          )
+        } catch (e: Exception) {
+          promise.reject("ERR_AUDIO_INFO", e.message, e)
+        }
+      }
+    }
+
     AsyncFunction("getFileSha256") { filePath: String, promise: Promise ->
       executor.execute {
         try {
@@ -892,7 +1057,7 @@ class SherpaOnnxModule : Module() {
       if (resolvedVadEngine.isBlank()) {
         return null
       }
-      val numThreads = options?.getInt("numThreads") ?: DEFAULT_NUM_THREADS
+      val numThreads = options?.getInt("numThreads") ?: resolveDefaultNumThreads()
       val provider = options?.getString("provider") ?: "cpu"
       val debug = options?.getBoolean("debug") ?: false
       val config =
@@ -1841,7 +2006,7 @@ class SherpaOnnxModule : Module() {
 
     val sampleRate = options?.getInt("sampleRate") ?: DEFAULT_SAMPLE_RATE
     val featureDim = options?.getInt("featureDim") ?: DEFAULT_FEATURE_DIM
-    val numThreads = options?.getInt("numThreads") ?: DEFAULT_NUM_THREADS
+    val numThreads = options?.getInt("numThreads") ?: resolveDefaultNumThreads()
     val provider = options?.getString("provider") ?: "cpu"
     val debug = options?.getBoolean("debug") ?: false
     val denoiseModel = options?.getString("denoiseModel")
@@ -2311,7 +2476,7 @@ class SherpaOnnxModule : Module() {
       }
     val baseProcessedSamples = ((safeStartOffsetBytes - WAV_HEADER_SIZE.toLong()).coerceAtLeast(0L)) / 2L
     val featureDim = options?.getInt("featureDim") ?: DEFAULT_FEATURE_DIM
-    val numThreads = options?.getInt("numThreads") ?: DEFAULT_NUM_THREADS
+    val numThreads = options?.getInt("numThreads") ?: resolveDefaultNumThreads()
     val provider = options?.getString("provider") ?: "cpu"
     val debug = options?.getBoolean("debug") ?: false
     val denoiseModel = options?.getString("denoiseModel")
@@ -3200,6 +3365,31 @@ class SherpaOnnxModule : Module() {
     }
   }
 
+  private fun resolveDefaultNumThreads(): Int {
+    val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+    val activityManager = appContext.reactContext?.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+    val isLowRamDevice = activityManager?.isLowRamDevice ?: false
+    return computeRecommendedNumThreads(cores, isLowRamDevice)
+  }
+
+  private fun computeRecommendedNumThreads(cores: Int, isLowRamDevice: Boolean): Int {
+    // High-tier: enough CPU cores and not low-RAM device -> 4 threads.
+    // Otherwise keep 2 threads to reduce contention/thermal pressure on low-tier devices.
+    return if (!isLowRamDevice && cores >= 8) 4 else 2
+  }
+
+  private fun normalizeAudioExportFormat(format: String): String? {
+    val normalized = format.trim().lowercase()
+    if (normalized.isBlank()) {
+      return null
+    }
+    return when (normalized) {
+      "ogg" -> "oggm"
+      in SUPPORTED_AUDIO_EXPORT_FORMATS -> normalized
+      else -> null
+    }
+  }
+
   private fun checkNnapiSupport(): ProviderCheckResult {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
       return ProviderCheckResult(false, "Android 版本低于 9（API 28）")
@@ -3298,7 +3488,6 @@ class SherpaOnnxModule : Module() {
     private const val DEFAULT_MODEL_DIR_ASSET = "sherpa/asr/zh"
     private const val DEFAULT_SAMPLE_RATE = 16000
     private const val DEFAULT_FEATURE_DIM = 80
-    private const val DEFAULT_NUM_THREADS = 2
     private const val DEFAULT_AUDIO_BUFFER_SAMPLES = 512
     private const val WAV_READ_MODE_STREAMING = "streaming"
     private const val WAV_READ_MODE_DIRECT = "direct"
@@ -3329,5 +3518,28 @@ class SherpaOnnxModule : Module() {
     private const val STOP_REASON_AUDIO_FOCUS_LOSS = "audio_focus_loss"
     private const val STOP_REASON_MODULE_DESTROYED = "module_destroyed"
     private const val STOP_REASON_RECOVERED_AFTER_RESTART = "recovered_after_restart"
+    private val SUPPORTED_AUDIO_EXPORT_FORMATS =
+      setOf("wav", "wav16k", "mp3", "flac", "m4a", "aac", "opus", "oggm", "webm", "mkv")
+
+    @JvmStatic
+    private external fun nativeConvertAudioToWav16k(inputPath: String, outputPath: String): String
+
+    @JvmStatic
+    private external fun nativeConvertAudioToFormat(
+      inputPath: String,
+      outputPath: String,
+      format: String,
+      outputSampleRateHz: Int,
+      outputBitRate: Int,
+      outputChannels: Int,
+      outputSampleFormat: String?,
+      outputCodecName: String?,
+    ): String
+
+    @JvmStatic
+    private external fun nativeDecodeAudioFileToFloatSamples(inputPath: String, targetSampleRateHz: Int): Array<Any>
+
+    @JvmStatic
+    private external fun nativeGetAudioFileInfo(inputPath: String): Array<Any>
   }
 }
