@@ -1,6 +1,7 @@
 import { Stack, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useCallback, useEffect, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
@@ -22,39 +23,51 @@ type VadSegmentItem = {
     durationMs: number;
 };
 
-type FileRecognitionTiming = {
-    preflightMs: number;
-    documentPickMs: number;
-    conversionTotalMs: number;
-    prepareRuntimePathsMs: number;
-    nativeTranscribeMs: number;
-    provider: string;
-    numThreads: number;
-    availableProcessors: number;
-    performanceTier: 'low' | 'high';
-    runtimePathPrepareSteps: {
-        key: string;
-        copied: boolean;
-        skipped: boolean;
-        skipReason?: string;
-        elapsedMs: number;
-    }[];
-    mainDecodeMs: number;
-    segmentCount: number;
-    vadRawSegmentCount: number;
-    vadNoPathSegmentCount: number;
-    vadDurationTotalMs: number;
-    textAssembleMs: number;
-    totalMs: number;
+const REFERENCE_TEXT =
+    '北京科技馆是的就我也是在某一个夏天然后才开始培养出来游泳这个习惯的但是最近天气好像就还没有热到那种程度是的嗯那你平时喜欢干嘛呀哦所以你平你你喜欢看日本动漫是吗就有一个女生进来嗯我还是在校大学生我是学英语翻译我籍贯是内蒙古赤峰然后我的出生地在吉林吉林长春啊对对但是上大学会有很多同学问说你们是不是街道上都跑马呀这种这种话听的挺多的我今年是二十一岁';
+
+type CompareItem = {
+    char: string;
+    matched: boolean;
 };
 
-const RUNTIME_PATH_STEP_LABEL: Record<string, string> = {
-    denoiseModel: '降噪模型路径准备',
-    punctuationModel: '标点模型路径准备',
-    vadModel: 'VAD 模型路径准备',
-    speakerSegmentationModel: '说话人分割模型路径准备',
-    speakerEmbeddingModel: '说话人向量模型路径准备',
-};
+function buildLcsCompare(reference: string, recognized: string): CompareItem[] {
+    const refChars = Array.from(reference);
+    const recChars = Array.from(recognized);
+    const m = refChars.length;
+    const n = recChars.length;
+    const dp = Array.from({ length: m + 1 }, () => Array<number>(n + 1).fill(0));
+
+    for (let i = 1; i <= m; i += 1) {
+        for (let j = 1; j <= n; j += 1) {
+            if (refChars[i - 1] === recChars[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+
+    const matched = new Array<boolean>(m).fill(false);
+    let i = m;
+    let j = n;
+    while (i > 0 && j > 0) {
+        if (refChars[i - 1] === recChars[j - 1]) {
+            matched[i - 1] = true;
+            i -= 1;
+            j -= 1;
+        } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+            i -= 1;
+        } else {
+            j -= 1;
+        }
+    }
+
+    return refChars.map((char, index) => ({
+        char,
+        matched: matched[index],
+    }));
+}
 
 function compareModelVersion(left: string, right: string): number {
     const leftParts = left.split('.').map(part => Number.parseInt(part, 10));
@@ -77,7 +90,6 @@ function compareModelVersion(left: string, right: string): number {
 export default function Home() {
     const [conversionText, setConversionText] = useState('');
     const [conversionElapsedMs, setConversionElapsedMs] = useState<number | null>(null);
-    const [fileRecognitionTiming, setFileRecognitionTiming] = useState<FileRecognitionTiming | null>(null);
     const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
     const [activeProviderText, setActiveProviderText] = useState('未开始识别');
     const [activeNumThreadsText, setActiveNumThreadsText] = useState('-');
@@ -90,6 +102,11 @@ export default function Home() {
     const [qwenProgress, setQwenProgress] = useState<RemoteSummaryProgress | null>(null);
     const [qwenElapsedMs, setQwenElapsedMs] = useState<number | null>(null);
     const [qwenRemoteModel, setQwenRemoteModel] = useState<string | null>(null);
+    const [compareItems, setCompareItems] = useState<CompareItem[]>([]);
+    const [compareSummary, setCompareSummary] = useState('未开始对比');
+    const [playingSegmentPath, setPlayingSegmentPath] = useState<string | null>(null);
+    const segmentPlayer = useAudioPlayer(null, { updateInterval: 200 });
+    const segmentPlayerStatus = useAudioPlayerStatus(segmentPlayer);
     const checkCurrentModelVersions = useCallback(async () => {
         const currentModelId = getCurrentModel();
         const minimumVersion = MIN_MODEL_VERSION_BY_MODEL_ID[currentModelId];
@@ -128,11 +145,15 @@ export default function Home() {
 
         setFileRecognitionStatusText('文件识别中...');
         setConversionElapsedMs(null);
-        setFileRecognitionTiming(null);
+        try {
+            await segmentPlayer.pause();
+        } catch {
+            // no-op
+        }
+        setPlayingSegmentPath(null);
         try {
             const currentModelId = getCurrentModel();
             const totalStartedAt = Date.now();
-            const mainDecodeStartedAt = Date.now();
             const { transcribe, options: resolvedOptions } = await transcribeFileWithTiming({
                 filePath: uri,
                 modelId: currentModelId,
@@ -142,48 +163,16 @@ export default function Home() {
                 },
             });
             const result = transcribe.result;
-            const mainDecodeMs = Date.now() - mainDecodeStartedAt;
             const rawVadSegments = result.vadSegments ?? [];
             const normalizedSegments = rawVadSegments.filter(item => Boolean(item.path));
-            const vadNoPathSegmentCount = rawVadSegments.length - normalizedSegments.length;
-            const vadDurationTotalMs = rawVadSegments.reduce((sum, item) => sum + (item.durationMs ?? 0), 0);
             setVadSegments(normalizedSegments);
-            const textAssembleStartedAt = Date.now();
             setConversionText(result.text);
-            const textAssembleMs = Date.now() - textAssembleStartedAt;
             const totalMs = Date.now() - totalStartedAt;
             setConversionElapsedMs(totalMs);
-            const timingSummary: FileRecognitionTiming = {
-                preflightMs: 0,
-                documentPickMs: 0,
-                conversionTotalMs: transcribe.timing.totalMs,
-                prepareRuntimePathsMs: transcribe.timing.prepareRuntimePathsMs,
-                nativeTranscribeMs: transcribe.timing.nativeTranscribeMs,
-                provider: transcribe.timing.provider,
-                numThreads: transcribe.timing.numThreads,
-                availableProcessors: transcribe.timing.availableProcessors,
-                performanceTier: transcribe.timing.performanceTier,
-                runtimePathPrepareSteps: transcribe.timing.runtimePathPrepare.steps.map(item => ({
-                    key: item.key,
-                    copied: item.copied,
-                    skipped: item.skipped,
-                    skipReason: item.skipReason,
-                    elapsedMs: item.elapsedMs,
-                })),
-                mainDecodeMs,
-                segmentCount: normalizedSegments.length,
-                vadRawSegmentCount: rawVadSegments.length,
-                vadNoPathSegmentCount,
-                vadDurationTotalMs,
-                textAssembleMs,
-                totalMs,
-            };
-            setFileRecognitionTiming(timingSummary);
             setActiveProviderText(
                 `${transcribe.timing.provider}（threads=${transcribe.timing.numThreads}, 核心=${transcribe.timing.availableProcessors}, 档位=${transcribe.timing.performanceTier}）`,
             );
             setActiveNumThreadsText(String(transcribe.timing.numThreads));
-            console.info('[file-recognition][timing]', timingSummary);
             console.info('[file-recognition][options]', {
                 modelId: currentModelId,
                 ...resolvedOptions,
@@ -194,8 +183,8 @@ export default function Home() {
         } catch (error) {
             const message = (error as Error).message ?? 'unknown';
             setConversionElapsedMs(null);
-            setFileRecognitionTiming(null);
             setVadSegments([]);
+            setPlayingSegmentPath(null);
             setFileRecognitionStatusText(`文件识别失败: ${message}`);
             console.error('[file-recognition] failed', error);
             return false;
@@ -203,29 +192,12 @@ export default function Home() {
     };
 
     const handlePickDocument = useCallback(async () => {
-        const preflightStartedAt = Date.now();
         const canContinue = await runRecognitionPreflight('file');
-        const preflightMs = Date.now() - preflightStartedAt;
         if (!canContinue) {
             return;
         }
-        const pickStartedAt = Date.now();
         const selected = await pickDocument({ multiple: false });
-        const documentPickMs = Date.now() - pickStartedAt;
-        const success = await handleConversion(selected[0]?.uri);
-        if (!success) {
-            return;
-        }
-        setFileRecognitionTiming(prev => {
-            if (!prev) {
-                return prev;
-            }
-            return {
-                ...prev,
-                preflightMs,
-                documentPickMs,
-            };
-        });
+        await handleConversion(selected[0]?.uri);
     }, [pickDocument, runRecognitionPreflight, handleConversion]);
 
     const handleRandomNews = useCallback(() => {
@@ -258,6 +230,55 @@ export default function Home() {
         }
     }, [selectedNews.content]);
 
+    const handleCompareReferenceText = useCallback(() => {
+        const recognized = conversionText.trim();
+        if (!recognized) {
+            setCompareItems([]);
+            setCompareSummary('无离线翻译结果，无法对比');
+            return;
+        }
+        const compared = buildLcsCompare(REFERENCE_TEXT, recognized);
+        const hitCount = compared.filter(item => item.matched).length;
+        const total = compared.length;
+        const hitRate = total > 0 ? ((hitCount / total) * 100).toFixed(2) : '0.00';
+        setCompareItems(compared);
+        setCompareSummary(`命中 ${hitCount}/${total}（${hitRate}%）`);
+    }, [conversionText]);
+
+    const handlePlaySegment = useCallback(
+        async (segment: VadSegmentItem) => {
+            if (!segment.path) {
+                return;
+            }
+            try {
+                if (playingSegmentPath === segment.path && segmentPlayerStatus.playing) {
+                    await segmentPlayer.pause();
+                    setPlayingSegmentPath(null);
+                    return;
+                }
+                segmentPlayer.replace(segment.path);
+                segmentPlayer.play();
+                setPlayingSegmentPath(segment.path);
+            } catch (error) {
+                console.error('[test][play-segment] failed', error);
+                setPlayingSegmentPath(null);
+            }
+        },
+        [playingSegmentPath, segmentPlayer, segmentPlayerStatus.playing],
+    );
+
+    useEffect(() => {
+        if (!segmentPlayerStatus.playing && segmentPlayerStatus.didJustFinish) {
+            setPlayingSegmentPath(null);
+        }
+    }, [segmentPlayerStatus.didJustFinish, segmentPlayerStatus.playing]);
+
+    useEffect(() => {
+        return () => {
+            void segmentPlayer.pause();
+        };
+    }, [segmentPlayer]);
+
     useFocusEffect(
         useCallback(() => {
             checkCurrentModelVersions().catch(error => {
@@ -277,49 +298,29 @@ export default function Home() {
                 <TextX>当前 Provider：{activeProviderText}</TextX>
                 <TextX>当前线程数：{activeNumThreadsText}</TextX>
                 <TextX>离线翻译结果：{conversionText}</TextX>
-                {conversionElapsedMs === null ? null : <TextX>耗时：{(conversionElapsedMs / 1000).toFixed(2)} s</TextX>}
-                {fileRecognitionTiming ? (
-                    <View className="gap-1 rounded-lg border border-[#e5e7eb] p-3">
-                        <TextX variant="subtitle">识别分阶段耗时</TextX>
-                        <TextX variant="description">总耗时：{(fileRecognitionTiming.totalMs / 1000).toFixed(2)} s</TextX>
-                        <TextX variant="description">前置检查：{(fileRecognitionTiming.preflightMs / 1000).toFixed(2)} s</TextX>
-                        <TextX variant="description">文件选择：{(fileRecognitionTiming.documentPickMs / 1000).toFixed(2)} s</TextX>
-                        <TextX variant="description">识别函数总耗时：{(fileRecognitionTiming.conversionTotalMs / 1000).toFixed(2)} s</TextX>
-                        <TextX variant="description">主识别（含VAD输出）：{(fileRecognitionTiming.mainDecodeMs / 1000).toFixed(2)} s</TextX>
-                        <TextX variant="description">
-                            模型路径准备：{(fileRecognitionTiming.prepareRuntimePathsMs / 1000).toFixed(2)} s
-                        </TextX>
-                        <TextX variant="description">Native 推理：{(fileRecognitionTiming.nativeTranscribeMs / 1000).toFixed(2)} s</TextX>
-                        <TextX variant="description">Provider：{fileRecognitionTiming.provider}</TextX>
-                        <TextX variant="description">num_threads：{fileRecognitionTiming.numThreads}</TextX>
-                        <TextX variant="description">设备核心数：{fileRecognitionTiming.availableProcessors}</TextX>
-                        <TextX variant="description">设备档位：{fileRecognitionTiming.performanceTier}</TextX>
-                        <TextX variant="description">分段数量：{fileRecognitionTiming.segmentCount}</TextX>
-                        <TextX variant="description">VAD 原始分段数：{fileRecognitionTiming.vadRawSegmentCount}</TextX>
-                        <TextX variant="description">VAD 空路径分段数：{fileRecognitionTiming.vadNoPathSegmentCount}</TextX>
-                        <TextX variant="description">
-                            VAD 分段总时长：{(fileRecognitionTiming.vadDurationTotalMs / 1000).toFixed(2)} s
-                        </TextX>
-                        <TextX variant="description">文本拼接与收尾：{(fileRecognitionTiming.textAssembleMs / 1000).toFixed(2)} s</TextX>
-                        {fileRecognitionTiming.runtimePathPrepareSteps.length > 0 ? (
-                            <View className="mt-1 gap-0.5">
-                                {fileRecognitionTiming.runtimePathPrepareSteps.map(detail => {
-                                    const label = RUNTIME_PATH_STEP_LABEL[detail.key] ?? detail.key;
-                                    const action = detail.skipped
-                                        ? `跳过${detail.skipReason ? `(${detail.skipReason})` : ''}`
-                                        : detail.copied
-                                          ? '已拷贝'
-                                          : '已复用缓存';
-                                    return (
-                                        <TextX key={detail.key} variant="description">
-                                            {label}：{(detail.elapsedMs / 1000).toFixed(2)} s（{action}）
-                                        </TextX>
-                                    );
-                                })}
-                            </View>
-                        ) : null}
+                <View className="gap-2 rounded-lg border border-[#e5e7eb] p-3">
+                    <View className="flex-row items-center gap-2">
+                        <ButtonX size="sm" onPress={handleCompareReferenceText}>
+                            对比
+                        </ButtonX>
+                        <TextX variant="description">{compareSummary}</TextX>
                     </View>
-                ) : null}
+                    <TextX variant="description">标准文本：</TextX>
+                    <Text>{REFERENCE_TEXT}</Text>
+                    {compareItems.length > 0 ? (
+                        <View className="gap-1">
+                            <TextX variant="description">对比结果（绿色=命中，红色=未命中）</TextX>
+                            <Text>
+                                {compareItems.map((item, index) => (
+                                    <Text key={`${item.char}-${index}`} style={{ color: item.matched ? '#16a34a' : '#dc2626' }}>
+                                        {item.char}
+                                    </Text>
+                                ))}
+                            </Text>
+                        </View>
+                    ) : null}
+                </View>
+                {conversionElapsedMs === null ? null : <TextX>耗时：{(conversionElapsedMs / 1000).toFixed(2)} s</TextX>}
 
                 <View className="gap-2">
                     <TextX variant="description">
@@ -335,6 +336,9 @@ export default function Home() {
                             <TextX numberOfLines={2} variant="description">
                                 文本: {item.text || '(空)'}
                             </TextX>
+                            <ButtonX size="sm" variant="outline" onPress={() => void handlePlaySegment(item)}>
+                                {playingSegmentPath === item.path && segmentPlayerStatus.playing ? '暂停' : '播放'}
+                            </ButtonX>
                         </View>
                     ))}
                 </View>

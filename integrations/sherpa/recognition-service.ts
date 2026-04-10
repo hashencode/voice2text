@@ -1,15 +1,9 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import {
-    getDenoiseEnabled,
-    getSpeakerDiarizationEnabled,
-    getVadEngine,
-    type VadEngineId,
-} from '~/data/mmkv/app-config';
+import { getDenoiseEnabled, getSpeakerDiarizationEnabled, getVadEngine, type VadEngineId } from '~/data/mmkv/app-config';
 import SherpaOnnx, {
     type SherpaDownloadedModelTranscribeWithTiming,
     type SherpaModelId,
     type SherpaTranscribeOptions,
-    type SherpaTranscribeResult,
 } from '~/modules/sherpa';
 
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
@@ -96,7 +90,6 @@ export function buildDefaultTranscribeOptions(
         enableSpeakerDiarization: resolved.speakerDiarizationEnabled,
         speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
         speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
-        vadMaxSpeechDuration: 20,
         vadEngine: resolved.vadEngine,
         wavReadMode: 'streaming',
         ...overrides,
@@ -119,33 +112,6 @@ export async function transcribeFileWithTiming(context: RecognitionRunContext): 
         const transcribe = await SherpaOnnx.transcribeWavByDownloadedModelWithTiming(prepared.path, context.modelId, options);
         return {
             transcribe,
-            options,
-        };
-    } finally {
-        await prepared.cleanup();
-    }
-}
-
-export async function transcribeSegmentQuick(context: RecognitionRunContext): Promise<{
-    result: SherpaTranscribeResult;
-    options: SherpaTranscribeOptions;
-}> {
-    const options = buildDefaultTranscribeOptions(context.preference, {
-        enableVad: false,
-        enableSpeakerDiarization: false,
-        ...context.overrides,
-    });
-    const prepared = await ensureInputSampleRate16k(context.filePath);
-    try {
-        if (prepared.transcoded) {
-            console.info('[recognition] auto-transcoded segment to 16k', {
-                sourceSampleRate: prepared.inputSampleRate,
-                sourcePath: context.filePath,
-            });
-        }
-        const result = await SherpaOnnx.transcribeWavByDownloadedModel(prepared.path, context.modelId, options);
-        return {
-            result,
             options,
         };
     } finally {

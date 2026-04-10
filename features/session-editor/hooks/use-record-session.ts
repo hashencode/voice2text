@@ -46,7 +46,6 @@ export function useRecordSession() {
             getSherpaDownloadedModelOptions(realtimeModelId, {
                 debug: true,
                 enableDenoise: false,
-                enableVad: true,
                 enableSpeakerDiarization: false,
                 wavReadMode: 'streaming',
             }),

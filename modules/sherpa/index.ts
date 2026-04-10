@@ -5,26 +5,14 @@ import { requireNativeModule } from 'expo-modules-core';
 export type SherpaTranscribeOptions = {
     modelDirAsset?: string;
     modelDir?: string;
-    modelType?: 'paraformer' | 'moonshine' | string;
+    modelType?: 'paraformer' | 'moonshine';
     encoder?: string;
-    decoder?: string;
-    joiner?: string;
     model?: string;
     preprocessor?: string;
     uncachedDecoder?: string;
     cachedDecoder?: string;
     mergedDecoder?: string;
-    encoderAdaptor?: string;
-    llm?: string;
-    embedding?: string;
-    tokenizer?: string;
-    convFrontend?: string;
-    maxTotalLen?: number;
-    maxNewTokens?: number;
     temperature?: number;
-    topP?: number;
-    seed?: number;
-    hotwords?: string;
     tokens?: string;
     sampleRate?: number;
     featureDim?: number;
@@ -38,11 +26,9 @@ export type SherpaTranscribeOptions = {
     denoiseModel?: string;
     enablePunctuation?: boolean;
     punctuationModel?: string;
-    enableVad?: boolean;
     vadEngine?: 'tenvad' | 'silerovad' | string;
     vadModel?: string;
     vadThreshold?: number;
-    vadNegThreshold?: number;
     vadMinSilenceDuration?: number;
     vadMinSpeechDuration?: number;
     vadWindowSize?: number;
@@ -55,7 +41,7 @@ export type SherpaTranscribeOptions = {
     speakerNumClusters?: number;
     speakerClusteringThreshold?: number;
     speakerSimilarityThreshold?: number;
-    wavReadMode?: 'streaming' | 'direct';
+    wavReadMode?: 'streaming';
     streamingStartOffsetBytes?: number;
     streamingExistingText?: string;
 };
@@ -203,33 +189,11 @@ export type SherpaAudioConvertOptions = {
     sampleRate?: number;
     bitRate?: number;
     channels?: number;
-    sampleFormat?:
-        | 'u8'
-        | 's16'
-        | 's32'
-        | 'flt'
-        | 'dbl'
-        | 'u8p'
-        | 's16p'
-        | 's32p'
-        | 'fltp'
-        | 'dblp'
-        | string;
+    sampleFormat?: 'u8' | 's16' | 's32' | 'flt' | 'dbl' | 'u8p' | 's16p' | 's32p' | 'fltp' | 'dblp' | string;
     codec?: string;
 };
 
-export type SherpaAudioOutputFormat =
-    | 'wav'
-    | 'wav16k'
-    | 'mp3'
-    | 'flac'
-    | 'm4a'
-    | 'aac'
-    | 'opus'
-    | 'ogg'
-    | 'oggm'
-    | 'webm'
-    | 'mkv';
+export type SherpaAudioOutputFormat = 'wav' | 'wav16k' | 'mp3' | 'flac' | 'm4a' | 'aac' | 'opus' | 'ogg' | 'oggm' | 'webm' | 'mkv';
 
 export type SherpaDecodedAudio = {
     samples: number[];
@@ -296,18 +260,12 @@ type SherpaVadEngine = 'tenvad' | 'silerovad';
 
 const DEFAULT_VAD_ENGINE: SherpaVadEngine = 'tenvad';
 const AUTO_PROVIDER_ORDER = ['nnapi', 'xnnpack', 'cpu'] as const;
-const SHERPA_RUNTIME_SELECTION_KEY = 'sherpa:runtime:selection:v1';
+const FIXED_NUM_THREADS = 2;
 const DEFAULT_RUNTIME_PROFILE: SherpaRuntimeProfile = {
     availableProcessors: 2,
     isLowRamDevice: false,
-    recommendedNumThreads: 2,
+    recommendedNumThreads: FIXED_NUM_THREADS,
     performanceTier: 'low',
-};
-
-type SherpaRuntimeSelection = {
-    provider: string;
-    numThreads: number;
-    updatedAt: number;
 };
 
 let hasLoggedProviderDiagnostics = false;
@@ -315,37 +273,30 @@ let hasLoggedProviderSelfCheck = false;
 
 const VAD_ENGINE_DEFAULTS: Record<
     SherpaVadEngine,
-    Required<
-        Pick<
-            SherpaTranscribeOptions,
-            | 'vadEngine'
-            | 'vadModel'
-            | 'vadThreshold'
-            | 'vadMinSilenceDuration'
-            | 'vadMinSpeechDuration'
-            | 'vadMaxSpeechDuration'
-            | 'vadWindowSize'
+    Pick<SherpaTranscribeOptions, 'vadEngine' | 'vadModel'> &
+        Required<
+            Pick<
+                SherpaTranscribeOptions,
+                'vadThreshold' | 'vadMinSilenceDuration' | 'vadMinSpeechDuration' | 'vadMaxSpeechDuration' | 'vadWindowSize'
+            >
         >
-    > &
-        Partial<Required<Pick<SherpaTranscribeOptions, 'vadNegThreshold'>>>
 > = {
     tenvad: {
         vadEngine: 'tenvad',
         vadModel: 'sherpa/onnx/ten-vad.onnx',
-        vadThreshold: 0.5,
-        vadMinSilenceDuration: 0.5,
+        vadThreshold: 0.4,
+        vadMinSilenceDuration: 0.3,
         vadMinSpeechDuration: 0.25,
-        vadMaxSpeechDuration: 20,
+        vadMaxSpeechDuration: 6,
         vadWindowSize: 256,
     },
     silerovad: {
         vadEngine: 'silerovad',
         vadModel: 'sherpa/onnx/silero-vad.onnx',
-        vadThreshold: 0.2,
-        vadNegThreshold: -1,
-        vadMinSilenceDuration: 0.5,
-        vadMinSpeechDuration: 0.2,
-        vadMaxSpeechDuration: 20,
+        vadThreshold: 0.4,
+        vadMinSilenceDuration: 0.3,
+        vadMinSpeechDuration: 0.25,
+        vadMaxSpeechDuration: 10,
         vadWindowSize: 512,
     },
 };
@@ -361,11 +312,22 @@ function withVadEngineDefaults(options: SherpaTranscribeOptions): SherpaTranscri
     const vadEngine = resolveVadEngine(options.vadEngine);
     const defaults = VAD_ENGINE_DEFAULTS[vadEngine];
     const customVadModel = options.vadModel?.trim();
-    return {
+    const merged = {
         ...defaults,
         ...options,
+    };
+    return {
+        ...merged,
         vadEngine,
         vadModel: customVadModel ? customVadModel : defaults.vadModel,
+        vadThreshold: typeof merged.vadThreshold === 'number' ? merged.vadThreshold : defaults.vadThreshold,
+        vadMinSilenceDuration:
+            typeof merged.vadMinSilenceDuration === 'number' ? merged.vadMinSilenceDuration : defaults.vadMinSilenceDuration,
+        vadMinSpeechDuration:
+            typeof merged.vadMinSpeechDuration === 'number' ? merged.vadMinSpeechDuration : defaults.vadMinSpeechDuration,
+        vadMaxSpeechDuration:
+            typeof merged.vadMaxSpeechDuration === 'number' ? merged.vadMaxSpeechDuration : defaults.vadMaxSpeechDuration,
+        vadWindowSize: typeof merged.vadWindowSize === 'number' ? merged.vadWindowSize : defaults.vadWindowSize,
     };
 }
 
@@ -377,7 +339,6 @@ export const SHERPA_MODEL_PRESETS = {
         denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/onnx/punctuation.onnx',
-        enableVad: true,
         encoder: 'encoder_model.ort',
         mergedDecoder: 'decoder_model_merged.ort',
         tokens: 'tokens.txt',
@@ -390,7 +351,6 @@ export const SHERPA_MODEL_PRESETS = {
         denoiseModel: 'sherpa/onnx/speech-enhancement.onnx',
         enablePunctuation: false,
         punctuationModel: 'sherpa/onnx/punctuation.onnx',
-        enableVad: true,
         model: 'model.int8.onnx',
         tokens: 'tokens.txt',
         requiredFiles: ['model.int8.onnx', 'tokens.txt'],
@@ -1348,9 +1308,7 @@ function buildProviderCandidates(explicitProvider?: string, modelType?: string):
     }
     try {
         const nativeProviders = NativeSherpaOnnx.getAutoProviders();
-        const normalizedProviders = nativeProviders
-            .map(item => normalizeProvider(item))
-            .filter((item): item is string => Boolean(item));
+        const normalizedProviders = nativeProviders.map(item => normalizeProvider(item)).filter((item): item is string => Boolean(item));
         if (normalizedProviders.length > 0) {
             return normalizedProviders;
         }
@@ -1363,13 +1321,11 @@ function buildProviderCandidates(explicitProvider?: string, modelType?: string):
 function getSafeRuntimeProfile(): SherpaRuntimeProfile {
     try {
         const profile = NativeSherpaOnnx.getRuntimeProfile();
-        const recommendedNumThreads = profile.recommendedNumThreads >= 4 ? 4 : 2;
-        const performanceTier = recommendedNumThreads >= 4 ? 'high' : 'low';
         return {
             availableProcessors: Math.max(1, Math.round(profile.availableProcessors || DEFAULT_RUNTIME_PROFILE.availableProcessors)),
             isLowRamDevice: Boolean(profile.isLowRamDevice),
-            recommendedNumThreads,
-            performanceTier,
+            recommendedNumThreads: FIXED_NUM_THREADS,
+            performanceTier: 'low',
         };
     } catch {
         return DEFAULT_RUNTIME_PROFILE;
@@ -1377,48 +1333,8 @@ function getSafeRuntimeProfile(): SherpaRuntimeProfile {
 }
 
 function normalizeNumThreads(value: number): number {
-    if (!Number.isFinite(value)) {
-        return DEFAULT_RUNTIME_PROFILE.recommendedNumThreads;
-    }
-    return Math.max(1, Math.min(16, Math.round(value)));
-}
-
-async function readRuntimeSelection(): Promise<SherpaRuntimeSelection | null> {
-    try {
-        const raw = await AsyncStorage.getItem(SHERPA_RUNTIME_SELECTION_KEY);
-        if (!raw) {
-            return null;
-        }
-        const parsed = JSON.parse(raw) as Partial<SherpaRuntimeSelection>;
-        const provider = normalizeProvider(parsed.provider);
-        if (!provider || typeof parsed.numThreads !== 'number') {
-            return null;
-        }
-        return {
-            provider,
-            numThreads: normalizeNumThreads(parsed.numThreads),
-            updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
-        };
-    } catch {
-        return null;
-    }
-}
-
-async function writeRuntimeSelection(provider: string, numThreads: number): Promise<void> {
-    const normalizedProvider = normalizeProvider(provider);
-    if (!normalizedProvider) {
-        return;
-    }
-    const payload: SherpaRuntimeSelection = {
-        provider: normalizedProvider,
-        numThreads: normalizeNumThreads(numThreads),
-        updatedAt: Date.now(),
-    };
-    await AsyncStorage.setItem(SHERPA_RUNTIME_SELECTION_KEY, JSON.stringify(payload));
-}
-
-async function clearRuntimeSelection(): Promise<void> {
-    await AsyncStorage.removeItem(SHERPA_RUNTIME_SELECTION_KEY);
+    void value;
+    return FIXED_NUM_THREADS;
 }
 
 async function transcribeWavWithAutoProvider(
@@ -1442,33 +1358,17 @@ async function transcribeWavWithAutoProvider(
             diagnostics.xnnpack.supported ? null : `xnnpack: ${diagnostics.xnnpack.reason}`,
         ].filter((item): item is string => Boolean(item));
         if (unsupportedReasons.length > 0) {
-            console.info(`[sherpa][provider-diagnostics] autoProviders=${diagnostics.autoProviders.join(',')} unsupported=${unsupportedReasons.join(' | ')}`);
+            console.info(
+                `[sherpa][provider-diagnostics] autoProviders=${diagnostics.autoProviders.join(',')} unsupported=${unsupportedReasons.join(' | ')}`,
+            );
         } else {
             console.info(`[sherpa][provider-diagnostics] autoProviders=${diagnostics.autoProviders.join(',')} all-accelerators-supported`);
         }
     }
     const explicitProvider = normalizeProvider(baseOptions.provider);
-    const explicitNumThreads = typeof baseOptions.numThreads === 'number' ? normalizeNumThreads(baseOptions.numThreads) : null;
-    const cachedSelection = !explicitProvider && explicitNumThreads === null ? await readRuntimeSelection() : null;
-    if (cachedSelection) {
-        try {
-            const cachedOptions = {
-                ...baseOptions,
-                provider: cachedSelection.provider,
-                numThreads: cachedSelection.numThreads,
-            };
-            const cachedResult = await NativeSherpaOnnx.transcribeWav(path, cachedOptions);
-            return {
-                result: cachedResult,
-                provider: cachedSelection.provider,
-                numThreads: cachedSelection.numThreads,
-                runtimeProfile,
-            };
-        } catch {
-            await clearRuntimeSelection();
-        }
+    if (typeof baseOptions.numThreads === 'number') {
+        normalizeNumThreads(baseOptions.numThreads);
     }
-    const numThreads = explicitNumThreads ?? runtimeProfile.recommendedNumThreads;
     const providerCandidates = buildProviderCandidates(explicitProvider ?? undefined, baseOptions.modelType);
     let lastError: unknown = null;
 
@@ -1477,12 +1377,16 @@ async function transcribeWavWithAutoProvider(
         const options = {
             ...baseOptions,
             provider,
-            numThreads,
+            numThreads: FIXED_NUM_THREADS,
         };
         try {
             const result = await NativeSherpaOnnx.transcribeWav(path, options);
-            await writeRuntimeSelection(provider, numThreads);
-            return { result, provider, numThreads, runtimeProfile };
+            return {
+                result,
+                provider,
+                numThreads: FIXED_NUM_THREADS,
+                runtimeProfile,
+            };
         } catch (error) {
             lastError = error;
             const hasNext = index < providerCandidates.length - 1;
@@ -1492,7 +1396,7 @@ async function transcribeWavWithAutoProvider(
         }
     }
 
-    throw (lastError as Error);
+    throw lastError as Error;
 }
 
 const NativeSherpaOnnx = requireNativeModule<SherpaOnnxNative>('SherpaOnnx');
