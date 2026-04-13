@@ -197,7 +197,7 @@ export default function ImportAudioPage() {
 
                             <View className="flex-1 items-center justify-center">
                                 {isPlaybackMode ? (
-                                    <View className="flex-row items-center gap-2">
+                                    <View className="flex-row items-center gap-4">
                                         <Pressable onPress={handleRewind}>
                                             <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
                                                 <Rewind size={20} strokeWidth={2} color={textColor} />
@@ -219,7 +219,7 @@ export default function ImportAudioPage() {
                                         </Pressable>
                                     </View>
                                 ) : (
-                                    <View className="h-12" />
+                                    <TextX style={{ color: mutedTextColor }}>点击右侧按钮开始播放</TextX>
                                 )}
                             </View>
 
@@ -279,8 +279,8 @@ export default function ImportAudioPage() {
                 title={confirmDialogState.title}
                 description={confirmDialogState.description}
                 confirmText={confirmDialogState.confirmText}
+                cancelText={confirmDialogState.cancelText}
                 confirmButtonProps={confirmDialogState.confirmButtonProps}
-                cancelText="不保存"
                 onConfirm={confirmDialogState.onConfirm}
                 onClose={closeConfirmDialog}
                 onCancel={cancelConfirmDialog}

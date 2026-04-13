@@ -1,5 +1,6 @@
 import {
     Bold,
+    CircleChevronDown,
     Heading1,
     Heading2,
     Heading3,
@@ -12,7 +13,7 @@ import {
     Underline,
 } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Keyboard, Pressable, View } from 'react-native';
 import type { EnrichedTextInputInstance, OnChangeStateEvent } from 'react-native-enriched';
 import { ScrollView } from 'react-native-gesture-handler';
 import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-controller';
@@ -57,6 +58,10 @@ export default function EditorKeyboardToolbar({
         },
         [focusInput],
     );
+    const dismissKeyboardAndBlur = React.useCallback(() => {
+        noteInputRef.current?.blur?.();
+        Keyboard.dismiss();
+    }, [noteInputRef]);
 
     const isHeadingActive = Boolean(
         noteStyleState?.h1.isActive ||
@@ -172,39 +177,46 @@ export default function EditorKeyboardToolbar({
             pointerEvents="box-none"
             style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 40, elevation: 40 }}>
             <View pointerEvents="auto" style={{ backgroundColor: mutedColor, height: TOOLBAR_HEIGHT }} className="justify-center px-3">
-                <ScrollView
-                    horizontal
-                    style={{ width: '100%', height: '100%' }}
-                    showsHorizontalScrollIndicator={false}
-                    nestedScrollEnabled
-                    directionalLockEnabled
-                    keyboardShouldPersistTaps="always"
-                    contentContainerStyle={{ gap: 16, alignItems: 'center', paddingRight: 12 }}>
-                    {toolbarItems.map(item => {
-                        const IconComp = item.icon;
-                        return (
-                            <Pressable
-                                key={item.key}
-                                onPress={() => {
-                                    if (item.blocked) {
-                                        onBlocked();
-                                        return;
-                                    }
-                                    item.onPress();
-                                }}
-                                hitSlop={8}>
-                                <View
-                                    className="h-[34px] w-[34px] items-center justify-center rounded-lg"
-                                    style={{ opacity: item.blocked ? 0.35 : 1 }}>
-                                    <IconComp
-                                        size={TOOLBAR_ICON_SIZE}
-                                        color={item.blocked ? mutedTextColor : item.active ? primaryColor : textColor}
-                                    />
-                                </View>
-                            </Pressable>
-                        );
-                    })}
-                </ScrollView>
+                <View className="flex-row items-center">
+                    <ScrollView
+                        horizontal
+                        style={{ flex: 1, height: '100%' }}
+                        showsHorizontalScrollIndicator={false}
+                        nestedScrollEnabled
+                        directionalLockEnabled
+                        keyboardShouldPersistTaps="always"
+                        contentContainerStyle={{ gap: 16, alignItems: 'center', paddingRight: 12 }}>
+                        {toolbarItems.map(item => {
+                            const IconComp = item.icon;
+                            return (
+                                <Pressable
+                                    key={item.key}
+                                    onPress={() => {
+                                        if (item.blocked) {
+                                            onBlocked();
+                                            return;
+                                        }
+                                        item.onPress();
+                                    }}
+                                    hitSlop={8}>
+                                    <View
+                                        className="h-[34px] w-[34px] items-center justify-center rounded-lg"
+                                        style={{ opacity: item.blocked ? 0.35 : 1 }}>
+                                        <IconComp
+                                            size={TOOLBAR_ICON_SIZE}
+                                            color={item.blocked ? mutedTextColor : item.active ? primaryColor : textColor}
+                                        />
+                                    </View>
+                                </Pressable>
+                            );
+                        })}
+                    </ScrollView>
+                    <Pressable onPress={dismissKeyboardAndBlur} hitSlop={8}>
+                        <View className="ml-2 h-[34px] w-[34px] items-center justify-center rounded-lg">
+                            <CircleChevronDown size={TOOLBAR_ICON_SIZE} color={textColor} />
+                        </View>
+                    </Pressable>
+                </View>
             </View>
         </KeyboardStickyView>
     );

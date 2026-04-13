@@ -10,20 +10,6 @@ android {
 
   defaultConfig {
     minSdkVersion 24
-    def disableFfmpeg = (findProperty("sherpaOnnxDisableFfmpeg") ?: "false").toString().toLowerCase() in ["true", "1"]
-    externalNativeBuild {
-      cmake {
-        cppFlags "-std=c++17"
-        arguments "-DSHERPA_ONNX_DISABLE_FFMPEG=${disableFfmpeg ? "ON" : "OFF"}"
-      }
-    }
-  }
-
-  externalNativeBuild {
-    cmake {
-      path file("src/main/cpp/CMakeLists.txt")
-      version "3.22.1"
-    }
   }
 }
 

@@ -27,6 +27,7 @@ type ConfirmDialogState = {
     title: string;
     description: string;
     confirmText: string;
+    cancelText: string;
     confirmButtonProps?: { variant?: ConfirmButtonVariant };
     onConfirm?: () => void;
     onCancel?: () => void;
@@ -135,6 +136,7 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
         title: '',
         description: '',
         confirmText: '确定',
+        cancelText: '取消',
     });
 
     const seekThrottleLastMsRef = React.useRef(0);
@@ -450,11 +452,6 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
                 recordedAtMs,
             };
 
-            toast({
-                title: '保存成功',
-                variant: 'success',
-                duration: 2000,
-            });
             return true;
         } catch (error) {
             toast({
@@ -504,9 +501,10 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
             pendingNavActionRef.current = pendingAction ?? null;
             setConfirmDialogState({
                 isVisible: true,
-                title: '保存导入内容',
+                title: '保存内容修改',
                 description: '离开前是否保存当前修改？',
-                confirmText: '保存并返回',
+                confirmText: '保存修改',
+                cancelText: '放弃修改',
                 confirmButtonProps: { variant: 'primary' },
                 onConfirm: () => {
                     void (async () => {
@@ -514,14 +512,27 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
                         if (!ok) {
                             return;
                         }
-                        const action = pendingNavActionRef.current;
-                        pendingNavActionRef.current = null;
-                        allowNextRemoveRef.current = true;
-                        if (action) {
-                            navigation.dispatch(action as never);
-                        } else {
-                            navigation.goBack();
-                        }
+                        setConfirmDialogState({
+                            isVisible: true,
+                            title: '保存成功',
+                            description: '内容已保存，是否返回上一页？',
+                            confirmText: '返回',
+                            cancelText: '继续编辑',
+                            confirmButtonProps: { variant: 'primary' },
+                            onConfirm: () => {
+                                const action = pendingNavActionRef.current;
+                                pendingNavActionRef.current = null;
+                                allowNextRemoveRef.current = true;
+                                if (action) {
+                                    navigation.dispatch(action as never);
+                                } else {
+                                    navigation.goBack();
+                                }
+                            },
+                            onCancel: () => {
+                                pendingNavActionRef.current = null;
+                            },
+                        });
                     })();
                 },
                 onCancel: () => {

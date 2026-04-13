@@ -269,6 +269,10 @@ type SherpaModelPreset = SherpaTranscribeOptions & {
 type SherpaVadEngine = 'tenvad' | 'silerovad';
 
 const DEFAULT_VAD_ENGINE: SherpaVadEngine = 'tenvad';
+const MODEL_TYPE_VAD_ENGINE: Record<'moonshine' | 'paraformer', SherpaVadEngine> = {
+    moonshine: 'tenvad',
+    paraformer: 'silerovad',
+};
 const AUTO_PROVIDER_ORDER = ['nnapi', 'xnnpack', 'cpu'] as const;
 const FIXED_NUM_THREADS = 2;
 const DEFAULT_RUNTIME_PROFILE: SherpaRuntimeProfile = {
@@ -283,7 +287,7 @@ let hasLoggedProviderSelfCheck = false;
 
 const VAD_ENGINE_DEFAULTS: Record<
     SherpaVadEngine,
-    Pick<SherpaTranscribeOptions, 'vadEngine' | 'vadModel'> &
+    Pick<SherpaTranscribeOptions, 'vadEngine'> &
         Required<
             Pick<
                 SherpaTranscribeOptions,
@@ -293,7 +297,6 @@ const VAD_ENGINE_DEFAULTS: Record<
 > = {
     tenvad: {
         vadEngine: 'tenvad',
-        vadModel: 'sherpa/onnx/ten-vad.onnx',
         vadThreshold: 0.4,
         vadMinSilenceDuration: 0.3,
         vadMinSpeechDuration: 0.25,
@@ -302,7 +305,6 @@ const VAD_ENGINE_DEFAULTS: Record<
     },
     silerovad: {
         vadEngine: 'silerovad',
-        vadModel: 'sherpa/onnx/silero-vad.onnx',
         vadThreshold: 0.4,
         vadMinSilenceDuration: 0.3,
         vadMinSpeechDuration: 0.25,
@@ -311,17 +313,19 @@ const VAD_ENGINE_DEFAULTS: Record<
     },
 };
 
-function resolveVadEngine(value: unknown): SherpaVadEngine {
+function resolveVadEngine(value: unknown, modelType?: SherpaTranscribeOptions['modelType']): SherpaVadEngine {
     if (value === 'silerovad' || value === 'tenvad') {
         return value;
+    }
+    if (modelType === 'moonshine' || modelType === 'paraformer') {
+        return MODEL_TYPE_VAD_ENGINE[modelType];
     }
     return DEFAULT_VAD_ENGINE;
 }
 
 function withVadEngineDefaults(options: SherpaTranscribeOptions): SherpaTranscribeOptions {
-    const vadEngine = resolveVadEngine(options.vadEngine);
+    const vadEngine = resolveVadEngine(options.vadEngine, options.modelType);
     const defaults = VAD_ENGINE_DEFAULTS[vadEngine];
-    const customVadModel = options.vadModel?.trim();
     const merged = {
         ...defaults,
         ...options,
@@ -329,7 +333,6 @@ function withVadEngineDefaults(options: SherpaTranscribeOptions): SherpaTranscri
     return {
         ...merged,
         vadEngine,
-        vadModel: customVadModel ? customVadModel : defaults.vadModel,
         vadThreshold: typeof merged.vadThreshold === 'number' ? merged.vadThreshold : defaults.vadThreshold,
         vadMinSilenceDuration:
             typeof merged.vadMinSilenceDuration === 'number' ? merged.vadMinSilenceDuration : defaults.vadMinSilenceDuration,

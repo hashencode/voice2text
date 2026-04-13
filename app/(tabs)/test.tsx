@@ -1,6 +1,6 @@
+import { Asset } from 'expo-asset';
 import { Stack, useFocusEffect } from 'expo-router';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { ButtonX } from '~/components/ui/buttonx';
@@ -8,30 +8,97 @@ import { TextX } from '~/components/ui/textx';
 import { getDenoiseEnabled, getSpeakerDiarizationEnabled } from '~/data/mmkv/app-config';
 import { getCurrentModel } from '~/data/mmkv/model-selection';
 import { pickRandomNewsSample } from '~/features/test/data/news-samples';
-import { useFilePicker } from '~/hooks/useFilePicker';
 import { summarizeTextByRemoteApi, type RemoteSummaryProgress } from '~/integrations/llm/remote-summary';
 import { transcribeFileWithTiming } from '~/integrations/sherpa/recognition-service';
 import { getInstalledModelVersion } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
 import { runRecognitionPreflight as runRecognitionPreflightTool } from '~/scripts/utils';
 
-type VadSegmentItem = {
-    index: number;
-    path: string;
-    text: string;
-    numSamples: number;
-    durationMs: number;
-};
+const DEFAULT_TEST_WAV_MODULE = require('../../assets/sherpa/wav/test.wav');
 
-const REFERENCE_TEXT =
-    '北京科技馆是的就我也是在某一个夏天然后才开始培养出来游泳这个习惯的但是最近天气好像就还没有热到那种程度是的嗯那你平时喜欢干嘛呀哦所以你平你你喜欢看日本动漫是吗就有一个女生进来嗯我还是在校大学生我是学英语翻译我籍贯是内蒙古赤峰然后我的出生地在吉林吉林长春啊对对但是上大学会有很多同学问说你们是不是街道上都跑马呀这种这种话听的挺多的我今年是二十一岁';
+const REFERENCE_SEGMENTS = [
+    { timestamp: '29.776 -- 35.788', text: '朋友们晚上好，欢迎大家来参加今天晚上的活动。谢谢大家。' },
+    { timestamp: '42.160 -- 45.996', text: '这是我第四次办年度演讲。' },
+    { timestamp: '47.024 -- 49.868', text: '前三次呢，因为疫情的原因。' },
+    { timestamp: '50.512 -- 55.340', text: '都在小米科技园内举办，现场的人很少。' },
+    { timestamp: '56.176 -- 57.388', text: '这是第四次。' },
+    { timestamp: '58.192 -- 66.892', text: '我们仔细想了想，我们还是想办一个比较大的聚会，然后呢，让我们的新朋友、老朋友一起聚一聚。' },
+    { timestamp: '67.760 -- 70.828', text: '今天的话呢，我们就在北京的。' },
+    { timestamp: '71.664 -- 74.828', text: '国家会议中心呢，举办了这么一个活动。' },
+    { timestamp: '75.472 -- 85.868', text: '现场呢，来了很多人，大概有三千五百人，还有很多很多的朋友呢，通过观看直播的方式来参与。' },
+    { timestamp: '86.352 -- 91.308', text: '再一次呢，对大家的参加表示感谢，谢谢大家。' },
+    { timestamp: '98.512 -- 99.692', text: '两个月前。' },
+    { timestamp: '100.400 -- 104.396', text: '我参加了今年武汉大学的毕业典礼。' },
+    { timestamp: '105.936 -- 107.276', text: '今年呢是。' },
+    { timestamp: '107.888 -- 110.572', text: '武汉大学建校一百三十周年。' },
+    { timestamp: '111.760 -- 117.196', text: '作为校友，被母校邀请，在毕业典礼上致辞。' },
+    { timestamp: '118.032 -- 122.732', text: '这对我来说是至高无上的荣誉。' },
+    { timestamp: '123.664 -- 128.556', text: '站在讲台的那一刻，面对全校师生。' },
+    { timestamp: '129.200 -- 134.252', text: '关于武大的所有的记忆，一下子涌现在脑海里。' },
+    { timestamp: '134.960 -- 139.436', text: '今天呢，我就先和大家聊聊五大往事。' },
+    { timestamp: '141.840 -- 143.980', text: '那还是三十六年前。' },
+    { timestamp: '145.936 -- 147.660', text: '一九八七年。' },
+    { timestamp: '148.688 -- 151.564', text: '我呢，考上了武汉大学的计算机系。' },
+    { timestamp: '152.688 -- 156.748', text: '在武汉大学的图书馆里，看了一本书。' },
+    { timestamp: '157.584 -- 161.804', text: '硅谷之火，建立了我一生的梦想。' },
+    { timestamp: '163.312 -- 164.652', text: '看完书以后。' },
+    { timestamp: '165.264 -- 166.636', text: '热血沸腾。' },
+    { timestamp: '167.600 -- 169.548', text: '激动得睡不着觉。' },
+    { timestamp: '170.416 -- 171.404', text: '我还记得。' },
+    { timestamp: '172.016 -- 174.700', text: '那天晚上，星光很亮。' },
+    { timestamp: '175.408 -- 179.820', text: '我就在武大的操场上，就是屏幕上这个操场。' },
+    { timestamp: '180.816 -- 185.228', text: '走了一圈又一圈，走了整整一个晚上。' },
+    { timestamp: '186.480 -- 187.916', text: '我心里有团火。' },
+    { timestamp: '188.912 -- 192.076', text: '我也想搬一个伟大的公司。' },
+    { timestamp: '193.968 -- 195.020', text: '就是这样。' },
+    { timestamp: '197.648 -- 202.316', text: '梦想之火，在我心里彻底点燃了。' },
+    { timestamp: '209.968 -- 212.396', text: '是一个大一的新生。' },
+    { timestamp: '220.496 -- 222.636', text: '是一个大一的新生。' },
+    { timestamp: '223.984 -- 226.892', text: '一个从县城里出来的年轻人。' },
+    { timestamp: '228.368 -- 230.604', text: '什么也不会，什么也没有。' },
+    { timestamp: '231.568 -- 236.204', text: '就想创办一家伟大的公司，这不就是天方夜谭吗？' },
+    { timestamp: '237.616 -- 239.788', text: '这么离谱的一个梦想。' },
+    { timestamp: '240.400 -- 242.316', text: '该如何实现呢？' },
+    { timestamp: '243.856 -- 246.924', text: '那天晚上，我想了一整晚上。' },
+    { timestamp: '247.952 -- 249.068', text: '说实话。' },
+    { timestamp: '250.352 -- 253.868', text: '越想越糊涂，完全理不清头绪。' },
+    {
+        timestamp: '254.960 -- 265.836',
+        text: '后来我在想：“哎，干脆别想了，把书念好是正事。”所以呢，我就下定决心，认认真真读书。',
+    },
+    { timestamp: '266.640 -- 267.468', text: '那么。' },
+    { timestamp: '268.496 -- 271.564', text: '我怎么能够把书读得不同凡响呢？' },
+] as const;
+
+const REFERENCE_TEXT = REFERENCE_SEGMENTS.map(item => item.text).join('');
+
+async function resolveDefaultTestWavUri(): Promise<string> {
+    const asset = Asset.fromModule(DEFAULT_TEST_WAV_MODULE);
+    if (!asset.localUri) {
+        await asset.downloadAsync();
+    }
+    const resolved = asset.localUri ?? asset.uri;
+    if (!resolved) {
+        throw new Error('默认 test.wav 路径不可用');
+    }
+    return resolved;
+}
 
 type CompareItem = {
     char: string;
     matched: boolean;
 };
 
-function buildLcsCompare(reference: string, recognized: string): CompareItem[] {
+type LcsCompareResult = {
+    referenceItems: CompareItem[];
+    recognizedItems: CompareItem[];
+};
+
+function isPunctuationChar(char: string): boolean {
+    return /[，。！？；：“”‘’（）【】《》〈〉、,.!?;:'"()[\]{}<>…—-]/.test(char);
+}
+
+function buildLcsCompare(reference: string, recognized: string): LcsCompareResult {
     const refChars = Array.from(reference);
     const recChars = Array.from(recognized);
     const m = refChars.length;
@@ -48,12 +115,14 @@ function buildLcsCompare(reference: string, recognized: string): CompareItem[] {
         }
     }
 
-    const matched = new Array<boolean>(m).fill(false);
+    const matchedRef = new Array<boolean>(m).fill(false);
+    const matchedRec = new Array<boolean>(n).fill(false);
     let i = m;
     let j = n;
     while (i > 0 && j > 0) {
         if (refChars[i - 1] === recChars[j - 1]) {
-            matched[i - 1] = true;
+            matchedRef[i - 1] = true;
+            matchedRec[j - 1] = true;
             i -= 1;
             j -= 1;
         } else if (dp[i - 1][j] >= dp[i][j - 1]) {
@@ -63,10 +132,36 @@ function buildLcsCompare(reference: string, recognized: string): CompareItem[] {
         }
     }
 
-    return refChars.map((char, index) => ({
-        char,
-        matched: matched[index],
-    }));
+    return {
+        referenceItems: refChars.map((char, index) => ({
+            char,
+            matched: matchedRef[index],
+        })),
+        recognizedItems: recChars.map((char, index) => ({
+            char,
+            matched: matchedRec[index],
+        })),
+    };
+}
+
+function formatRecognizedChar(item: CompareItem): string {
+    if (item.matched || isPunctuationChar(item.char)) {
+        return item.char;
+    }
+    if (item.char.trim().length === 0) {
+        return item.char;
+    }
+    return `(${item.char})`;
+}
+
+function getRecognizedCharColor(item: CompareItem): string {
+    if (item.matched) {
+        return '#16a34a';
+    }
+    if (isPunctuationChar(item.char)) {
+        return '#111827';
+    }
+    return '#dc2626';
 }
 
 function compareModelVersion(left: string, right: string): number {
@@ -90,12 +185,11 @@ function compareModelVersion(left: string, right: string): number {
 export default function Home() {
     const [conversionText, setConversionText] = useState('');
     const [conversionElapsedMs, setConversionElapsedMs] = useState<number | null>(null);
-    const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待选择文件');
+    const [fileRecognitionStatusText, setFileRecognitionStatusText] = useState('待识别（默认 test.wav）');
     const [activeProviderText, setActiveProviderText] = useState('未开始识别');
     const [activeNumThreadsText, setActiveNumThreadsText] = useState('-');
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabled] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabled] = useState(getDenoiseEnabled());
-    const [vadSegments, setVadSegments] = useState<VadSegmentItem[]>([]);
     const [qwenStatusText, setQwenStatusText] = useState('待选择新闻样本');
     const [selectedNews, setSelectedNews] = useState(() => pickRandomNewsSample());
     const [qwenSummaryText, setQwenSummaryText] = useState('');
@@ -104,9 +198,6 @@ export default function Home() {
     const [qwenRemoteModel, setQwenRemoteModel] = useState<string | null>(null);
     const [compareItems, setCompareItems] = useState<CompareItem[]>([]);
     const [compareSummary, setCompareSummary] = useState('未开始对比');
-    const [playingSegmentPath, setPlayingSegmentPath] = useState<string | null>(null);
-    const segmentPlayer = useAudioPlayer(null, { updateInterval: 200 });
-    const segmentPlayerStatus = useAudioPlayerStatus(segmentPlayer);
     const checkCurrentModelVersions = useCallback(async () => {
         const currentModelId = getCurrentModel();
         const minimumVersion = MIN_MODEL_VERSION_BY_MODEL_ID[currentModelId];
@@ -124,11 +215,6 @@ export default function Home() {
         }
     }, []);
 
-    const { pickDocument } = useFilePicker({
-        multiple: false,
-        onError: error => console.error('Error:', error),
-    });
-
     const runRecognitionPreflight = useCallback(async (kind: 'file' | 'recording'): Promise<boolean> => {
         const modelId = getCurrentModel();
         return runRecognitionPreflightTool({
@@ -137,20 +223,9 @@ export default function Home() {
         });
     }, []);
 
-    const handleConversion = async (uri?: string): Promise<boolean> => {
-        if (!uri) {
-            setFileRecognitionStatusText('未获取到文件路径');
-            return false;
-        }
-
+    const handleConversion = async (uri: string): Promise<boolean> => {
         setFileRecognitionStatusText('文件识别中...');
         setConversionElapsedMs(null);
-        try {
-            await segmentPlayer.pause();
-        } catch {
-            // no-op
-        }
-        setPlayingSegmentPath(null);
         try {
             const currentModelId = getCurrentModel();
             const totalStartedAt = Date.now();
@@ -163,9 +238,6 @@ export default function Home() {
                 },
             });
             const result = transcribe.result;
-            const rawVadSegments = result.vadSegments ?? [];
-            const normalizedSegments = rawVadSegments.filter(item => Boolean(item.path));
-            setVadSegments(normalizedSegments);
             setConversionText(result.text);
             const totalMs = Date.now() - totalStartedAt;
             setConversionElapsedMs(totalMs);
@@ -183,22 +255,24 @@ export default function Home() {
         } catch (error) {
             const message = (error as Error).message ?? 'unknown';
             setConversionElapsedMs(null);
-            setVadSegments([]);
-            setPlayingSegmentPath(null);
             setFileRecognitionStatusText(`文件识别失败: ${message}`);
             console.error('[file-recognition] failed', error);
             return false;
         }
     };
 
-    const handlePickDocument = useCallback(async () => {
+    const handleRecognizeDefaultTestFile = useCallback(async () => {
         const canContinue = await runRecognitionPreflight('file');
         if (!canContinue) {
             return;
         }
-        const selected = await pickDocument({ multiple: false });
-        await handleConversion(selected[0]?.uri);
-    }, [pickDocument, runRecognitionPreflight, handleConversion]);
+        try {
+            const uri = await resolveDefaultTestWavUri();
+            await handleConversion(uri);
+        } catch (error) {
+            setFileRecognitionStatusText(`默认 test.wav 加载失败: ${(error as Error).message}`);
+        }
+    }, [runRecognitionPreflight, handleConversion]);
 
     const handleRandomNews = useCallback(() => {
         setSelectedNews(pickRandomNewsSample());
@@ -238,46 +312,13 @@ export default function Home() {
             return;
         }
         const compared = buildLcsCompare(REFERENCE_TEXT, recognized);
-        const hitCount = compared.filter(item => item.matched).length;
-        const total = compared.length;
+        const comparedWithoutPunctuation = compared.referenceItems.filter(item => !isPunctuationChar(item.char));
+        const hitCount = comparedWithoutPunctuation.filter(item => item.matched).length;
+        const total = comparedWithoutPunctuation.length;
         const hitRate = total > 0 ? ((hitCount / total) * 100).toFixed(2) : '0.00';
-        setCompareItems(compared);
+        setCompareItems(compared.recognizedItems);
         setCompareSummary(`命中 ${hitCount}/${total}（${hitRate}%）`);
     }, [conversionText]);
-
-    const handlePlaySegment = useCallback(
-        async (segment: VadSegmentItem) => {
-            if (!segment.path) {
-                return;
-            }
-            try {
-                if (playingSegmentPath === segment.path && segmentPlayerStatus.playing) {
-                    await segmentPlayer.pause();
-                    setPlayingSegmentPath(null);
-                    return;
-                }
-                segmentPlayer.replace(segment.path);
-                segmentPlayer.play();
-                setPlayingSegmentPath(segment.path);
-            } catch (error) {
-                console.error('[test][play-segment] failed', error);
-                setPlayingSegmentPath(null);
-            }
-        },
-        [playingSegmentPath, segmentPlayer, segmentPlayerStatus.playing],
-    );
-
-    useEffect(() => {
-        if (!segmentPlayerStatus.playing && segmentPlayerStatus.didJustFinish) {
-            setPlayingSegmentPath(null);
-        }
-    }, [segmentPlayerStatus.didJustFinish, segmentPlayerStatus.playing]);
-
-    useEffect(() => {
-        return () => {
-            void segmentPlayer.pause();
-        };
-    }, [segmentPlayer]);
 
     useFocusEffect(
         useCallback(() => {
@@ -293,55 +334,33 @@ export default function Home() {
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}>
             <Stack.Screen options={{ headerShown: false }} />
             <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4 pb-6">
-                <ButtonX onPress={handlePickDocument}>选择文件</ButtonX>
+                <View className="flex-row items-center gap-2">
+                    <ButtonX onPress={handleRecognizeDefaultTestFile}>识别</ButtonX>
+                    <ButtonX variant="outline" onPress={handleCompareReferenceText}>
+                        对比
+                    </ButtonX>
+                </View>
                 <TextX>文件识别状态：{fileRecognitionStatusText}</TextX>
                 <TextX>当前 Provider：{activeProviderText}</TextX>
                 <TextX>当前线程数：{activeNumThreadsText}</TextX>
-                <TextX>离线翻译结果：{conversionText}</TextX>
-                <View className="gap-2 rounded-lg border border-[#e5e7eb] p-3">
-                    <View className="flex-row items-center gap-2">
-                        <ButtonX size="sm" onPress={handleCompareReferenceText}>
-                            对比
-                        </ButtonX>
-                        <TextX variant="description">{compareSummary}</TextX>
-                    </View>
-                    <TextX variant="description">标准文本：</TextX>
-                    <Text>{REFERENCE_TEXT}</Text>
+                <View className="gap-1">
+                    <TextX>离线翻译结果：</TextX>
                     {compareItems.length > 0 ? (
-                        <View className="gap-1">
-                            <TextX variant="description">对比结果（绿色=命中，红色=未命中）</TextX>
-                            <Text>
-                                {compareItems.map((item, index) => (
-                                    <Text key={`${item.char}-${index}`} style={{ color: item.matched ? '#16a34a' : '#dc2626' }}>
-                                        {item.char}
-                                    </Text>
-                                ))}
-                            </Text>
-                        </View>
-                    ) : null}
+                        <Text>
+                            {compareItems.map((item, index) => (
+                                <Text key={`${item.char}-${index}`} style={{ color: getRecognizedCharColor(item) }}>
+                                    {formatRecognizedChar(item)}
+                                </Text>
+                            ))}
+                        </Text>
+                    ) : (
+                        <TextX>{conversionText}</TextX>
+                    )}
+                </View>
+                <View className="gap-2 rounded-lg border border-[#e5e7eb] p-3">
+                    <TextX variant="description">{compareSummary}</TextX>
                 </View>
                 {conversionElapsedMs === null ? null : <TextX>耗时：{(conversionElapsedMs / 1000).toFixed(2)} s</TextX>}
-
-                <View className="gap-2">
-                    <TextX variant="description">
-                        VAD 分段结果：{vadSegments.length > 0 ? `共 ${vadSegments.length} 段` : '暂无（请先完成一次识别）'}
-                    </TextX>
-                    {vadSegments.map(item => (
-                        <View key={item.path} className="border-border rounded-xl border px-3 py-2">
-                            <TextX>段 {item.index}</TextX>
-                            <TextX numberOfLines={1} variant="description">
-                                {item.path}
-                            </TextX>
-                            <TextX variant="description">时长: {(item.durationMs / 1000).toFixed(2)} s</TextX>
-                            <TextX numberOfLines={2} variant="description">
-                                文本: {item.text || '(空)'}
-                            </TextX>
-                            <ButtonX size="sm" variant="outline" onPress={() => void handlePlaySegment(item)}>
-                                {playingSegmentPath === item.path && segmentPlayerStatus.playing ? '暂停' : '播放'}
-                            </ButtonX>
-                        </View>
-                    ))}
-                </View>
 
                 <View className="gap-2 rounded-xl border border-[#e5e7eb] p-3">
                     <TextX variant="title">远程 LLM 摘要（测试页）</TextX>

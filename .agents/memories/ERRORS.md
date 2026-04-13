@@ -10,3 +10,9 @@
 
 - 2026-03-27: [命令不可用] `pnpm` 在本仓库环境报 `command not found` -> 项目实际使用 `bun.lock` 与 `bun run` 工作流 -> 执行校验/脚本优先用 `bun run <script>`，避免默认使用 `pnpm`。
 - 2026-03-30: [命令不可用] `python` 在当前环境报 `command not found` -> 仅有 `python3` 或未安装 `python` 别名 -> 文件编辑优先使用 `apply_patch`，脚本型命令优先检查 `python3` 可用性后再执行。
+- 2026-04-12: [URL 命令失败] `zsh` 直接执行含 `?` 的 GitHub API URL 报 `no matches found` -> `?` 被 shell 按通配模式解析 -> URL 参数统一用单引号包裹（如 `curl '...?...'`）避免展开。
+- 2026-04-12: [Shell 兼容] 在 `zsh` 使用 `mapfile` 报 `command not found` -> `mapfile` 为 bash 内建 -> 跨 shell 脚本改用 `while read` 或显式 `bash -lc`。
+- 2026-04-12: [jq 过滤报错] 组合条件写成 `.path|startswith(...) and (.path|endswith(...))` 报 `Cannot index string with string "path"` -> `jq` 管道优先级导致右侧 `.path` 作用在错误输入上 -> 条件加括号：`select((.path|startswith(...)) and (.path|endswith(...)))`。
+- 2026-04-13: [Android 构建失败] `gradlew app:assembleDebug` 报 `:sherpa:configureCMakeDebug[arm64-v8a]` 与 `CMakeLists.txt does not exist` -> `modules/sherpa/android/build.gradle` 配置了 `externalNativeBuild.cmake.path` 但模块仅使用 `libs/sherpa-onnx.aar`、无 `src/main/cpp` -> 移除该模块的 `externalNativeBuild` 配置后构建恢复。 #promote
+
+- 2026-04-13: [Android 闪退] 调用 `getAudioFileInfo` 时崩溃 `UnsatisfiedLinkError: nativeGetAudioFileInfo` -> Kotlin 暴露了 JNI 方法但 AAR/so 中无对应导出符号 -> `getAudioFileInfo` 改为纯 Android API 实现（`MediaExtractor` + `MediaMetadataRetriever` + WAV 头解析），不再依赖该 JNI 符号。

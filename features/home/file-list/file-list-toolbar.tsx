@@ -34,7 +34,7 @@ export default function FileListToolbar({
 
     return (
         <View
-            className="flex-row items-center justify-between px-4 pb-1 pt-3"
+            className="flex-row items-center justify-between px-4 py-3"
             style={{ backgroundColor: cardColor, borderTopStartRadius: BORDER_RADIUS, borderTopEndRadius: BORDER_RADIUS }}>
             {isMultiSelectMode ? (
                 <View className="flex-grow flex-row items-center gap-x-2">

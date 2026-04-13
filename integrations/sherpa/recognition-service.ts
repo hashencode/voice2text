@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { getDenoiseEnabled, getSpeakerDiarizationEnabled, getVadEngine, type VadEngineId } from '~/data/mmkv/app-config';
+import { getDenoiseEnabled, getSpeakerDiarizationEnabled, type VadEngineId } from '~/data/mmkv/app-config';
 import SherpaOnnx, {
     type SherpaDownloadedModelTranscribeWithTiming,
     type SherpaModelId,
@@ -61,7 +61,6 @@ async function ensureInputSampleRate16k(filePath: string): Promise<{
 export type RecognitionPreference = {
     denoiseEnabled?: boolean;
     speakerDiarizationEnabled?: boolean;
-    vadEngine?: VadEngineId;
 };
 
 export type RecognitionRunContext = {
@@ -71,15 +70,19 @@ export type RecognitionRunContext = {
     overrides?: SherpaTranscribeOptions;
 };
 
+function resolveVadEngineByModel(modelId: SherpaModelId): VadEngineId {
+    return modelId === 'moonshine-zh' ? 'tenvad' : 'silerovad';
+}
+
 function resolvePreference(preference?: RecognitionPreference): Required<RecognitionPreference> {
     return {
         denoiseEnabled: preference?.denoiseEnabled ?? getDenoiseEnabled(),
         speakerDiarizationEnabled: preference?.speakerDiarizationEnabled ?? getSpeakerDiarizationEnabled(),
-        vadEngine: preference?.vadEngine ?? getVadEngine(),
     };
 }
 
 export function buildDefaultTranscribeOptions(
+    modelId: SherpaModelId,
     preference?: RecognitionPreference,
     overrides: SherpaTranscribeOptions = {},
 ): SherpaTranscribeOptions {
@@ -90,7 +93,7 @@ export function buildDefaultTranscribeOptions(
         enableSpeakerDiarization: resolved.speakerDiarizationEnabled,
         speakerSegmentationModel: DEFAULT_SPEAKER_SEGMENTATION_MODEL,
         speakerEmbeddingModel: DEFAULT_SPEAKER_EMBEDDING_MODEL,
-        vadEngine: resolved.vadEngine,
+        vadEngine: resolveVadEngineByModel(modelId),
         wavReadMode: 'streaming',
         ...overrides,
     };
@@ -100,7 +103,7 @@ export async function transcribeFileWithTiming(context: RecognitionRunContext): 
     transcribe: SherpaDownloadedModelTranscribeWithTiming;
     options: SherpaTranscribeOptions;
 }> {
-    const options = buildDefaultTranscribeOptions(context.preference, context.overrides);
+    const options = buildDefaultTranscribeOptions(context.modelId, context.preference, context.overrides);
     const prepared = await ensureInputSampleRate16k(context.filePath);
     try {
         if (prepared.transcoded) {

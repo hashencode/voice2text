@@ -37,6 +37,7 @@ export default function FolderListView({
 }: FolderListViewProps) {
     return (
         <>
+            {folders.length > 0 ? <Separator /> : null}
             {folders.map((folder, index) => {
                 const isAllFolder = folder.name === allFoldersKey;
                 const displayName = isAllFolder ? '全部文件' : folder.name;
@@ -81,7 +82,7 @@ export default function FolderListView({
                                 ) : undefined
                             }
                         />
-                        {index < folders.length - 1 ? <Separator /> : null}
+                        <Separator />
                     </React.Fragment>
                 );
             })}

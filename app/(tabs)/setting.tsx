@@ -10,16 +10,9 @@ import { TextX } from '~/components/ui/textx';
 import { View } from '~/components/ui/view';
 import {
     getDenoiseEnabled,
-    getFinalTranscribeUseSpeakerDiarization,
-    getFinalTranscribeUseVad,
     getSpeakerDiarizationEnabled,
-    getVadEngine,
     setDenoiseEnabled,
-    setFinalTranscribeUseSpeakerDiarization,
-    setFinalTranscribeUseVad,
     setSpeakerDiarizationEnabled,
-    setVadEngine,
-    type VadEngineId,
 } from '~/data/mmkv/app-config';
 import { getCurrentModel, setCurrentModel } from '~/data/mmkv/model-selection';
 import {
@@ -78,11 +71,6 @@ export default function Setting() {
     const [refreshing, setRefreshing] = useState(false);
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabledState] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabledState] = useState(getDenoiseEnabled());
-    const [vadEngine, setVadEngineState] = useState<VadEngineId>(getVadEngine());
-    const [finalTranscribeUseVad, setFinalTranscribeUseVadState] = useState(getFinalTranscribeUseVad());
-    const [finalTranscribeUseSpeakerDiarization, setFinalTranscribeUseSpeakerDiarizationState] = useState(
-        getFinalTranscribeUseSpeakerDiarization(),
-    );
     const [currentModelId, setCurrentModelId] = useState<SherpaModelId>(getCurrentModel());
     const [modelItems, setModelItems] = useState<Record<SherpaModelId, ModelItemState>>({
         'moonshine-zh': createDefaultModelItemState(),
@@ -112,9 +100,6 @@ export default function Setting() {
             const nextModelId = getCurrentModel();
             setCurrentModelId(nextModelId);
             await Promise.all(MODEL_IDS.map(modelId => refreshModel(modelId)));
-            setVadEngineState(getVadEngine());
-            setFinalTranscribeUseVadState(getFinalTranscribeUseVad());
-            setFinalTranscribeUseSpeakerDiarizationState(getFinalTranscribeUseSpeakerDiarization());
         } finally {
             setRefreshing(false);
         }
@@ -134,25 +119,6 @@ export default function Setting() {
     const handleToggleDenoise = useCallback((value: boolean) => {
         setDenoiseEnabled(value);
         setDenoiseEnabledState(value);
-    }, []);
-
-    const handleVadEngineChange = useCallback((value: string) => {
-        if (value !== 'tenvad' && value !== 'silerovad') {
-            return;
-        }
-        const engine = value as VadEngineId;
-        setVadEngine(engine);
-        setVadEngineState(engine);
-    }, []);
-
-    const handleToggleFinalTranscribeUseVad = useCallback((value: boolean) => {
-        setFinalTranscribeUseVad(value);
-        setFinalTranscribeUseVadState(value);
-    }, []);
-
-    const handleToggleFinalTranscribeUseSpeakerDiarization = useCallback((value: boolean) => {
-        setFinalTranscribeUseSpeakerDiarization(value);
-        setFinalTranscribeUseSpeakerDiarizationState(value);
     }, []);
 
     const handleModelChange = useCallback((value: string) => {
@@ -278,30 +244,6 @@ export default function Setting() {
                     <View className="flex flex-row items-center justify-between">
                         <TextX>降噪开关：{denoiseEnabled ? '开启' : '关闭'}</TextX>
                         <SwitchX value={denoiseEnabled} onValueChange={handleToggleDenoise} />
-                    </View>
-                    <View className="gap-2">
-                        <TextX>VAD 引擎</TextX>
-                        <Tabs value={vadEngine} onValueChange={handleVadEngineChange}>
-                            <TabsList>
-                                <TabsTrigger value="tenvad" className="w-auto">
-                                    tenvad
-                                </TabsTrigger>
-                                <TabsTrigger value="silerovad" className="w-auto">
-                                    silerovad
-                                </TabsTrigger>
-                            </TabsList>
-                        </Tabs>
-                    </View>
-                    <View className="flex flex-row items-center justify-between">
-                        <TextX>最终转写启用 VAD：{finalTranscribeUseVad ? '开启' : '关闭'}</TextX>
-                        <SwitchX value={finalTranscribeUseVad} onValueChange={handleToggleFinalTranscribeUseVad} />
-                    </View>
-                    <View className="flex flex-row items-center justify-between">
-                        <TextX>最终转写启用说话人分离：{finalTranscribeUseSpeakerDiarization ? '开启' : '关闭'}</TextX>
-                        <SwitchX
-                            value={finalTranscribeUseSpeakerDiarization}
-                            onValueChange={handleToggleFinalTranscribeUseSpeakerDiarization}
-                        />
                     </View>
                 </View>
 

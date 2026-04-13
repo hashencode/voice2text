@@ -33,6 +33,7 @@ export default function FileListView({
 }: RecordingListViewProps) {
     return (
         <>
+            {items.length > 0 ? <Separator /> : null}
             {items.map((item, index) => (
                 <React.Fragment key={item.path}>
                     <FileListItem
@@ -57,7 +58,7 @@ export default function FileListView({
                             ) : undefined
                         }
                     />
-                    {index < items.length - 1 ? <Separator /> : null}
+                    <Separator />
                 </React.Fragment>
             ))}
         </>

@@ -7,6 +7,9 @@ import android.content.res.AssetManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
 import android.media.MediaRecorder
 import android.os.Build
 import com.k2fsa.sherpa.onnx.FeatureConfig
@@ -167,6 +170,12 @@ class SherpaOnnxModule : Module() {
     val durationMs: Long,
   )
 
+  private data class AudioFileInfo(
+    val sampleRate: Int,
+    val channels: Int,
+    val durationMs: Long,
+  )
+
   private data class RecoverableWavSession(
     val sessionDir: File,
     val metaFile: File,
@@ -208,7 +217,6 @@ class SherpaOnnxModule : Module() {
     val decodingMethod: String,
     val maxActivePaths: Int,
     val blankPenalty: Float,
-    val vadModel: String?,
     val vadEngine: String?,
     val enableVad: Boolean,
     val enableSpeakerDiarization: Boolean,
@@ -786,24 +794,12 @@ class SherpaOnnxModule : Module() {
       executor.execute {
         try {
           val input = inputPath.removePrefix("file://")
-          val result = nativeGetAudioFileInfo(input)
-          if (result.isEmpty()) {
-            promise.reject("ERR_AUDIO_INFO", "Unexpected audio info result", null)
-            return@execute
-          }
-          if (result.size == 1 && result[0] is String) {
-            promise.reject("ERR_AUDIO_INFO", result[0] as String, null)
-            return@execute
-          }
-          if (result.size != 3 || result[0] !is Number || result[1] !is Number || result[2] !is Number) {
-            promise.reject("ERR_AUDIO_INFO", "Unexpected audio info payload", null)
-            return@execute
-          }
+          val info = getAudioFileInfoByAndroidApi(input)
           promise.resolve(
             mapOf(
-              "sampleRate" to (result[0] as Number).toInt(),
-              "channels" to (result[1] as Number).toInt(),
-              "durationMs" to (result[2] as Number).toLong().toDouble(),
+              "sampleRate" to info.sampleRate,
+              "channels" to info.channels,
+              "durationMs" to info.durationMs.toDouble(),
             ),
           )
         } catch (e: Exception) {
@@ -1084,13 +1080,12 @@ class SherpaOnnxModule : Module() {
   private fun createRealtimeVad(options: Map<String, Any?>?, sampleRate: Int): Vad? {
     return try {
       val modelContext = resolveModelContext(options)
-      val vadModel = options?.getString("vadModel")
       val vadEngine = options?.getString("vadEngine")?.lowercase()
-      val vadModelPath = resolveVadModelPath(modelContext, vadModel)
-      val resolvedVadEngine = resolveVadEngineName(vadEngine, vadModelPath)
+      val resolvedVadEngine = resolveVadEngineName(vadEngine)
       if (resolvedVadEngine.isBlank()) {
         return null
       }
+      val vadModelPath = resolveVadModelPath(modelContext, resolvedVadEngine)
       val numThreads = resolveNumThreadsWithThermalCap(options?.getInt("numThreads"))
       val provider = options?.getString("provider") ?: "cpu"
       val debug = options?.getBoolean("debug") ?: false
@@ -1320,6 +1315,80 @@ class SherpaOnnxModule : Module() {
     val numSamples = maxOf(dataSize / bytesPerSample, 0L)
     val durationMs = ((numSamples.toDouble() / safeSampleRate.toDouble()) * 1000.0).toLong()
     return WavInfo(sampleRate = safeSampleRate, numSamples = numSamples, durationMs = durationMs)
+  }
+
+  private fun getAudioFileInfoByAndroidApi(inputPath: String): AudioFileInfo {
+    val file = File(inputPath)
+    if (!file.exists() || !file.isFile) {
+      throw IllegalArgumentException("Audio file does not exist: $inputPath")
+    }
+
+    if (inputPath.lowercase().endsWith(".wav")) {
+      val wavInfo = readWavInfo(file)
+      return AudioFileInfo(
+        sampleRate = wavInfo.sampleRate,
+        channels = 1,
+        durationMs = wavInfo.durationMs,
+      )
+    }
+
+    var sampleRate = 0
+    var channels = 0
+    var durationMs = 0L
+    var foundAudioTrack = false
+
+    val extractor = MediaExtractor()
+    try {
+      extractor.setDataSource(inputPath)
+      for (trackIndex in 0 until extractor.trackCount) {
+        val format = extractor.getTrackFormat(trackIndex)
+        val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+        if (!mime.startsWith("audio/")) {
+          continue
+        }
+        foundAudioTrack = true
+        if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+          sampleRate = maxOf(sampleRate, format.getInteger(MediaFormat.KEY_SAMPLE_RATE))
+        }
+        if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+          channels = maxOf(channels, format.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+        }
+        if (format.containsKey(MediaFormat.KEY_DURATION)) {
+          val trackDurationUs = format.getLong(MediaFormat.KEY_DURATION)
+          durationMs = maxOf(durationMs, trackDurationUs / 1000L)
+        }
+      }
+    } finally {
+      extractor.release()
+    }
+
+    if (!foundAudioTrack) {
+      throw IllegalArgumentException("No audio track found: $inputPath")
+    }
+
+    if (durationMs <= 0L) {
+      val retriever = MediaMetadataRetriever()
+      try {
+        retriever.setDataSource(inputPath)
+        val durationText = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+        durationMs = durationText?.toLongOrNull() ?: 0L
+      } finally {
+        retriever.release()
+      }
+    }
+
+    if (sampleRate <= 0) {
+      sampleRate = DEFAULT_SAMPLE_RATE
+    }
+    if (channels <= 0) {
+      channels = 1
+    }
+
+    return AudioFileInfo(
+      sampleRate = sampleRate,
+      channels = channels,
+      durationMs = maxOf(durationMs, 0L),
+    )
   }
 
   private fun intToLittleEndianBytes(value: Int): ByteArray {
@@ -1971,13 +2040,16 @@ class SherpaOnnxModule : Module() {
     throw IllegalArgumentException("No readable model path for $label: ${issues.joinToString("; ")}")
   }
 
-  private fun resolveVadModelPath(modelContext: ModelContext, vadModel: String?): String {
-    if (!vadModel.isNullOrBlank()) {
-      return modelContext.resolveModelPath(vadModel)
-    }
+  private fun resolveVadModelPath(modelContext: ModelContext, resolvedVadEngine: String): String {
+    val vadAssetPath =
+      when (resolvedVadEngine) {
+        "tenvad" -> TEN_VAD_MODEL_ASSET
+        "silerovad" -> SILERO_VAD_MODEL_ASSET
+        else -> throw IllegalArgumentException("Unsupported vadEngine: $resolvedVadEngine")
+      }
 
     if (!modelContext.useFileModelDir) {
-      return modelContext.resolveModelPath(DEFAULT_VAD_MODEL_ASSET)
+      return modelContext.resolveModelPath(vadAssetPath)
     }
 
     val context = appContext.reactContext ?: throw IllegalStateException("React context is not available")
@@ -1989,7 +2061,7 @@ class SherpaOnnxModule : Module() {
       throw IllegalStateException("Unable to create runtime VAD directory: ${defaultVadDir.absolutePath}")
     }
 
-    val fileName = DEFAULT_VAD_MODEL_ASSET.substringAfterLast("/")
+    val fileName = vadAssetPath.substringAfterLast("/")
     val destFile = File(defaultVadDir, fileName)
     if (destFile.exists() && destFile.isFile && destFile.length() > 0L) {
       return destFile.absolutePath
@@ -1998,7 +2070,7 @@ class SherpaOnnxModule : Module() {
     val assetManager = context.assets
     var copied = false
     var lastError: Exception? = null
-    for (candidate in buildAssetCandidates(DEFAULT_VAD_MODEL_ASSET)) {
+    for (candidate in buildAssetCandidates(vadAssetPath)) {
       try {
         assetManager.open(candidate).use { input ->
           FileOutputStream(destFile).use { output ->
@@ -2019,7 +2091,7 @@ class SherpaOnnxModule : Module() {
     }
 
     if (!copied) {
-      throw IllegalArgumentException("Default VAD asset not found: $DEFAULT_VAD_MODEL_ASSET", lastError)
+      throw IllegalArgumentException("Default VAD asset not found: $vadAssetPath", lastError)
     }
     if (!destFile.exists() || !destFile.isFile || destFile.length() <= 0L) {
       throw IllegalStateException("Copied default VAD file is invalid: ${destFile.absolutePath}")
@@ -2053,7 +2125,6 @@ class SherpaOnnxModule : Module() {
     val decodingMethod = options?.getString("decodingMethod") ?: "greedy_search"
     val maxActivePaths = options?.getInt("maxActivePaths") ?: 4
     val blankPenalty = options?.getFloat("blankPenalty") ?: 0f
-    val vadModel = options?.getString("vadModel")
     val vadEngine = options?.getString("vadEngine")?.lowercase()
     val enableVad = true
     val enableSpeakerDiarization = options?.getBoolean("enableSpeakerDiarization") ?: false
@@ -2172,7 +2243,6 @@ class SherpaOnnxModule : Module() {
       decodingMethod = decodingMethod,
       maxActivePaths = maxActivePaths,
       blankPenalty = blankPenalty,
-      vadModel = vadModel,
       vadEngine = vadEngine,
       enableVad = enableVad,
       enableSpeakerDiarization = enableSpeakerDiarization,
@@ -2203,12 +2273,12 @@ class SherpaOnnxModule : Module() {
       }
       if (setup.enableVad) {
         try {
-          val vadModelPath = resolveVadModelPath(setup.modelContext, setup.vadModel)
-          val resolvedVadEngine = resolveVadEngineName(setup.vadEngine, vadModelPath)
+          val resolvedVadEngine = resolveVadEngineName(setup.vadEngine)
           if (resolvedVadEngine.isBlank()) {
-            println("[sherpa] Unsupported offline VAD model file: $vadModelPath. Fallback without VAD.")
+            println("[sherpa] Unsupported offline VAD engine: ${setup.vadEngine}. Fallback without VAD.")
             vad = null
           } else {
+            val vadModelPath = resolveVadModelPath(setup.modelContext, resolvedVadEngine)
             val vadModelConfig =
               buildVadModelConfig(options, resolvedVadEngine, vadModelPath, setup.sampleRate, setup.numThreads, setup.provider, setup.debug)
             vad = Vad(setup.modelContext.assetManager, vadModelConfig)
@@ -2377,12 +2447,12 @@ class SherpaOnnxModule : Module() {
       }
       if (setup.enableVad) {
         try {
-          val vadModelPath = resolveVadModelPath(setup.modelContext, setup.vadModel)
-          val resolvedVadEngine = resolveVadEngineName(setup.vadEngine, vadModelPath)
+          val resolvedVadEngine = resolveVadEngineName(setup.vadEngine)
           if (resolvedVadEngine.isBlank()) {
-            println("[sherpa] Unsupported offline VAD model file: $vadModelPath. Skip VAD in streaming mode.")
+            println("[sherpa] Unsupported offline VAD engine: ${setup.vadEngine}. Skip VAD in streaming mode.")
             vad = null
           } else {
+            val vadModelPath = resolveVadModelPath(setup.modelContext, resolvedVadEngine)
             val vadModelConfig =
               buildVadModelConfig(options, resolvedVadEngine, vadModelPath, setup.sampleRate, setup.numThreads, setup.provider, setup.debug)
             vad = Vad(setup.modelContext.assetManager, vadModelConfig)
@@ -2955,12 +3025,9 @@ class SherpaOnnxModule : Module() {
     return FIXED_NUM_THREADS
   }
 
-  private fun resolveVadEngineName(vadEngine: String?, vadModelPath: String): String {
-    val normalizedVadPath = vadModelPath.lowercase()
+  private fun resolveVadEngineName(vadEngine: String?): String {
     return when {
       vadEngine == "tenvad" || vadEngine == "silerovad" -> vadEngine
-      normalizedVadPath.contains("ten-vad") -> "tenvad"
-      normalizedVadPath.contains("silero") -> "silerovad"
       else -> ""
     }
   }
@@ -3166,7 +3233,8 @@ class SherpaOnnxModule : Module() {
     private const val STREAMING_SPEECH_START_OFFSET_SAMPLES = 6400
     private const val REALTIME_ASR_UPDATE_EVENT = "onRealtimeAsrUpdate"
     private const val WAV_HEADER_SIZE = 44
-    private const val DEFAULT_VAD_MODEL_ASSET = "sherpa/onnx/ten-vad.onnx"
+    private const val TEN_VAD_MODEL_ASSET = "sherpa/onnx/ten-vad.onnx"
+    private const val SILERO_VAD_MODEL_ASSET = "sherpa/onnx/silero-vad.onnx"
     private const val DEFAULT_RUNTIME_VAD_SUBDIR = "sherpa/vad"
     private const val DEFAULT_OFFLINE_VAD_SEGMENTS_SUBDIR = "sherpa/offline-vad-segments"
     private const val FIXED_NUM_THREADS = 2
@@ -3206,8 +3274,5 @@ class SherpaOnnxModule : Module() {
 
     @JvmStatic
     private external fun nativeDecodeAudioFileToFloatSamples(inputPath: String, targetSampleRateHz: Int): Array<Any>
-
-    @JvmStatic
-    private external fun nativeGetAudioFileInfo(inputPath: String): Array<Any>
   }
 }

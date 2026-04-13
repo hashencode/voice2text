@@ -32,7 +32,7 @@ export default function FolderListToolbar({
 
     return (
         <View
-            className="flex-row items-center justify-between px-4 pb-1 pt-3"
+            className="flex-row items-center justify-between px-4 py-3"
             style={{ backgroundColor: cardColor, borderTopStartRadius: BORDER_RADIUS, borderTopEndRadius: BORDER_RADIUS }}>
             <View className="flex-grow flex-row items-center gap-x-2">
                 <TextX variant="title" numberOfLines={1} ellipsizeMode="tail">
