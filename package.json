@@ -3,14 +3,14 @@
     "version": "1.0.0",
     "main": "expo-router/entry",
     "scripts": {
-        "android": "expo run:android",
+        "android": "expo run:android --port 8083",
         "ios": "expo run:ios",
-        "start": "expo start",
+        "start": "expo start --port 8083",
         "prebuild": "expo prebuild",
         "memory:review": "node scripts/memory-review.mjs",
         "lint": "eslint \"**/*.{js,jsx,ts,tsx}\" && prettier -c \"**/*.{js,jsx,ts,tsx,json}\"",
         "format": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix && prettier \"**/*.{js,jsx,ts,tsx,json}\" --write",
-        "web": "expo start --web"
+        "web": "expo start --web --port 8083"
     },
     "dependencies": {
         "@expo/vector-icons": "^15.0.2",
@@ -46,7 +46,7 @@
         "iconoir-react-native": "^7.11.0",
         "lodash": "^4.17.23",
         "lucide-react-native": "^0.562.0",
-        "nativewind": "latest",
+        "nativewind": "^4.2.1",
         "react": "19.2.0",
         "react-dom": "19.2.0",
         "react-i18next": "^14.0.1",

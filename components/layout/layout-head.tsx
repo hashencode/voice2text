@@ -6,12 +6,12 @@ import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
 
-export interface IHeadProps {
+export interface HeadProps {
     title?: ReactNode; // 标题
     onBack?: () => void; // 返回按钮点击事件回调
 }
 
-export default function LayoutHead(props: IHeadProps) {
+export default function LayoutHead(props: HeadProps) {
     const { title, onBack } = props;
 
     const navigation = useNavigation();
@@ -23,7 +23,9 @@ export default function LayoutHead(props: IHeadProps) {
             if (onBack) {
                 onBack();
             } else {
-                navigation.goBack();
+                if (navigation.canGoBack()) {
+                    navigation.goBack();
+                }
             }
         },
         { trailing: false, wait: 500 },

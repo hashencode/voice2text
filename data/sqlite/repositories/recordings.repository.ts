@@ -7,7 +7,7 @@ function toMeta(row: RecordingMetaRow): RecordingMeta {
         displayName: row.display_name,
         isFavorite: row.is_favorite === 1,
         sourceFileName: row.source_file_name,
-        sha256: row.sha256,
+        fileSizeBytes: row.file_size_bytes,
         noteRichText: row.note_rich_text,
         transcriptText: row.transcript_text,
         summaryText: row.summary_text,
@@ -23,9 +23,29 @@ function toMeta(row: RecordingMetaRow): RecordingMeta {
 export async function listRecordingMeta(): Promise<RecordingMeta[]> {
     const db = await getSqliteDb();
     const rows = await db.getAllAsync<RecordingMetaRow>(
-        'SELECT path, display_name, is_favorite, source_file_name, sha256, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason FROM recordings ORDER BY recorded_at_ms DESC, path DESC',
+        'SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason FROM recordings ORDER BY recorded_at_ms DESC, path DESC',
     );
     return rows.map(toMeta);
+}
+
+export type RecordingMetaOverview = Pick<RecordingMeta, 'path' | 'displayName' | 'isFavorite' | 'durationMs' | 'recordedAtMs'>;
+
+export async function listRecordingMetaOverview(): Promise<RecordingMetaOverview[]> {
+    const db = await getSqliteDb();
+    const rows = await db.getAllAsync<{
+        path: string;
+        display_name: string | null;
+        is_favorite: number;
+        duration_ms: number | null;
+        recorded_at_ms: number | null;
+    }>('SELECT path, display_name, is_favorite, duration_ms, recorded_at_ms FROM recordings ORDER BY recorded_at_ms DESC, path DESC');
+    return rows.map(row => ({
+        path: row.path,
+        displayName: row.display_name,
+        isFavorite: row.is_favorite === 1,
+        durationMs: row.duration_ms,
+        recordedAtMs: row.recorded_at_ms,
+    }));
 }
 
 export async function upsertRecordingMeta(meta: RecordingMeta): Promise<void> {
@@ -33,13 +53,13 @@ export async function upsertRecordingMeta(meta: RecordingMeta): Promise<void> {
     const now = Date.now();
     await db.runAsync(
         `INSERT INTO recordings (
-            path, display_name, is_favorite, source_file_name, sha256, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason, created_at_ms, updated_at_ms
+            path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason, created_at_ms, updated_at_ms
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(path) DO UPDATE SET
             display_name=COALESCE(excluded.display_name, recordings.display_name),
             is_favorite=COALESCE(excluded.is_favorite, recordings.is_favorite),
             source_file_name=COALESCE(excluded.source_file_name, recordings.source_file_name),
-            sha256=COALESCE(excluded.sha256, recordings.sha256),
+            file_size_bytes=COALESCE(excluded.file_size_bytes, recordings.file_size_bytes),
             note_rich_text=COALESCE(excluded.note_rich_text, recordings.note_rich_text),
             transcript_text=COALESCE(excluded.transcript_text, recordings.transcript_text),
             summary_text=COALESCE(excluded.summary_text, recordings.summary_text),
@@ -54,7 +74,7 @@ export async function upsertRecordingMeta(meta: RecordingMeta): Promise<void> {
         meta.displayName ?? null,
         meta.isFavorite ? 1 : 0,
         meta.sourceFileName ?? null,
-        meta.sha256 ?? null,
+        meta.fileSizeBytes ?? null,
         meta.noteRichText ?? null,
         meta.transcriptText ?? null,
         meta.summaryText ?? null,
@@ -84,21 +104,36 @@ export async function deleteRecordingMeta(path: string): Promise<void> {
     await db.runAsync('DELETE FROM recordings WHERE path = ?', path);
 }
 
-export async function findRecordingMetaBySourceFileNameAndSha256(sourceFileName: string, sha256: string): Promise<RecordingMeta | null> {
-    const normalizedSourceName = sourceFileName.trim().toLowerCase();
-    const normalizedSha256 = sha256.trim().toLowerCase();
-    if (!normalizedSourceName || !normalizedSha256) {
+export async function findRecordingMetaByPath(path: string): Promise<RecordingMeta | null> {
+    const normalizedPath = path.trim();
+    if (!normalizedPath) {
         return null;
     }
     const db = await getSqliteDb();
     const row = await db.getFirstAsync<RecordingMetaRow>(
-        `SELECT path, display_name, is_favorite, source_file_name, sha256, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason
+        `SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason
          FROM recordings
-         WHERE lower(trim(source_file_name)) = ? AND lower(trim(sha256)) = ?
+         WHERE path = ?
+         LIMIT 1`,
+        normalizedPath,
+    );
+    return row ? toMeta(row) : null;
+}
+
+export async function findRecordingMetaBySourceFileNameAndFileSize(sourceFileName: string, fileSizeBytes: number): Promise<RecordingMeta | null> {
+    const normalizedSourceName = sourceFileName.trim().toLowerCase();
+    if (!normalizedSourceName || !Number.isFinite(fileSizeBytes) || fileSizeBytes <= 0) {
+        return null;
+    }
+    const db = await getSqliteDb();
+    const row = await db.getFirstAsync<RecordingMetaRow>(
+        `SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason
+         FROM recordings
+         WHERE lower(trim(source_file_name)) = ? AND file_size_bytes = ?
          ORDER BY updated_at_ms DESC, recorded_at_ms DESC
          LIMIT 1`,
         normalizedSourceName,
-        normalizedSha256,
+        Math.floor(fileSizeBytes),
     );
     return row ? toMeta(row) : null;
 }

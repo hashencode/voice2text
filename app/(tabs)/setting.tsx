@@ -24,6 +24,7 @@ import {
     type SherpaModelId,
 } from '~/modules/sherpa';
 import { MIN_MODEL_VERSION_BY_MODEL_ID } from '~/scripts/const';
+import { useColor } from '~/hooks/useColor';
 
 type ModelItemState = {
     installed: boolean;
@@ -67,11 +68,12 @@ function phaseToText(progress: DownloadModelProgress): string {
     return '模型就绪';
 }
 
-export default function Setting() {
+export default function SettingPage() {
     const [refreshing, setRefreshing] = useState(false);
     const [speakerDiarizationEnabled, setSpeakerDiarizationEnabledState] = useState(getSpeakerDiarizationEnabled());
     const [denoiseEnabled, setDenoiseEnabledState] = useState(getDenoiseEnabled());
     const [currentModelId, setCurrentModelId] = useState<SherpaModelId>(getCurrentModel());
+    const borderColor = useColor('border');
     const [modelItems, setModelItems] = useState<Record<SherpaModelId, ModelItemState>>({
         'moonshine-zh': createDefaultModelItemState(),
         'paraformer-zh': createDefaultModelItemState(),
@@ -222,7 +224,7 @@ export default function Setting() {
         <DefaultLayout>
             <Stack.Screen options={{ headerShown: false }} />
             <View className="p-4">
-                <View className="mb-3 gap-2.5 rounded-lg border border-[#e5e7eb] p-3">
+                <View className="mb-3 gap-2.5 rounded-lg border p-3" style={{ borderColor }}>
                     <TextX variant="subtitle">识别配置</TextX>
                     <View className="gap-2">
                         <TextX>当前识别模型</TextX>
@@ -237,11 +239,11 @@ export default function Setting() {
                             </TabsList>
                         </Tabs>
                     </View>
-                    <View className="flex flex-row items-center justify-between">
+                    <View className="flex-row items-center justify-between">
                         <TextX>说话人分离开关：{speakerDiarizationEnabled ? '开启' : '关闭'}</TextX>
                         <SwitchX value={speakerDiarizationEnabled} onValueChange={handleToggleSpeakerDiarization} />
                     </View>
-                    <View className="flex flex-row items-center justify-between">
+                    <View className="flex-row items-center justify-between">
                         <TextX>降噪开关：{denoiseEnabled ? '开启' : '关闭'}</TextX>
                         <SwitchX value={denoiseEnabled} onValueChange={handleToggleDenoise} />
                     </View>
@@ -249,14 +251,14 @@ export default function Setting() {
 
                 <ScrollView
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
-                    contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
-                    <View className="gap-1.5 rounded-lg border border-[#e5e7eb] p-3">
-                        <View className="flex flex-row items-center justify-between gap-x-2">
+                    contentContainerClassName="gap-3 pb-6">
+                    <View className="gap-1.5 rounded-lg border p-3" style={{ borderColor }}>
+                        <View className="flex-row items-center justify-between gap-x-2">
                             <TextX variant="title">{currentModelId}</TextX>
                             <TextX variant="description">{modelItem.statusText || '-'}</TextX>
                         </View>
 
-                        <View className="flex flex-row items-center gap-x-2">
+                        <View className="flex-row items-center gap-x-2">
                             <ButtonX onPress={handleInstallCurrentModel} loading={modelItem.busy}>
                                 {modelItem.installed ? '重新安装' : '安装'}
                             </ButtonX>

@@ -1,5 +1,4 @@
 import { TextX } from '@/components/ui/textx';
-import { GradientBackground } from '~/components/ui/gradient-background';
 import type { LucideProps } from 'lucide-react-native';
 import { CircleCheck, CircleX, Info, TriangleAlert } from 'lucide-react-native';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -8,6 +7,7 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
+import { GradientBackground } from '~/components/ui/gradient-background';
 import { Colors } from '~/theme/colors';
 import { FONT_SIZE, FONT_SIZE_LG, FONT_SIZE_SM, LINE_HEIGHT_SIZE_LG, LINE_HEIGHT_SIZE_SM } from '~/theme/globals';
 

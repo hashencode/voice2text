@@ -3,7 +3,7 @@ export type RecordingMeta = {
     displayName?: string | null;
     isFavorite?: boolean;
     sourceFileName?: string | null;
-    sha256?: string | null;
+    fileSizeBytes?: number | null;
     noteRichText?: string | null;
     transcriptText?: string | null;
     summaryText?: string | null;
@@ -20,7 +20,7 @@ export type RecordingMetaRow = {
     display_name: string | null;
     is_favorite: number;
     source_file_name: string | null;
-    sha256: string | null;
+    file_size_bytes: number | null;
     note_rich_text: string | null;
     transcript_text: string | null;
     summary_text: string | null;

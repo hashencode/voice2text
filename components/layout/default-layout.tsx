@@ -9,7 +9,7 @@ import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
 
-interface IDefaultLayoutProps extends PropsWithChildren {
+interface DefaultLayoutProps extends PropsWithChildren {
     safeAreaViewConfig?: SafeAreaViewProps;
     scrollable?: boolean;
     headTitle?: ReactNode;
@@ -22,14 +22,16 @@ interface IDefaultLayoutProps extends PropsWithChildren {
     };
 }
 
-export const DefaultLayout = (props: IDefaultLayoutProps) => {
+export const DefaultLayout = (props: DefaultLayoutProps) => {
     const { headTitle, headExtra, safeAreaViewConfig, scrollable = true, styles = {} } = props;
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
 
     const { run: handleGoBack } = useThrottleFn(
         () => {
-            navigation.goBack();
+            if (navigation.canGoBack()) {
+                navigation.goBack();
+            }
         },
         { trailing: false, wait: 500 },
     );
@@ -40,7 +42,7 @@ export const DefaultLayout = (props: IDefaultLayoutProps) => {
             <View className="absolute left-0 top-0 w-full" style={[{ height: insets.top }, styles.safeTop]} />
 
             {headTitle || headExtra ? (
-                <View className="flex flex-row justify-between px-4 py-2">
+                <View className="flex-row justify-between px-4 py-2">
                     {isString(headTitle) ? (
                         <ButtonX
                             className="flex-shrink-0"
@@ -59,7 +61,7 @@ export const DefaultLayout = (props: IDefaultLayoutProps) => {
             {/*主体内容*/}
             <View className="flex-1" style={styles.mainContent}>
                 {scrollable ? (
-                    <ScrollView overScrollMode="never" contentContainerStyle={{ flexGrow: 1 }}>
+                    <ScrollView overScrollMode="never" contentContainerClassName="grow">
                         {props.children}
                     </ScrollView>
                 ) : (

@@ -14,7 +14,7 @@ export default function RootLayout() {
     useRecordingRecovery();
 
     return (
-        <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureHandlerRootView className="flex-1">
             <KeyboardProvider>
                 <ToastProvider maxToasts={3}>
                     <ThemeProvider>

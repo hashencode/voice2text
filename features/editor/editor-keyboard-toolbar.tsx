@@ -20,7 +20,6 @@ import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-cont
 
 type ToolbarStateKey = keyof OnChangeStateEvent;
 const TOOLBAR_ICON_SIZE = 20;
-const TOOLBAR_HEIGHT = 50;
 
 type Props = {
     visible: boolean;
@@ -175,17 +174,23 @@ export default function EditorKeyboardToolbar({
     return (
         <KeyboardStickyView
             pointerEvents="box-none"
-            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 40, elevation: 40 }}>
-            <View pointerEvents="auto" style={{ backgroundColor: mutedColor, height: TOOLBAR_HEIGHT }} className="justify-center px-3">
+            className="absolute bottom-0 left-0 right-0 z-40"
+            style={{ elevation: 40 }}>
+            <View pointerEvents="auto" style={{ backgroundColor: mutedColor }} className="h-[50px] justify-center px-3">
                 <View className="flex-row items-center">
                     <ScrollView
                         horizontal
-                        style={{ flex: 1, height: '100%' }}
+                        className="h-full flex-1"
                         showsHorizontalScrollIndicator={false}
                         nestedScrollEnabled
                         directionalLockEnabled
                         keyboardShouldPersistTaps="always"
                         contentContainerStyle={{ gap: 16, alignItems: 'center', paddingRight: 12 }}>
+                        <Pressable onPress={dismissKeyboardAndBlur} hitSlop={8}>
+                            <View className="h-[34px] w-[34px] items-center justify-center rounded-lg">
+                                <CircleChevronDown size={TOOLBAR_ICON_SIZE} color={textColor} />
+                            </View>
+                        </Pressable>
                         {toolbarItems.map(item => {
                             const IconComp = item.icon;
                             return (
@@ -200,8 +205,7 @@ export default function EditorKeyboardToolbar({
                                     }}
                                     hitSlop={8}>
                                     <View
-                                        className="h-[34px] w-[34px] items-center justify-center rounded-lg"
-                                        style={{ opacity: item.blocked ? 0.35 : 1 }}>
+                                        className={`h-[34px] w-[34px] items-center justify-center rounded-lg ${item.blocked ? 'opacity-[0.35]' : ''}`}>
                                         <IconComp
                                             size={TOOLBAR_ICON_SIZE}
                                             color={item.blocked ? mutedTextColor : item.active ? primaryColor : textColor}
@@ -211,11 +215,6 @@ export default function EditorKeyboardToolbar({
                             );
                         })}
                     </ScrollView>
-                    <Pressable onPress={dismissKeyboardAndBlur} hitSlop={8}>
-                        <View className="ml-2 h-[34px] w-[34px] items-center justify-center rounded-lg">
-                            <CircleChevronDown size={TOOLBAR_ICON_SIZE} color={textColor} />
-                        </View>
-                    </Pressable>
                 </View>
             </View>
         </KeyboardStickyView>

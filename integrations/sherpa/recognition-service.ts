@@ -9,6 +9,12 @@ import SherpaOnnx, {
 const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx';
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
 const TARGET_RECOGNITION_SAMPLE_RATE = 16000;
+const TARGET_RECOGNITION_CHANNELS = 1;
+
+function isWavPath(path: string): boolean {
+    const cleanPath = path.split('?')[0]?.toLowerCase() ?? '';
+    return cleanPath.endsWith('.wav');
+}
 
 function buildTranscodeTempPath(): string {
     const root = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
@@ -27,7 +33,10 @@ async function ensureInputSampleRate16k(filePath: string): Promise<{
 }> {
     const info = await SherpaOnnx.getAudioFileInfo(filePath);
     const sampleRate = info.sampleRate;
-    if (sampleRate === TARGET_RECOGNITION_SAMPLE_RATE) {
+    const channels = info.channels;
+
+    // Fast path: standard WAV mono 16k can be passed directly.
+    if (isWavPath(filePath) && sampleRate === TARGET_RECOGNITION_SAMPLE_RATE && channels === TARGET_RECOGNITION_CHANNELS) {
         return {
             path: filePath,
             inputSampleRate: sampleRate,
@@ -41,7 +50,7 @@ async function ensureInputSampleRate16k(filePath: string): Promise<{
     await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
     await SherpaOnnx.convertAudioToFormat(filePath, outputPath, 'wav', {
         sampleRate: TARGET_RECOGNITION_SAMPLE_RATE,
-        channels: 1,
+        channels: TARGET_RECOGNITION_CHANNELS,
         sampleFormat: 's16',
     });
     return {

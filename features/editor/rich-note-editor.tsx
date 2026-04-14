@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { EnrichedTextInput, type EnrichedTextInputInstance, type OnChangeStateEvent } from 'react-native-enriched';
 import { useColor } from '~/hooks/useColor';
-import { FONT_SIZE } from '~/theme/globals';
+import { FONT_SIZE_LG } from '~/theme/globals';
 
 type Props = {
     placeholder?: string;
@@ -38,7 +38,7 @@ export default function RichNoteEditor({
                 onChangeState={event => onStyleStateChange?.(event.nativeEvent)}
                 style={{
                     flex: 1,
-                    fontSize: FONT_SIZE,
+                    fontSize: FONT_SIZE_LG,
                     color: textColor,
                 }}
                 placeholder={placeholder}

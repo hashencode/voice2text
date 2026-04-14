@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS recordings (
   display_name TEXT,
   is_favorite INTEGER NOT NULL DEFAULT 0,
   source_file_name TEXT,
-  sha256 TEXT,
+  file_size_bytes INTEGER,
   note_rich_text TEXT,
   transcript_text TEXT,
   summary_text TEXT,
@@ -45,9 +45,9 @@ async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     if (!hasSourceFileNameColumn) {
         await db.execAsync('ALTER TABLE recordings ADD COLUMN source_file_name TEXT;');
     }
-    const hasSha256Column = recordingsTableInfo.some(column => column.name === 'sha256');
-    if (!hasSha256Column) {
-        await db.execAsync('ALTER TABLE recordings ADD COLUMN sha256 TEXT;');
+    const hasFileSizeBytesColumn = recordingsTableInfo.some(column => column.name === 'file_size_bytes');
+    if (!hasFileSizeBytesColumn) {
+        await db.execAsync('ALTER TABLE recordings ADD COLUMN file_size_bytes INTEGER;');
     }
     const hasNoteRichTextColumn = recordingsTableInfo.some(column => column.name === 'note_rich_text');
     if (!hasNoteRichTextColumn) {
@@ -62,7 +62,7 @@ async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
         await db.execAsync('ALTER TABLE recordings ADD COLUMN summary_text TEXT;');
     }
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recordings_source_file_name ON recordings(source_file_name);');
-    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recordings_sha256 ON recordings(sha256);');
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recordings_source_file_name_file_size ON recordings(source_file_name, file_size_bytes);');
 
     const foldersTableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(folders)');
     const hasFolderFavoriteColumn = foldersTableInfo.some(column => column.name === 'is_favorite');

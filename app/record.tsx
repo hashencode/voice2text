@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
-import { ArrowLeft, CalendarDays, Mic, Square } from 'lucide-react-native';
+import { ArrowLeft, Mic, Square } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import type { EnrichedTextInputInstance, OnChangeStateEvent } from 'react-native-enriched';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
@@ -15,11 +15,36 @@ import { useToast } from '~/components/ui/toast';
 import EditorKeyboardToolbar from '~/features/editor/editor-keyboard-toolbar';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
 import LiveTranscriptPanel from '~/features/session-editor/components/live-transcript-panel';
+import SessionHeader from '~/features/session-editor/components/session-header';
 import { useRecordSession } from '~/features/session-editor/hooks/use-record-session';
-import { formatHeaderDate } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import { useColor } from '~/hooks/useColor';
-import { BORDER_RADIUS, BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
+import { BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
+
+type RoundControlButtonProps = {
+    backgroundColor: string;
+    disabled?: boolean;
+    onPress?: () => void;
+    children: React.ReactNode;
+};
+
+function RoundControlButton({ backgroundColor, disabled = false, onPress, children }: RoundControlButtonProps) {
+    const container = (
+        <View className={`h-12 w-12 items-center justify-center rounded-full ${disabled ? 'opacity-50' : ''}`} style={{ backgroundColor }}>
+            {children}
+        </View>
+    );
+
+    if (!onPress) {
+        return container;
+    }
+
+    return (
+        <Pressable onPress={onPress} disabled={disabled}>
+            {container}
+        </Pressable>
+    );
+}
 
 export default function RecordPage() {
     const [isNoteFocused, setIsNoteFocused] = React.useState(false);
@@ -59,33 +84,32 @@ export default function RecordPage() {
     const cardColor = useColor('card');
     const mutedColor = useColor('muted');
     const showKeyboardToolbar = editorTab === 'remark' && isNoteFocused;
+    const renderRecordStatus = () => {
+        if (isRecordingOrPaused) {
+            return (
+                <TextX className="text-2xl" style={{ fontVariant: ['tabular-nums'] }}>
+                    {elapsedText}
+                </TextX>
+            );
+        }
+        return <TextX style={{ color: mutedTextColor }}>点击右侧开始录制</TextX>;
+    };
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View className="flex flex-1">
+            <View className="flex-1">
                 <View className="flex-1 px-4 pt-4">
-                    <TextInput
-                        value={displayName}
-                        onChangeText={setDisplayName}
-                        placeholderTextColor={mutedTextColor}
-                        className="p-0 text-3xl font-semibold"
-                        style={{ color: textColor }}
+                    <SessionHeader
+                        displayName={displayName}
+                        onChangeDisplayName={setDisplayName}
+                        textColor={textColor}
+                        mutedTextColor={mutedTextColor}
+                        headerAtMs={headerAtMs}
                     />
 
-                    <View className="mt-3 flex-row items-center">
-                        <View className="flex-row items-center gap-1.5">
-                            <CalendarDays size={14} color={mutedTextColor} />
-                            <TextX style={{ color: mutedTextColor }}>{formatHeaderDate(headerAtMs)}</TextX>
-                        </View>
-                    </View>
-
                     <View className="mt-3 flex-1">
-                        <Tabs
-                            value={editorTab}
-                            onValueChange={value => setEditorTab(value as EditorTabValue)}
-                            contentSwitchDelayMs={180}
-                            style={{ flex: 1 }}>
+                        <Tabs value={editorTab} onValueChange={value => setEditorTab(value as EditorTabValue)} className="flex-1">
                             <TabsList radius={BORDER_RADIUS_SM} style={{ backgroundColor: mutedColor }}>
                                 <TabsTrigger value="remark" icon={DesignPencil} iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
                                     灵感速记
@@ -101,7 +125,7 @@ export default function RecordPage() {
                                 </TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="remark" style={{ flex: 1 }}>
+                            <TabsContent value="remark" className="flex-1">
                                 <RichNoteEditor
                                     placeholder="编辑录音备注"
                                     inputRef={noteInputRef}
@@ -121,57 +145,35 @@ export default function RecordPage() {
                             </TabsContent>
 
                             <TabsContent value="summary">
-                                <TextX style={{ color: mutedTextColor }}>...</TextX>
+                                <TextX style={{ color: mutedTextColor }}>总结功能即将上线</TextX>
                             </TabsContent>
                         </Tabs>
                     </View>
                 </View>
 
-                <View
-                    className="flex-shrink-0"
-                    style={{
-                        backgroundColor: cardColor,
-                        borderStartStartRadius: BORDER_RADIUS,
-                        borderEndStartRadius: BORDER_RADIUS,
-                    }}>
+                <View className="flex-shrink-0 rounded-t-[26px]" style={{ backgroundColor: cardColor }}>
                     <View className="flex-row items-center gap-3 p-3 pb-4">
                         {isIdleLike ? (
-                            <Pressable onPress={handleBackPress} disabled={isStopping || actionLoading}>
-                                <View
-                                    className="h-12 w-12 items-center justify-center rounded-full"
-                                    style={{ backgroundColor: mutedColor, opacity: isStopping ? 0.5 : 1 }}>
-                                    <ArrowLeft size={20} color={textColor} />
-                                </View>
-                            </Pressable>
+                            <RoundControlButton backgroundColor={mutedColor} disabled={isStopping || actionLoading} onPress={handleBackPress}>
+                                <ArrowLeft size={20} color={textColor} />
+                            </RoundControlButton>
                         ) : canStop ? (
-                            <Pressable onPress={handleConfirmStop} disabled={isStopping}>
-                                <View
-                                    className="h-12 w-12 items-center justify-center rounded-full"
-                                    style={{ backgroundColor: destructiveColor, opacity: isStopping ? 0.5 : 1 }}>
-                                    <Square size={20} color={destructiveForegroundColor} />
-                                </View>
-                            </Pressable>
+                            <RoundControlButton backgroundColor={destructiveColor} disabled={isStopping} onPress={handleConfirmStop}>
+                                <Square size={20} color={destructiveForegroundColor} />
+                            </RoundControlButton>
                         ) : (
-                            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor, opacity: 0.5 }}>
+                            <RoundControlButton backgroundColor={mutedColor} disabled>
                                 <Square size={20} color={destructiveColor} />
-                            </View>
+                            </RoundControlButton>
                         )}
 
                         <View className="flex-1 items-center justify-center">
-                            {isRecordingOrPaused ? (
-                                <TextX style={{ fontVariant: ['tabular-nums'], fontSize: 24 }}>{elapsedText}</TextX>
-                            ) : (
-                                <TextX style={{ color: mutedTextColor }}>点击右侧开始录制</TextX>
-                            )}
+                            {renderRecordStatus()}
                         </View>
 
                         <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
-                            <View
-                                className="h-12 w-12 items-center justify-center rounded-full"
-                                style={{
-                                    backgroundColor: isMicVisualState ? primaryColor : mutedColor,
-                                    opacity: isStopping ? 0.5 : 1,
-                                }}>
+                            <View className={`h-12 w-12 items-center justify-center rounded-full ${isStopping ? 'opacity-50' : ''}`}
+                                  style={{ backgroundColor: isMicVisualState ? primaryColor : mutedColor }}>
                                 {isIdleLike ? (
                                     <Mic size={22} color={primaryForegroundColor} />
                                 ) : isPaused ? (

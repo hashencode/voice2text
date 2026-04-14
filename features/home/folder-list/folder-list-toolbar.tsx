@@ -1,9 +1,9 @@
 import { CheckCheck, FolderPlus, ListChecks, X } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
+import ToolbarIconButton from '~/features/home/common/toolbar-icon-button';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
-import { BORDER_RADIUS, BUTTON_HEIGHT } from '~/theme/globals';
 
 type FolderListToolbarProps = {
     isMultiSelectMode: boolean;
@@ -32,40 +32,30 @@ export default function FolderListToolbar({
 
     return (
         <View
-            className="flex-row items-center justify-between px-4 py-3"
-            style={{ backgroundColor: cardColor, borderTopStartRadius: BORDER_RADIUS, borderTopEndRadius: BORDER_RADIUS }}>
+            className="flex-row items-center justify-between rounded-t-[26px] px-4 py-3"
+            style={{ backgroundColor: cardColor }}>
             <View className="flex-grow flex-row items-center gap-x-2">
                 <TextX variant="title" numberOfLines={1} ellipsizeMode="tail">
                     {isMultiSelectMode ? actionMenuTitle : currentFolderLabel}
                 </TextX>
             </View>
-            <View className="flex-row items-center gap-x-2" style={{ height: BUTTON_HEIGHT }}>
+            <View className="h-9 flex-row items-center gap-x-2">
                 {!isMultiSelectMode ? (
-                    <Pressable
-                        className="h-9 w-9 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: secondaryColor }}
-                        onPress={onCreateFolder}>
+                    <ToolbarIconButton backgroundColor={secondaryColor} onPress={onCreateFolder}>
                         <FolderPlus size={16} color={textColor} />
-                    </Pressable>
+                    </ToolbarIconButton>
                 ) : null}
                 {isMultiSelectMode ? (
-                    <Pressable
-                        className="h-9 w-9 items-center justify-center rounded-xl"
-                        style={{
-                            backgroundColor: secondaryColor,
-                            opacity: isToggleSelectAllDisabled ? 0.45 : 1,
-                        }}
+                    <ToolbarIconButton
+                        backgroundColor={secondaryColor}
                         disabled={isToggleSelectAllDisabled}
                         onPress={onToggleSelectAll}>
                         <CheckCheck size={16} color={textColor} strokeWidth={isAllSelected ? 2.3 : 2} />
-                    </Pressable>
+                    </ToolbarIconButton>
                 ) : null}
-                <Pressable
-                    className="h-9 w-9 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: secondaryColor }}
-                    onPress={onToggleMultiSelectMode}>
+                <ToolbarIconButton backgroundColor={secondaryColor} onPress={onToggleMultiSelectMode}>
                     {isMultiSelectMode ? <X size={16} color={textColor} /> : <ListChecks size={16} color={textColor} />}
-                </Pressable>
+                </ToolbarIconButton>
             </View>
         </View>
     );

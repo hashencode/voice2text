@@ -20,6 +20,7 @@ type RecordingListViewProps = {
     onToggleSelectPath: (path: string) => void;
     onEnterMultiSelectWithItem: (path: string) => void;
     onOpenSingleActionForItem: (path: string) => void;
+    onOpenItem: (item: RecordingListItem) => void;
 };
 
 export default function FileListView({
@@ -30,6 +31,7 @@ export default function FileListView({
     onToggleSelectPath,
     onEnterMultiSelectWithItem,
     onOpenSingleActionForItem,
+    onOpenItem,
 }: RecordingListViewProps) {
     return (
         <>
@@ -45,7 +47,9 @@ export default function FileListView({
                         onPress={() => {
                             if (isMultiSelectMode) {
                                 onToggleSelectPath(item.path);
+                                return;
                             }
+                            onOpenItem(item);
                         }}
                         onLongPress={isMultiSelectMode ? () => onToggleSelectPath(item.path) : () => onEnterMultiSelectWithItem(item.path)}
                         onPressMore={() => onOpenSingleActionForItem(item.path)}

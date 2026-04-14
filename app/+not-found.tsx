@@ -6,11 +6,11 @@ import { TextX } from '~/components/ui/textx';
 export default function NotFoundScreen() {
     return (
         <>
-            <Stack.Screen options={{ title: 'Oops!' }} />
+            <Stack.Screen options={{ title: '页面未找到' }} />
             <View className={classes.container}>
-                <TextX className={classes.title}>This screen doesn&apos;t exist.</TextX>
+                <TextX className={classes.title}>当前页面不存在</TextX>
                 <Link href="/" className={classes.link}>
-                    <TextX className={classes.linkText}>Go to home screen!</TextX>
+                    <TextX className={classes.linkText}>返回首页</TextX>
                 </Link>
             </View>
         </>

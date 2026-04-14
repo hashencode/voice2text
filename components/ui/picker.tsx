@@ -1,22 +1,14 @@
 import { Icon } from '@/components/ui/icon';
-import { GradientBackground } from '@/components/ui/gradient-background';
 import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { acquireOverlayInteractionLock } from '@/hooks/use-overlay-interaction-lock';
 import { useColor } from '@/hooks/useColor';
-import {
-    BORDER_RADIUS,
-    BUTTON_HEIGHT,
-    BUTTON_ICON,
-    BUTTON_PADDING_HORIZON,
-    BUTTON_PADDING_HORIZON_LG,
-    BUTTON_PADDING_HORIZON_SM,
-    FONT_SIZE_SM,
-} from '@/theme/globals';
-import { ChevronDown, LucideProps } from 'lucide-react-native';
+import { BORDER_RADIUS, BUTTON_HEIGHT, BUTTON_ICON, BUTTON_PADDING_HORIZON } from '@/theme/globals';
+import { Check, ChevronDown, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { ScrollView, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
+import { ScrollView, StyleSheet, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
+import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 
 export interface PickerOption {
     label: string;
@@ -60,6 +52,8 @@ interface PickerProps {
     optionActiveOpacity?: number;
     onOpenChange?: (open: boolean) => void;
     okText?: string;
+    cancelText?: string;
+    showCancelButton?: boolean;
 }
 
 export function Picker({
@@ -86,7 +80,9 @@ export function Picker({
     triggerActiveOpacity = 0.8,
     optionActiveOpacity = 0.8,
     onOpenChange,
-    okText = 'OK',
+    okText = '确定',
+    cancelText = '取消',
+    showCancelButton = true,
 }: PickerProps) {
     const [isOpen, setIsOpen] = useState(false);
     const lockReleaseRef = React.useRef<(() => void) | null>(null);
@@ -99,7 +95,6 @@ export function Picker({
     const cardColor = useColor('card');
     const danger = useColor('red');
     const primary = useColor('primary');
-    const primaryForeground = useColor('primaryForeground');
     const textMutedColor = useColor('textMuted');
 
     // Normalize data structure - convert options to sections format
@@ -176,70 +171,32 @@ export function Picker({
         opacity: disabled ? 0.5 : 1,
     };
 
-    const renderOption = (option: PickerOption, sectionIndex: number, optionIndex: number) => {
+    const renderOption = (option: PickerOption, sectionIndex: number, optionIndex: number, isLastOption: boolean) => {
         const isSelected = multiple ? values.includes(option.value) : value === option.value;
 
         return (
             <TouchableOpacity
                 key={`${sectionIndex}-${option.value}`}
                 onPress={() => !option.disabled && handleSelect(option.value)}
-                className="my-0.5 overflow-hidden rounded-full"
+                className="overflow-hidden rounded-lg"
                 style={{
                     opacity: option.disabled ? 0.3 : 1,
+                    borderBottomWidth: isLastOption ? 0 : StyleSheet.hairlineWidth,
+                    borderBottomColor: borderColor,
                 }}
                 disabled={option.disabled}
                 activeOpacity={optionActiveOpacity}>
-                {isSelected ? (
-                    <GradientBackground
-                        baseColor={primary}
-                        style={{ paddingVertical: BUTTON_PADDING_HORIZON_SM, paddingHorizontal: BUTTON_PADDING_HORIZON_LG }}>
-                        <View className="w-full items-center">
-                            <TextX
-                                className="text-center"
-                                style={{
-                                    color: primaryForeground,
-                                    fontWeight: '600',
-                                }}>
-                                {option.label}
+                <View className="w-full flex-row items-center justify-between py-5">
+                    <View>
+                        <TextX className="text-center">{option.label}</TextX>
+                        {option.description && (
+                            <TextX variant="description" className="mt-0.5">
+                                {option.description}
                             </TextX>
-                            {option.description && (
-                                <TextX
-                                    variant="subtitle"
-                                    className="mt-1 text-center"
-                                    style={{
-                                        fontSize: FONT_SIZE_SM,
-                                        color: primaryForeground,
-                                    }}>
-                                    {option.description}
-                                </TextX>
-                            )}
-                        </View>
-                    </GradientBackground>
-                ) : (
-                    <View style={{ paddingVertical: BUTTON_PADDING_HORIZON_SM, paddingHorizontal: BUTTON_PADDING_HORIZON_LG }}>
-                        <View className="w-full items-center">
-                            <TextX
-                                className="text-center"
-                                style={{
-                                    color: text,
-                                    fontWeight: '400',
-                                }}>
-                                {option.label}
-                            </TextX>
-                            {option.description && (
-                                <TextX
-                                    variant="subtitle"
-                                    className="mt-1 text-center"
-                                    style={{
-                                        fontSize: FONT_SIZE_SM,
-                                        color: textMutedColor,
-                                    }}>
-                                    {option.description}
-                                </TextX>
-                            )}
-                        </View>
+                        )}
                     </View>
-                )}
+                    {isSelected ? <Check color={primary} /> : null}
+                </View>
             </TouchableOpacity>
         );
     };
@@ -308,36 +265,20 @@ export function Picker({
             <ModalMask isVisible={isOpen} onPressMask={() => setOpen(false)} statusBarTranslucent contentTransitionPreset="slide-up">
                 <View className="flex-1 justify-end">
                     <View
-                        className="w-full overflow-hidden pb-8"
+                        className="w-full overflow-hidden"
                         style={{
                             backgroundColor: cardColor,
                             borderTopStartRadius: BORDER_RADIUS,
                             borderTopEndRadius: BORDER_RADIUS,
                         }}>
                         {/* Header */}
-                        {(modalTitle || multiple) && (
-                            <View
-                                className="flex-row items-center justify-between p-4 pt-5"
-                                style={{
-                                    borderBottomWidth: 1,
-                                    borderBottomColor: borderColor,
-                                }}>
-                                <TextX variant="subtitle">{modalTitle || 'Select Options'}</TextX>
-
-                                {multiple && (
-                                    <TouchableOpacity onPress={() => setOpen(false)}>
-                                        <TextX
-                                            style={{
-                                                color: primary,
-                                                fontWeight: '500',
-                                            }}>
-                                            {okText}
-                                        </TextX>
-                                    </TouchableOpacity>
-                                )}
+                        {modalTitle && (
+                            <View className="items-center p-4 pt-5">
+                                <TextX variant="subtitle" className="text-center">
+                                    {modalTitle}
+                                </TextX>
                             </View>
                         )}
-
                         {/* Options - Updated to match date-picker styling */}
                         <View style={{ height: resolvedOptionsHeight }}>
                             <ScrollView
@@ -354,7 +295,14 @@ export function Picker({
                                                 <TextX variant="description">{section.title}</TextX>
                                             </View>
                                         )}
-                                        {section.options.map((option, optionIndex) => renderOption(option, sectionIndex, optionIndex))}
+                                        {section.options.map((option, optionIndex) => {
+                                            const globalOptionIndex =
+                                                filteredSections
+                                                    .slice(0, sectionIndex)
+                                                    .reduce((sum, item) => sum + item.options.length, 0) + optionIndex;
+                                            const isLastOption = globalOptionIndex === totalOptionsCount - 1;
+                                            return renderOption(option, sectionIndex, optionIndex, isLastOption);
+                                        })}
                                     </View>
                                 ))}
 
@@ -371,6 +319,63 @@ export function Picker({
                                 )}
                             </ScrollView>
                         </View>
+                        <View
+                            style={{
+                                borderTopWidth: StyleSheet.hairlineWidth,
+                                borderTopColor: borderColor,
+                            }}>
+                            {multiple ? (
+                                <View className="flex-row">
+                                    {showCancelButton && (
+                                        <>
+                                            <TouchableOpacity
+                                                className="flex-1 items-center px-5 py-4"
+                                                onPress={() => setOpen(false)}
+                                                activeOpacity={0.7}>
+                                                <TextX
+                                                    style={{
+                                                        color: text,
+                                                        fontWeight: '500',
+                                                    }}>
+                                                    {cancelText}
+                                                </TextX>
+                                            </TouchableOpacity>
+                                            <View
+                                                style={{
+                                                    width: StyleSheet.hairlineWidth,
+                                                    backgroundColor: borderColor,
+                                                }}
+                                            />
+                                        </>
+                                    )}
+                                    <TouchableOpacity
+                                        className="flex-1 items-center px-5 py-4"
+                                        onPress={() => setOpen(false)}
+                                        activeOpacity={0.7}>
+                                        <TextX
+                                            style={{
+                                                color: primary,
+                                                fontWeight: '600',
+                                            }}>
+                                            {okText}
+                                        </TextX>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                showCancelButton && (
+                                    <TouchableOpacity className="items-center px-5 py-4" onPress={() => setOpen(false)} activeOpacity={0.7}>
+                                        <TextX
+                                            style={{
+                                                color: text,
+                                                fontWeight: '600',
+                                            }}>
+                                            {cancelText}
+                                        </TextX>
+                                    </TouchableOpacity>
+                                )
+                            )}
+                        </View>
+                        <BottomSafeAreaSpacer />
                     </View>
                 </View>
             </ModalMask>

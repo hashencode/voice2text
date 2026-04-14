@@ -1,23 +1,37 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useNavigation } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect } from 'react';
 import type { EnrichedTextInputInstance } from 'react-native-enriched';
 import { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { useToast } from '~/components/ui/toast';
-import { findRecordingMetaBySourceFileNameAndSha256, upsertRecordingMeta, type RecordingMeta } from '~/data/sqlite/services/recordings.service';
+import {
+    findRecordingMetaByPath,
+    findRecordingMetaBySourceFileNameAndFileSize,
+    upsertRecordingMeta,
+    type RecordingMeta,
+} from '~/data/sqlite/services/recordings.service';
 import { formatSpeed, toDisplayName } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
-import SherpaOnnx from '~/modules/sherpa';
+import { transcribeFileWithTiming } from '~/integrations/sherpa/recognition-service';
+import SherpaOnnx, { ensureModelReady, type DownloadModelProgress, type SherpaModelId } from '~/modules/sherpa';
 
 const PLAYBACK_SPEEDS = [2.0, 1.5, 1.0, 0.9] as const;
 const MIN_SAVE_OVERLAY_DURATION_MS = 2000;
+const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
+
+type RecognitionLanguage = 'zh' | 'en';
+type RecognitionInstallState = 'ready' | 'installing' | 'failed';
+type RecognitionStatusIcon = 'voice-scan' | 'arrow-down-circle' | 'warning-triangle';
 
 type UseImportAudioSessionOptions = {
     audioUri?: string;
     audioName?: string | string[];
     noteInputRef?: React.RefObject<EnrichedTextInputInstance | null>;
+    fromList?: boolean;
+    initialDisplayName?: string;
+    initialHeaderAtMs?: number;
 };
 
 type ConfirmButtonVariant = 'primary' | 'destructive';
@@ -53,13 +67,6 @@ function ensureFileUri(path: string): string {
     return path;
 }
 
-function toHashPath(path: string): string {
-    if (!path) {
-        return path;
-    }
-    return path.replace(/^file:\/\//, '');
-}
-
 function normalizeSourceFileName(name: string): string {
     return name.trim().toLowerCase();
 }
@@ -67,7 +74,7 @@ function normalizeSourceFileName(name: string): string {
 function getFileNameFromUri(uri: string): string {
     const cleanUri = uri.split('?')[0];
     const segments = cleanUri.split('/');
-    return decodeURIComponent(segments[segments.length - 1] || 'import-audio');
+    return decodeURIComponent(segments[segments.length - 1] || '导入音频');
 }
 
 function getSourceFileName(audioName: string | string[] | undefined, audioUri: string | undefined): string {
@@ -79,7 +86,7 @@ function getSourceFileName(audioName: string | string[] | undefined, audioUri: s
     if (audioUri) {
         return getFileNameFromUri(audioUri);
     }
-    return 'import-audio';
+    return '导入音频';
 }
 
 function getFileExtension(name: string): string {
@@ -101,7 +108,7 @@ function createImportedFileUri(sourceFileName: string): string {
 }
 
 function toSingleName(name?: string | string[]): string {
-    return Array.isArray(name) ? name[0] ?? '' : name ?? '';
+    return Array.isArray(name) ? (name[0] ?? '') : (name ?? '');
 }
 
 function isSameSnapshot(a: SessionSnapshot, b: SessionSnapshot): boolean {
@@ -113,10 +120,41 @@ function isSameSnapshot(a: SessionSnapshot, b: SessionSnapshot): boolean {
     );
 }
 
-export function useImportAudioSession({ audioUri, audioName, noteInputRef }: UseImportAudioSessionOptions) {
-    const [displayName, setDisplayName] = React.useState(() => toDisplayName(audioName));
+function resolveOfflineModelId(language: RecognitionLanguage): SherpaModelId {
+    if (language === 'zh') {
+        return 'paraformer-zh';
+    }
+    return 'moonshine-zh';
+}
+
+function resolveInstallStatusText(progress: DownloadModelProgress): string {
+    if (progress.phase === 'downloading-json') {
+        return '正在获取模型信息';
+    }
+    if (progress.phase === 'downloading-zip') {
+        const percentText = typeof progress.percent === 'number' ? ` ${Math.round(progress.percent * 100)}%` : '';
+        return `正在下载模型${percentText}`;
+    }
+    if (progress.phase === 'verifying') {
+        return '正在校验模型';
+    }
+    if (progress.phase === 'extracting') {
+        return '正在解压模型';
+    }
+    return '正在应用模型';
+}
+
+export function useImportAudioSession({
+    audioUri,
+    audioName,
+    noteInputRef,
+    fromList = false,
+    initialDisplayName,
+    initialHeaderAtMs,
+}: UseImportAudioSessionOptions) {
+    const [displayName, setDisplayName] = React.useState(() => initialDisplayName?.trim() || toDisplayName(audioName));
     const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
-    const [headerAtMs, setHeaderAtMs] = React.useState(() => Date.now());
+    const [headerAtMs, setHeaderAtMs] = React.useState(() => initialHeaderAtMs ?? Date.now());
     const [remarkText, setRemarkText] = React.useState('');
     const [transcriptText, setTranscriptText] = React.useState('');
     const [summaryText, setSummaryText] = React.useState('');
@@ -129,8 +167,14 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
     const [isSeeking, setIsSeeking] = React.useState(false);
     const [pendingSeekSec, setPendingSeekSec] = React.useState<number | null>(null);
     const [isPreparingSession, setIsPreparingSession] = React.useState(false);
+    const [isInitialSessionLoading, setIsInitialSessionLoading] = React.useState(Boolean(audioUri));
     const [saveOverlayVisible, setSaveOverlayVisible] = React.useState(false);
-    const [saveOverlayLabel, setSaveOverlayLabel] = React.useState('正在保存内容...');
+    const [saveOverlayLabel, setSaveOverlayLabel] = React.useState('正在保存内容');
+    const [recognitionLanguage, setRecognitionLanguage] = React.useState<RecognitionLanguage>('zh');
+    const [recognitionInstallState, setRecognitionInstallState] = React.useState<RecognitionInstallState>('ready');
+    const [recognitionStatusText, setRecognitionStatusText] = React.useState('选择语言和识别方式');
+    const [recognitionProgressPercent, setRecognitionProgressPercent] = React.useState<number | null>(null);
+    const [isRecognizing, setIsRecognizing] = React.useState(false);
     const [confirmDialogState, setConfirmDialogState] = React.useState<ConfirmDialogState>({
         isVisible: false,
         title: '',
@@ -150,12 +194,13 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
     const pendingNavActionRef = React.useRef<unknown>(null);
     const sourceFileNameRef = React.useRef<string>('');
     const sourceFileNameNormalizedRef = React.useRef<string>('');
-    const sourceSha256Ref = React.useRef<string | null>(null);
+    const sourceFileSizeBytesRef = React.useRef<number | null>(null);
     const selectedSourceUriRef = React.useRef<string | null>(audioUri ?? null);
     const matchedRecordingRef = React.useRef<RecordingMeta | null>(null);
     const remarkDraftRef = React.useRef('');
+    const recognitionRunIdRef = React.useRef(0);
     const initialSnapshotRef = React.useRef<SessionSnapshot>({
-        displayName: toDisplayName(audioName),
+        displayName: initialDisplayName?.trim() || toDisplayName(audioName),
         noteRichText: '',
         transcriptText: '',
         summaryText: '',
@@ -171,7 +216,7 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
     const currentSec = Math.max(playerStatus.currentTime ?? 0, 0);
     const previewSec = seekPreviewPercent === null ? currentSec : (durationSec * seekPreviewPercent) / 100;
     const displayCurrentSec = isSeeking ? previewSec : currentSec;
-    const displayProgressSec = isSeeking ? previewSec : pendingSeekSec ?? currentSec;
+    const displayProgressSec = isSeeking ? previewSec : (pendingSeekSec ?? currentSec);
     const progressPercent = durationSec > 0 ? Math.min(100, (displayProgressSec / durationSec) * 100) : 0;
 
     const getLatestRemarkText = useCallback(async () => {
@@ -352,6 +397,109 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
         remarkDraftRef.current = text;
     }, []);
 
+    const stopCurrentRecognition = useCallback(async () => {
+        recognitionRunIdRef.current += 1;
+        setIsRecognizing(false);
+        setRecognitionStatusText('识别已终止');
+        try {
+            await SherpaOnnx.stopRealtimeAsr();
+        } catch (error) {
+            console.warn('[import-audio] stopRealtimeAsr skipped', error);
+        }
+    }, []);
+
+    const runOfflineRecognition = useCallback(async () => {
+        const sourceUri = selectedSourceUriRef.current;
+        if (!sourceUri) {
+            toast({
+                title: '识别失败',
+                description: '缺少音频路径',
+                variant: 'error',
+                duration: 2500,
+            });
+            return;
+        }
+        if (isRecognizing) {
+            return;
+        }
+
+        const modelId = resolveOfflineModelId(recognitionLanguage);
+        const runId = recognitionRunIdRef.current + 1;
+        recognitionRunIdRef.current = runId;
+        setRecognitionInstallState('installing');
+        setRecognitionStatusText('正在准备模型');
+        setRecognitionProgressPercent(null);
+        let installReady = false;
+
+        try {
+            await ensureModelReady(modelId, {
+                baseUrl: MODEL_BASE_URL,
+                onProgress: progress => {
+                    if (recognitionRunIdRef.current !== runId) {
+                        return;
+                    }
+                    setRecognitionStatusText(resolveInstallStatusText(progress));
+                    if (progress.phase === 'downloading-zip' && typeof progress.percent === 'number') {
+                        setRecognitionProgressPercent(Math.round(progress.percent * 100));
+                    } else if (progress.phase === 'ready') {
+                        setRecognitionProgressPercent(100);
+                    }
+                },
+            });
+            if (recognitionRunIdRef.current !== runId) {
+                return;
+            }
+
+            setRecognitionInstallState('ready');
+            installReady = true;
+            setRecognitionProgressPercent(null);
+            setRecognitionStatusText('正在语音识别');
+            setIsRecognizing(true);
+
+            const { transcribe } = await transcribeFileWithTiming({
+                filePath: sourceUri,
+                modelId,
+            });
+            if (recognitionRunIdRef.current !== runId) {
+                return;
+            }
+
+            setTranscriptText(transcribe.result.text || '');
+            setRecognitionStatusText('识别完成');
+        } catch (error) {
+            if (recognitionRunIdRef.current !== runId) {
+                return;
+            }
+            if (!installReady) {
+                setRecognitionInstallState('failed');
+                setRecognitionStatusText((error as Error)?.message ? `安装失败：${(error as Error).message}` : '安装失败');
+            } else {
+                setRecognitionInstallState('ready');
+                setRecognitionStatusText((error as Error)?.message ? `识别失败：${(error as Error).message}` : '识别失败');
+            }
+            toast({
+                title: '离线识别失败',
+                description: (error as Error)?.message ?? '请稍后重试',
+                variant: 'error',
+                duration: 2800,
+            });
+        } finally {
+            if (recognitionRunIdRef.current === runId) {
+                setIsRecognizing(false);
+            }
+        }
+    }, [isRecognizing, recognitionLanguage, toast]);
+
+    const runOnlineRecognition = useCallback(() => {
+        setRecognitionStatusText('在线识别暂未接入');
+        toast({
+            title: '在线识别暂不可用',
+            description: '请先使用离线识别',
+            variant: 'error',
+            duration: 2200,
+        });
+    }, [toast]);
+
     const saveCurrentSession = useCallback(async (): Promise<boolean> => {
         if (saveInFlightRef.current) {
             return false;
@@ -370,13 +518,21 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
         saveInFlightRef.current = true;
         const startedAt = Date.now();
         setSaveOverlayVisible(true);
-        setSaveOverlayLabel('正在保存内容...');
+        setSaveOverlayLabel('正在保存内容');
 
         try {
+            await pausePlayerSafely();
             const latestRemarkText = await getLatestRemarkText();
             let finalPath = matchedRecordingRef.current?.path || resolvedAudioUri || sourceUri;
             const sourceFileName = sourceFileNameRef.current || getSourceFileName(audioName, sourceUri);
-            const sourceSha256 = sourceSha256Ref.current;
+            let sourceFileSizeBytes = sourceFileSizeBytesRef.current;
+            if (sourceFileSizeBytes === null) {
+                const sourceInfo = await FileSystem.getInfoAsync(ensureFileUri(sourceUri));
+                if (sourceInfo.exists && typeof sourceInfo.size === 'number' && Number.isFinite(sourceInfo.size) && sourceInfo.size > 0) {
+                    sourceFileSizeBytes = Math.floor(sourceInfo.size);
+                    sourceFileSizeBytesRef.current = sourceFileSizeBytes;
+                }
+            }
 
             let shouldCopyFile = !matchedRecordingRef.current;
             if (matchedRecordingRef.current?.path) {
@@ -394,7 +550,7 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
                 const importedDir = `${FileSystem.documentDirectory}recordings/imported/`;
                 await FileSystem.makeDirectoryAsync(importedDir, { intermediates: true });
                 const targetUri = createImportedFileUri(sourceFileName);
-                setSaveOverlayLabel('正在保存文件...');
+                setSaveOverlayLabel('正在读取文件');
                 await FileSystem.copyAsync({
                     from: ensureFileUri(sourceUri),
                     to: targetUri,
@@ -402,14 +558,14 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
                 finalPath = targetUri;
             }
 
-            setSaveOverlayLabel('正在写入数据...');
+            setSaveOverlayLabel('正在写入数据');
             const now = Date.now();
             const recordedAtMs = matchedRecordingRef.current?.recordedAtMs ?? now;
             await upsertRecordingMeta({
                 path: finalPath,
                 displayName: displayName.trim() || toDisplayName(sourceFileName),
                 sourceFileName,
-                sha256: sourceSha256 ?? null,
+                fileSizeBytes: sourceFileSizeBytes ?? null,
                 noteRichText: latestRemarkText,
                 transcriptText,
                 summaryText,
@@ -445,7 +601,7 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
                 path: finalPath,
                 displayName: nextSnapshot.displayName,
                 sourceFileName,
-                sha256: sourceSha256 ?? null,
+                fileSizeBytes: sourceFileSizeBytes ?? null,
                 noteRichText: nextSnapshot.noteRichText,
                 transcriptText: nextSnapshot.transcriptText,
                 summaryText: nextSnapshot.summaryText,
@@ -470,7 +626,7 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
             setSaveOverlayVisible(false);
             saveInFlightRef.current = false;
         }
-    }, [audioName, displayName, getLatestRemarkText, resolvedAudioUri, summaryText, toast, transcriptText]);
+    }, [audioName, displayName, getLatestRemarkText, pausePlayerSafely, resolvedAudioUri, summaryText, toast, transcriptText]);
 
     const closeConfirmDialog = useCallback(() => {
         setConfirmDialogState(prev => ({ ...prev, isVisible: false }));
@@ -484,6 +640,34 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
     const requestLeaveWithConfirm = useCallback(
         async (pendingAction?: unknown) => {
             if (saveInFlightRef.current || isPreparingSession) {
+                return;
+            }
+            if (isRecognizing) {
+                pendingNavActionRef.current = pendingAction ?? null;
+                setConfirmDialogState({
+                    isVisible: true,
+                    title: '当前正在进行语音识别',
+                    description: '返回操作将会打断识别进程',
+                    confirmText: '确认退出',
+                    cancelText: '取消',
+                    confirmButtonProps: { variant: 'destructive' },
+                    onConfirm: () => {
+                        void (async () => {
+                            await stopCurrentRecognition();
+                            const action = pendingNavActionRef.current;
+                            pendingNavActionRef.current = null;
+                            allowNextRemoveRef.current = true;
+                            if (action) {
+                                navigation.dispatch(action as never);
+                            } else {
+                                navigation.goBack();
+                            }
+                        })();
+                    },
+                    onCancel: () => {
+                        pendingNavActionRef.current = null;
+                    },
+                });
                 return;
             }
             const currentSnapshot = await getCurrentSnapshot();
@@ -547,7 +731,7 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
                 },
             });
         },
-        [getCurrentSnapshot, isPreparingSession, navigation, saveCurrentSession],
+        [getCurrentSnapshot, isPreparingSession, isRecognizing, navigation, saveCurrentSession, stopCurrentRecognition],
     );
 
     const handleBackPress = useCallback(() => {
@@ -570,12 +754,22 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
     }, [isPreparingSession, navigation, requestLeaveWithConfirm]);
 
     useEffect(() => {
+        let cancelled = false;
+        setIsInitialSessionLoading(Boolean(audioUri));
         const run = async () => {
-            if (!audioUri) {
+            if (!audioUri || cancelled) {
+                setIsInitialSessionLoading(false);
                 return;
             }
+            if (fromList) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                if (cancelled) {
+                    return;
+                }
+            }
 
-            const sourceUri = ensureFileUri(audioUri);
+            const rawSourceUri = audioUri;
+            const sourceUri = ensureFileUri(rawSourceUri);
             selectedSourceUriRef.current = sourceUri;
             const sourceFileName = getSourceFileName(audioName, sourceUri);
             sourceFileNameRef.current = sourceFileName;
@@ -583,43 +777,85 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
 
             setIsPreparingSession(true);
             try {
-                const digest = await SherpaOnnx.getFileSha256(toHashPath(sourceUri));
-                const sourceSha256 = digest.sha256.trim().toLowerCase();
-                sourceSha256Ref.current = sourceSha256;
-                const matched = await findRecordingMetaBySourceFileNameAndSha256(sourceFileNameNormalizedRef.current, sourceSha256);
+                const sourceInfo = await FileSystem.getInfoAsync(sourceUri);
+                const sourceFileSizeBytes =
+                    sourceInfo.exists && typeof sourceInfo.size === 'number' && Number.isFinite(sourceInfo.size) && sourceInfo.size > 0
+                        ? Math.floor(sourceInfo.size)
+                        : null;
+                sourceFileSizeBytesRef.current = sourceFileSizeBytes;
 
-                if (matched?.path) {
-                    const matchedUri = ensureFileUri(matched.path);
+                const matchedByPath = (await findRecordingMetaByPath(rawSourceUri)) ?? (await findRecordingMetaByPath(sourceUri));
+                if (matchedByPath?.path) {
+                    const matchedUri = ensureFileUri(matchedByPath.path);
                     const matchedInfo = await FileSystem.getInfoAsync(matchedUri);
                     if (matchedInfo.exists) {
-                        matchedRecordingRef.current = matched;
+                        matchedRecordingRef.current = matchedByPath;
+                        sourceFileSizeBytesRef.current = matchedByPath.fileSizeBytes ?? sourceFileSizeBytesRef.current;
                         setResolvedAudioUri(matchedUri);
-                        setDisplayName((matched.displayName?.trim() || toDisplayName(sourceFileName)) ?? toDisplayName(sourceFileName));
-                        setRemarkText(matched.noteRichText ?? '');
-                        remarkDraftRef.current = matched.noteRichText ?? '';
-                        setTranscriptText(matched.transcriptText ?? '');
-                        setSummaryText(matched.summaryText ?? '');
-                        setHeaderAtMs(matched.recordedAtMs ?? Date.now());
+                        setDisplayName(
+                            (matchedByPath.displayName?.trim() || initialDisplayName?.trim() || toDisplayName(sourceFileName)) ??
+                                toDisplayName(sourceFileName),
+                        );
+                        setRemarkText(matchedByPath.noteRichText ?? '');
+                        remarkDraftRef.current = matchedByPath.noteRichText ?? '';
+                        setTranscriptText(matchedByPath.transcriptText ?? '');
+                        setSummaryText(matchedByPath.summaryText ?? '');
+                        setHeaderAtMs(matchedByPath.recordedAtMs ?? initialHeaderAtMs ?? Date.now());
                         initialSnapshotRef.current = {
-                            displayName: (matched.displayName?.trim() || toDisplayName(sourceFileName)) ?? toDisplayName(sourceFileName),
-                            noteRichText: matched.noteRichText ?? '',
-                            transcriptText: matched.transcriptText ?? '',
-                            summaryText: matched.summaryText ?? '',
+                            displayName:
+                                (matchedByPath.displayName?.trim() || initialDisplayName?.trim() || toDisplayName(sourceFileName)) ??
+                                toDisplayName(sourceFileName),
+                            noteRichText: matchedByPath.noteRichText ?? '',
+                            transcriptText: matchedByPath.transcriptText ?? '',
+                            summaryText: matchedByPath.summaryText ?? '',
                         };
                         setNoteEditorSeed(prev => prev + 1);
                         return;
                     }
                 }
 
+                if (!fromList && sourceFileSizeBytes !== null) {
+                    const matched = await findRecordingMetaBySourceFileNameAndFileSize(
+                        sourceFileNameNormalizedRef.current,
+                        sourceFileSizeBytes,
+                    );
+
+                    if (matched?.path) {
+                        const matchedUri = ensureFileUri(matched.path);
+                        const matchedInfo = await FileSystem.getInfoAsync(matchedUri);
+                        if (matchedInfo.exists) {
+                            setConfirmDialogState({
+                                isVisible: true,
+                                title: '当前文件已存在',
+                                description: '是否前往编辑页面',
+                                confirmText: '前往编辑',
+                                cancelText: '返回',
+                                confirmButtonProps: { variant: 'primary' },
+                                onConfirm: () => {
+                                    router.replace({
+                                        pathname: '/import-audio',
+                                        params: { uri: matched.path, source: 'list' },
+                                    });
+                                },
+                                onCancel: () => {
+                                    allowNextRemoveRef.current = true;
+                                    navigation.goBack();
+                                },
+                            });
+                            return;
+                        }
+                    }
+                }
+
                 matchedRecordingRef.current = null;
-                const fallbackDisplayName = toDisplayName(toSingleName(audioName) || sourceFileName);
+                const fallbackDisplayName = initialDisplayName?.trim() || toDisplayName(toSingleName(audioName) || sourceFileName);
                 setResolvedAudioUri(sourceUri);
                 setDisplayName(fallbackDisplayName);
                 setRemarkText('');
                 remarkDraftRef.current = '';
                 setTranscriptText('');
                 setSummaryText('');
-                setHeaderAtMs(Date.now());
+                setHeaderAtMs(initialHeaderAtMs ?? Date.now());
                 initialSnapshotRef.current = {
                     displayName: fallbackDisplayName,
                     noteRichText: '',
@@ -630,15 +866,16 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
             } catch (error) {
                 console.warn('[import-audio] prepare session failed', error);
                 matchedRecordingRef.current = null;
-                sourceSha256Ref.current = null;
-                const fallbackDisplayName = toDisplayName(toSingleName(audioName) || sourceFileNameRef.current || sourceUri);
+                sourceFileSizeBytesRef.current = null;
+                const fallbackDisplayName =
+                    initialDisplayName?.trim() || toDisplayName(toSingleName(audioName) || sourceFileNameRef.current || sourceUri);
                 setResolvedAudioUri(sourceUri);
                 setDisplayName(fallbackDisplayName);
                 setRemarkText('');
                 remarkDraftRef.current = '';
                 setTranscriptText('');
                 setSummaryText('');
-                setHeaderAtMs(Date.now());
+                setHeaderAtMs(initialHeaderAtMs ?? Date.now());
                 initialSnapshotRef.current = {
                     displayName: fallbackDisplayName,
                     noteRichText: '',
@@ -654,10 +891,15 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
                 });
             } finally {
                 setIsPreparingSession(false);
+                setIsInitialSessionLoading(false);
             }
         };
         void run();
-    }, [audioName, audioUri, toast]);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [audioName, audioUri, fromList, initialDisplayName, initialHeaderAtMs, navigation, toast]);
 
     useEffect(() => {
         if (!resolvedAudioUri) {
@@ -687,6 +929,7 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
 
     useEffect(() => {
         return () => {
+            recognitionRunIdRef.current += 1;
             isUnmountedRef.current = true;
             if (seekThrottleTimerRef.current) {
                 clearTimeout(seekThrottleTimerRef.current);
@@ -697,6 +940,17 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
             void pausePlayerSafely();
         };
     }, [pausePlayerSafely]);
+
+    const recognitionStatusIcon: RecognitionStatusIcon = React.useMemo(() => {
+        if (recognitionInstallState === 'failed') {
+            return 'warning-triangle';
+        }
+        if (recognitionInstallState === 'installing') {
+            return 'arrow-down-circle';
+        }
+        return 'voice-scan';
+    }, [recognitionInstallState]);
+    const isRecognitionBusy = isRecognizing || recognitionInstallState === 'installing';
 
     const speedLabel = formatSpeed(playbackRate);
 
@@ -761,5 +1015,15 @@ export function useImportAudioSession({ audioUri, audioName, noteInputRef }: Use
         saveOverlayVisible,
         saveOverlayLabel,
         isPreparingSession,
+        isInitialSessionLoading,
+        recognitionLanguage,
+        setRecognitionLanguage,
+        recognitionStatusIcon,
+        recognitionStatusText,
+        recognitionProgressPercent,
+        isRecognizing,
+        isRecognitionBusy,
+        runOfflineRecognition,
+        runOnlineRecognition,
     };
 }

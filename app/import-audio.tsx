@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
-import { ArrowLeft, CalendarDays, FastForward, Gauge, Rewind, RotateCcw, Square } from 'lucide-react-native';
+import { ArrowLeft, Gauge, RotateCcw, Square } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import type { EnrichedTextInputInstance, OnChangeStateEvent } from 'react-native-enriched';
@@ -10,6 +10,8 @@ import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
+import { ButtonX } from '~/components/ui/buttonx';
+import { Picker } from '~/components/ui/picker';
 import { Progress } from '~/components/ui/progress';
 import { LoadingOverlay } from '~/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
@@ -17,18 +19,54 @@ import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
 import EditorKeyboardToolbar from '~/features/editor/editor-keyboard-toolbar';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
+import SessionHeader from '~/features/session-editor/components/session-header';
 import { useImportAudioSession } from '~/features/session-editor/hooks/use-import-audio-session';
-import { formatHeaderDate, formatTime } from '~/features/session-editor/services/time-format';
+import { formatTime } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import { useColor } from '~/hooks/useColor';
-import { BORDER_RADIUS, BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
+import { BORDER_RADIUS_SM, BUTTON_ICON_LG, FONT_SIZE_LG } from '~/theme/globals';
+
+type RoundControlButtonProps = {
+    backgroundColor: string;
+    onPress: () => void;
+    children: React.ReactNode;
+};
+
+function RoundControlButton({ backgroundColor, onPress, children }: RoundControlButtonProps) {
+    return (
+        <Pressable onPress={onPress}>
+            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor }}>
+                {children}
+            </View>
+        </Pressable>
+    );
+}
+
+function TimeLabel({ value, color, align = 'left' }: { value: string; color: string; align?: 'left' | 'right' }) {
+    return (
+        <TextX className={align === 'right' ? 'w-12 text-right' : 'w-12'} style={{ color }}>
+            {value}
+        </TextX>
+    );
+}
 
 export default function ImportAudioPage() {
     const [isNoteFocused, setIsNoteFocused] = React.useState(false);
     const [noteStyleState, setNoteStyleState] = React.useState<OnChangeStateEvent | null>(null);
     const noteInputRef = React.useRef<EnrichedTextInputInstance | null>(null);
-    const params = useLocalSearchParams<{ uri?: string | string[]; name?: string | string[] }>();
+    const params = useLocalSearchParams<{
+        uri?: string | string[];
+        name?: string | string[];
+        source?: string | string[];
+        recordedAtMs?: string | string[];
+    }>();
     const audioUri = Array.isArray(params.uri) ? params.uri[0] : params.uri;
+    const initialName = Array.isArray(params.name) ? params.name[0] : params.name;
+    const source = Array.isArray(params.source) ? params.source[0] : params.source;
+    const fromList = source === 'list';
+    const recordedAtMsRaw = Array.isArray(params.recordedAtMs) ? params.recordedAtMs[0] : params.recordedAtMs;
+    const parsedRecordedAtMs = recordedAtMsRaw ? Number(recordedAtMsRaw) : NaN;
+    const initialHeaderAtMs = Number.isFinite(parsedRecordedAtMs) ? parsedRecordedAtMs : undefined;
 
     const {
         displayName,
@@ -69,8 +107,23 @@ export default function ImportAudioPage() {
         cancelConfirmDialog,
         saveOverlayVisible,
         saveOverlayLabel,
-        isPreparingSession,
-    } = useImportAudioSession({ audioUri, audioName: params.name, noteInputRef });
+        isInitialSessionLoading,
+        recognitionLanguage,
+        setRecognitionLanguage,
+        recognitionStatusIcon,
+        recognitionStatusText,
+        recognitionProgressPercent,
+        isRecognitionBusy,
+        runOfflineRecognition,
+        runOnlineRecognition,
+    } = useImportAudioSession({
+        audioUri,
+        audioName: params.name,
+        noteInputRef,
+        fromList,
+        initialDisplayName: fromList ? initialName : undefined,
+        initialHeaderAtMs,
+    });
     const { toast } = useToast();
 
     const primaryColor = useColor('primary');
@@ -82,42 +135,58 @@ export default function ImportAudioPage() {
     const cardColor = useColor('card');
     const mutedColor = useColor('muted');
     const showKeyboardToolbar = editorTab === 'remark' && isNoteFocused;
+    const remarkPlaceholder = fromList && isInitialSessionLoading ? '正在读取灵感' : '记录此刻灵感';
+    const transcriptHasContent = transcriptText.trim().length > 0;
+    const recognitionIconColor =
+        recognitionStatusIcon === 'warning-triangle'
+            ? destructiveColor
+            : recognitionStatusIcon === 'arrow-down-circle'
+              ? primaryColor
+              : mutedTextColor;
+    const renderPlaybackCenter = () => {
+        if (!isPlaybackMode) {
+            return <TextX style={{ color: mutedTextColor }}>点击右侧按钮开始播放</TextX>;
+        }
+        return (
+            <View className="flex-row items-center gap-4">
+                <RoundControlButton backgroundColor={mutedColor} onPress={handleRewind}>
+                    <TextX>-5s</TextX>
+                </RoundControlButton>
+
+                <RoundControlButton backgroundColor={mutedColor} onPress={handleOpenPlaybackRateSheet}>
+                    {playbackRate === 1.0 ? (
+                        <Gauge size={20} strokeWidth={2} color={textColor} />
+                    ) : (
+                        <TextX style={{ color: primaryColor }}>{speedLabel}x</TextX>
+                    )}
+                </RoundControlButton>
+                <RoundControlButton backgroundColor={mutedColor} onPress={handleFastForward}>
+                    <TextX>+5s</TextX>
+                </RoundControlButton>
+            </View>
+        );
+    };
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View className="flex flex-1">
+            <View className="flex-1">
                 <View className="flex-1 px-4 pt-4">
-                    <TextInput
-                        value={displayName}
-                        onChangeText={setDisplayName}
-                        placeholderTextColor={mutedTextColor}
-                        className="p-0 text-3xl font-semibold"
-                        style={{
-                            color: textColor,
-                            minHeight: 40,
-                            lineHeight: 40,
-                            paddingVertical: 0,
-                            includeFontPadding: false,
-                            textAlignVertical: 'center',
-                        }}
+                    <SessionHeader
+                        displayName={displayName}
+                        onChangeDisplayName={setDisplayName}
+                        textColor={textColor}
+                        mutedTextColor={mutedTextColor}
+                        headerAtMs={headerAtMs}
                     />
 
-                    <View className="mt-3 flex-row items-center">
-                        <View className="flex-row items-center gap-1.5">
-                            <CalendarDays size={14} color={mutedTextColor} />
-                            <TextX style={{ color: mutedTextColor }}>{formatHeaderDate(headerAtMs)}</TextX>
-                        </View>
-                    </View>
-
                     <View className="mt-3 flex-1">
-                        <Tabs
-                            value={editorTab}
-                            onValueChange={value => setEditorTab(value as EditorTabValue)}
-                            contentSwitchDelayMs={180}
-                            style={{ flex: 1 }}>
+                        <Tabs value={editorTab} onValueChange={value => setEditorTab(value as EditorTabValue)} className="flex-1">
                             <TabsList radius={BORDER_RADIUS_SM} style={{ backgroundColor: mutedColor }}>
-                                <TabsTrigger value="remark" icon={DesignPencil} iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
+                                <TabsTrigger
+                                    value="remark"
+                                    icon={DesignPencil}
+                                    iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
                                     灵感速记
                                 </TabsTrigger>
                                 <TabsTrigger
@@ -131,10 +200,10 @@ export default function ImportAudioPage() {
                                 </TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="remark" style={{ flex: 1 }}>
+                            <TabsContent value="remark" className="flex-1">
                                 <RichNoteEditor
                                     key={`remark-${noteEditorSeed}`}
-                                    placeholder="编辑音频备注"
+                                    placeholder={remarkPlaceholder}
                                     inputRef={noteInputRef}
                                     initialText={remarkText}
                                     onTextChange={handleRemarkTextChange}
@@ -143,17 +212,71 @@ export default function ImportAudioPage() {
                                 />
                             </TabsContent>
 
-                            <TabsContent value="transcript">
-                                <TextInput
-                                    value={transcriptText}
-                                    onChangeText={setTranscriptText}
-                                    placeholder="编辑语音识别内容"
-                                    placeholderTextColor={mutedTextColor}
-                                    multiline
-                                    textAlignVertical="top"
-                                    className="flex-1 p-0 text-base"
-                                    style={{ color: textColor }}
-                                />
+                            <TabsContent value="transcript" className="flex-1">
+                                {transcriptHasContent ? (
+                                    <TextInput
+                                        value={transcriptText}
+                                        onChangeText={setTranscriptText}
+                                        placeholder="编辑语音识别内容"
+                                        placeholderTextColor={mutedTextColor}
+                                        multiline
+                                        textAlignVertical="top"
+                                        className="flex-1 p-0"
+                                        style={{ color: textColor, fontSize: FONT_SIZE_LG }}
+                                    />
+                                ) : (
+                                    <View className="flex-1 items-center justify-center px-4">
+                                        <View className="items-center gap-3">
+                                            <ChatBubbleTranslate strokeWidth={1} width={62} height={62} color={recognitionIconColor} />
+                                            <TextX style={{ color: mutedTextColor }}>{recognitionStatusText}</TextX>
+                                            {recognitionProgressPercent !== null ? (
+                                                <TextX style={{ color: mutedTextColor }}>{recognitionProgressPercent}%</TextX>
+                                            ) : null}
+                                        </View>
+
+                                        <View className="mt-5 flex w-full max-w-xs">
+                                            <Picker
+                                                value={recognitionLanguage}
+                                                modalTitle="选择识别语言"
+                                                placeholder="选择识别语言"
+                                                showCancelButton
+                                                cancelText="取消"
+                                                disabled={isRecognitionBusy}
+                                                options={[
+                                                    { label: '中文', value: 'zh' },
+                                                    { label: '英文', value: 'en' },
+                                                ]}
+                                                onValueChange={value => {
+                                                    if (value === 'zh' || value === 'en') {
+                                                        setRecognitionLanguage(value);
+                                                    }
+                                                }}
+                                            />
+                                        </View>
+
+                                        <View className="mt-4 w-full max-w-xs flex-row items-center gap-2">
+                                            <View className="flex-1">
+                                                <ButtonX
+                                                    variant="secondary"
+                                                    size="lg"
+                                                    onPress={() => void runOfflineRecognition()}
+                                                    disabled={isRecognitionBusy}
+                                                    loading={isRecognitionBusy}>
+                                                    离线识别
+                                                </ButtonX>
+                                            </View>
+                                            <View className="flex-1">
+                                                <ButtonX
+                                                    size="lg"
+                                                    variant="primary"
+                                                    onPress={runOnlineRecognition}
+                                                    disabled={isRecognitionBusy}>
+                                                    在线识别
+                                                </ButtonX>
+                                            </View>
+                                        </View>
+                                    </View>
+                                )}
                             </TabsContent>
 
                             <TabsContent value="summary">
@@ -172,65 +295,36 @@ export default function ImportAudioPage() {
                     </View>
                 </View>
 
-                <View
-                    className="flex-shrink-0"
-                    style={{
-                        backgroundColor: cardColor,
-                        borderStartStartRadius: BORDER_RADIUS,
-                        borderEndStartRadius: BORDER_RADIUS,
-                    }}>
+                <View className="flex-shrink-0 rounded-t-[26px]" style={{ backgroundColor: cardColor }}>
                     <Animated.View className="p-3" style={toolbarAnimatedStyle}>
                         <Animated.View className="flex-row items-center gap-3" style={toolbarMainRowAnimatedStyle}>
                             {isPlaybackMode ? (
-                                <Pressable onPress={() => void handleStopPlayback()}>
-                                    <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: destructiveColor }}>
-                                        <Square size={20} strokeWidth={2} color={destructiveForegroundColor} />
-                                    </View>
-                                </Pressable>
+                                <RoundControlButton backgroundColor={destructiveColor} onPress={() => void handleStopPlayback()}>
+                                    <Square size={20} strokeWidth={2} color={destructiveForegroundColor} />
+                                </RoundControlButton>
                             ) : (
-                                <Pressable onPress={handleBackPress}>
-                                    <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
-                                        <ArrowLeft size={20} strokeWidth={2} color={textColor} />
-                                    </View>
-                                </Pressable>
+                                <RoundControlButton backgroundColor={mutedColor} onPress={handleBackPress}>
+                                    <ArrowLeft size={20} strokeWidth={2} color={textColor} />
+                                </RoundControlButton>
                             )}
 
-                            <View className="flex-1 items-center justify-center">
-                                {isPlaybackMode ? (
-                                    <View className="flex-row items-center gap-4">
-                                        <Pressable onPress={handleRewind}>
-                                            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
-                                                <Rewind size={20} strokeWidth={2} color={textColor} />
-                                            </View>
-                                        </Pressable>
-                                        <Pressable onPress={handleFastForward}>
-                                            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
-                                                <FastForward size={20} strokeWidth={2} color={textColor} />
-                                            </View>
-                                        </Pressable>
-                                        <Pressable onPress={handleOpenPlaybackRateSheet}>
-                                            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: mutedColor }}>
-                                                {playbackRate === 1.0 ? (
-                                                    <Gauge size={20} strokeWidth={2} color={textColor} />
-                                                ) : (
-                                                    <TextX style={{ color: primaryColor }}>{speedLabel}x</TextX>
-                                                )}
-                                            </View>
-                                        </Pressable>
-                                    </View>
-                                ) : (
-                                    <TextX style={{ color: mutedTextColor }}>点击右侧按钮开始播放</TextX>
-                                )}
-                            </View>
+                            <View className="flex-1 items-center justify-center">{renderPlaybackCenter()}</View>
 
                             <BouncyPressable onPress={startPlayback} scaleIn={1.08}>
-                                <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: primaryColor }}>
+                                <View
+                                    className="h-12 w-12 items-center justify-center rounded-full"
+                                    style={{ backgroundColor: primaryColor }}>
                                     {playbackCompleted ? (
                                         <RotateCcw size={22} color={primaryForegroundColor} />
                                     ) : isPlaying ? (
                                         <Ionicons name="pause" size={22} color={primaryForegroundColor} />
                                     ) : (
-                                        <Ionicons name="play" size={22} color={primaryForegroundColor} style={{ transform: [{ translateX: 1.5 }] }} />
+                                        <Ionicons
+                                            name="play"
+                                            size={22}
+                                            color={primaryForegroundColor}
+                                            style={{ transform: [{ translateX: 1.5 }] }}
+                                        />
                                     )}
                                 </View>
                             </BouncyPressable>
@@ -238,7 +332,7 @@ export default function ImportAudioPage() {
 
                         <Animated.View style={playbackBarAnimatedStyle} pointerEvents={isPlaybackMode ? 'auto' : 'none'}>
                             <View className="flex-row items-center gap-3 rounded-xl px-2.5 py-2">
-                                <TextX style={{ color: mutedTextColor, width: 48 }}>{formatTime(displayCurrentSec)}</TextX>
+                                <TimeLabel value={formatTime(displayCurrentSec)} color={mutedTextColor} />
                                 <View className="flex-1">
                                     <Progress
                                         value={progressPercent}
@@ -250,7 +344,7 @@ export default function ImportAudioPage() {
                                         onSeekEnd={onSeekEnd}
                                     />
                                 </View>
-                                <TextX style={{ color: mutedTextColor, width: 48, textAlign: 'right' }}>{formatTime(durationSec)}</TextX>
+                                <TimeLabel value={formatTime(durationSec)} color={mutedTextColor} align="right" />
                             </View>
                         </Animated.View>
                     </Animated.View>
@@ -286,13 +380,7 @@ export default function ImportAudioPage() {
                 onCancel={cancelConfirmDialog}
                 dismissible={false}
             />
-            <LoadingOverlay
-                visible={isPreparingSession || saveOverlayVisible}
-                variant="bars"
-                size="lg"
-                showLabel
-                label={isPreparingSession ? '正在准备导入会话...' : saveOverlayLabel}
-            />
+            <LoadingOverlay visible={saveOverlayVisible} variant="bars" size="lg" showLabel label={saveOverlayLabel} />
             {ActionSheet}
         </DefaultLayout>
     );

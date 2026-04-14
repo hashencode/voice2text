@@ -1,9 +1,20 @@
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { FolderInput, Heart, HeartOff, PencilLine, Share2, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AlertDialog } from '~/components/ui/alert-dialog';
+import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
+import { CommonEmptyState } from '~/components/ui/common-empty-state';
+import { ModalMask } from '~/components/ui/modal-mask';
+import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
+import { TextX } from '~/components/ui/textx';
+import { useToast } from '~/components/ui/toast';
+import { setCurrentRecordingFolderName } from '~/data/mmkv/app-config';
+import type { Folder } from '~/data/sqlite/services/folders.service';
+import { listFolders, updateFolderFavorite } from '~/data/sqlite/services/folders.service';
+import { listRecordingMetaOverview, updateRecordingFavorite } from '~/data/sqlite/services/recordings.service';
 import NameInputDialog from '~/features/home/common/name-input-dialog';
 import FileListToolbar from '~/features/home/file-list/file-list-toolbar';
 import FileListView from '~/features/home/file-list/file-list-view';
@@ -14,18 +25,7 @@ import { useFileSelection } from '~/features/home/hooks/use-file-selection';
 import { useFolderActions } from '~/features/home/hooks/use-folder-actions';
 import { useFolderSelection } from '~/features/home/hooks/use-folder-selection';
 import { useItemActions } from '~/features/home/hooks/use-item-actions';
-import { AlertDialog } from '~/components/ui/alert-dialog';
-import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
-import { ModalMask } from '~/components/ui/modal-mask';
-import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
-import { TextX } from '~/components/ui/textx';
-import { useToast } from '~/components/ui/toast';
-import { setCurrentRecordingFolderName } from '~/data/mmkv/app-config';
-import type { Folder } from '~/data/sqlite/services/folders.service';
-import { listFolders, updateFolderFavorite } from '~/data/sqlite/services/folders.service';
-import { listRecordingMeta, updateRecordingFavorite } from '~/data/sqlite/services/recordings.service';
 import { useColor } from '~/hooks/useColor';
-import { FONT_SIZE_SM } from '~/theme/globals';
 
 type HomeRecordingItem = {
     path: string;
@@ -34,6 +34,33 @@ type HomeRecordingItem = {
     durationMs: number | null;
     recordedAtMs: number | null;
 };
+
+type ActionMenuItem = {
+    key: 'rename' | 'move' | 'favorite' | 'share' | 'delete';
+    label: string;
+    icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+    disabled: boolean;
+};
+
+function ActionMenuButton({
+    action,
+    textColor,
+    onPress,
+}: {
+    action: ActionMenuItem;
+    textColor: string;
+    onPress: (key: ActionMenuItem['key']) => void;
+}) {
+    return (
+        <Pressable
+            onPress={() => onPress(action.key)}
+            disabled={action.disabled}
+            className={`flex-1 items-center justify-center gap-y-1 rounded-xl ${action.disabled ? 'opacity-50' : ''}`}>
+            <action.icon size={26} color={textColor} strokeWidth={1.5} />
+            <TextX className="text-[13px]">{action.label}</TextX>
+        </Pressable>
+    );
+}
 
 const ALL_FOLDERS_KEY = '__all_folders__';
 
@@ -56,6 +83,7 @@ function extractFolder(path: string): string {
 }
 
 export default function HomeList() {
+    const router = useRouter();
     const { toast } = useToast();
     const insets = useSafeAreaInsets();
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
@@ -86,7 +114,7 @@ export default function HomeList() {
             setLoading(true);
         }
         try {
-            const [rows, folderRows] = await Promise.all([listRecordingMeta(), listFolders()]);
+            const [rows, folderRows] = await Promise.all([listRecordingMetaOverview(), listFolders()]);
             setItems(
                 rows.map(item => ({
                     path: item.path,
@@ -190,23 +218,17 @@ export default function HomeList() {
         return selectedItemForRename?.isFavorite === true;
     }, [folders, isFolderListMode, isSingleSelectMode, selectedCount, selectedFolderNameForRename, selectedItemForRename]);
 
-    const handleToggleMultiSelectMode = React.useCallback(() => {
-        setIsMultiSelectMode(prev => {
-            if (prev) {
-                clearSelectedPaths();
-                clearSelectedFolderNames();
-                setIsSingleSelectMode(false);
-                setIsSingleSelectClosing(false);
-            } else {
-                // Entering multi-select should start clean and not inherit single-action selection.
-                clearSelectedPaths();
-                clearSelectedFolderNames();
-                setIsSingleSelectMode(false);
-                setIsSingleSelectClosing(false);
-            }
-            return !prev;
-        });
+    const resetSelectionState = React.useCallback(() => {
+        clearSelectedPaths();
+        clearSelectedFolderNames();
+        setIsSingleSelectMode(false);
+        setIsSingleSelectClosing(false);
     }, [clearSelectedFolderNames, clearSelectedPaths]);
+
+    const handleToggleMultiSelectMode = React.useCallback(() => {
+        resetSelectionState();
+        setIsMultiSelectMode(prev => !prev);
+    }, [resetSelectionState]);
 
     const handleToggleSelectAll = React.useCallback(() => {
         if (isFolderListMode) {
@@ -258,13 +280,26 @@ export default function HomeList() {
     const openSingleActionForFile = React.useCallback(
         (path: string) => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            setIsMultiSelectMode(false);
-            setIsSingleSelectClosing(false);
-            setIsSingleSelectMode(true);
-            setSelectedFolderNames([]);
+            resetSelectionState();
             setSelectedPaths([path]);
+            setIsSingleSelectMode(true);
         },
-        [setSelectedFolderNames, setSelectedPaths],
+        [resetSelectionState, setSelectedPaths],
+    );
+    const handleOpenRecording = React.useCallback(
+        (item: HomeRecordingItem) => {
+            const initialName = item.displayName ?? extractFileName(item.path);
+            router.push({
+                pathname: '/import-audio',
+                params: {
+                    uri: item.path,
+                    name: initialName,
+                    recordedAtMs: item.recordedAtMs ? String(item.recordedAtMs) : undefined,
+                    source: 'list',
+                },
+            });
+        },
+        [router],
     );
     const openSingleActionForFolder = React.useCallback(
         (name: string) => {
@@ -272,13 +307,11 @@ export default function HomeList() {
                 return;
             }
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            setIsMultiSelectMode(false);
-            setIsSingleSelectClosing(false);
-            setIsSingleSelectMode(true);
-            setSelectedPaths([]);
+            resetSelectionState();
             setSelectedFolderNames([name]);
+            setIsSingleSelectMode(true);
         },
-        [setSelectedFolderNames, setSelectedPaths],
+        [resetSelectionState, setSelectedFolderNames],
     );
 
     const actionMenuTitle =
@@ -430,10 +463,18 @@ export default function HomeList() {
     );
 
     const handleActionPress = React.useCallback(
-        (actionKey: string) => {
+        (actionKey: ActionMenuItem['key']) => {
             if (actionKey === 'rename') {
                 closeSingleSelectMode();
                 handleOpenRenameDialog();
+                return;
+            }
+            if (actionKey === 'move') {
+                closeSingleSelectMode();
+                toast({
+                    title: '移动功能即将上线',
+                    variant: 'info',
+                });
                 return;
             }
             if (actionKey === 'delete') {
@@ -474,11 +515,11 @@ export default function HomeList() {
             toast,
         ],
     );
-    const favoriteAction =
+    const favoriteAction: ActionMenuItem =
         isSingleSelectMode && isSingleTargetFavorited
             ? { key: 'favorite', label: '取消收藏', icon: HeartOff, disabled: selectedCount === 0 }
             : { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 };
-    const actionMenuActions = isFolderListMode
+    const actionMenuActions: ActionMenuItem[] = isFolderListMode
         ? isMultiSelectMode
             ? [{ key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 }]
             : [
@@ -501,19 +542,9 @@ export default function HomeList() {
             ];
     const actionMenuContent = (
         <View className="border-t pb-4 pt-4" style={{ borderTopColor: borderColor }}>
-            <View className="flex flex-row justify-between">
+            <View className="flex-row justify-between">
                 {actionMenuActions.map(action => (
-                    <Pressable
-                        key={action.key}
-                        onPress={() => handleActionPress(action.key)}
-                        disabled={action.disabled}
-                        className="flex-1 items-center justify-center gap-y-1 rounded-xl"
-                        style={{
-                            opacity: action.disabled ? 0.45 : 1,
-                        }}>
-                        <action.icon size={26} color={textColor} strokeWidth={1.5} />
-                        <TextX style={{ fontSize: FONT_SIZE_SM }}>{action.label}</TextX>
-                    </Pressable>
+                    <ActionMenuButton key={action.key} action={action} textColor={textColor} onPress={handleActionPress} />
                 ))}
             </View>
             <BottomSafeAreaSpacer />
@@ -529,6 +560,38 @@ export default function HomeList() {
             {actionMenuContent}
         </View>
     );
+    const handleEnterFolderListMode = React.useCallback(() => {
+        setIsFolderListMode(true);
+        if (isMultiSelectMode || isSingleSelectMode) {
+            setIsMultiSelectMode(false);
+            resetSelectionState();
+        }
+    }, [isMultiSelectMode, isSingleSelectMode, resetSelectionState]);
+    const handlePressSearch = React.useCallback(() => {
+        toast({
+            title: '搜索功能即将上线',
+            variant: 'info',
+        });
+    }, [toast]);
+    const handleCloseRenameDialog = React.useCallback(() => {
+        setRenameError('');
+        setRenameDialogVisible(false);
+    }, []);
+    const handleCloseDeleteDialog = React.useCallback(() => {
+        if (deleting) {
+            return;
+        }
+        setDeleteDialogVisible(false);
+    }, [deleting]);
+    const handleCloseCreateFolderDialog = React.useCallback(() => {
+        if (creatingFolder) {
+            return;
+        }
+        setCreateFolderError('');
+        setCreateFolderDialogVisible(false);
+    }, [creatingFolder]);
+    const isFolderListEmpty = !loading && isFolderListMode && folderListEntries.length === 0;
+    const isFileListEmpty = !loading && !isFolderListMode && filteredItems.length === 0;
 
     return (
         <View className="flex-1">
@@ -548,22 +611,8 @@ export default function HomeList() {
                     isMultiSelectMode={isMultiSelectMode}
                     actionMenuTitle={actionMenuTitle}
                     currentFolderLabel={currentFolderLabel}
-                    onPressFolderTitle={() => {
-                        setIsFolderListMode(true);
-                        if (isMultiSelectMode || isSingleSelectMode) {
-                            setIsMultiSelectMode(false);
-                            setIsSingleSelectMode(false);
-                            setIsSingleSelectClosing(false);
-                            setSelectedPaths([]);
-                            setSelectedFolderNames([]);
-                        }
-                    }}
-                    onPressSearch={() => {
-                        toast({
-                            title: '搜索功能即将上线',
-                            variant: 'info',
-                        });
-                    }}
+                    onPressFolderTitle={handleEnterFolderListMode}
+                    onPressSearch={handlePressSearch}
                     isAllSelected={isAllFilteredSelected}
                     isToggleSelectAllDisabled={!isMultiSelectMode || filteredItems.length === 0}
                     onToggleSelectAll={handleToggleSelectAll}
@@ -572,8 +621,8 @@ export default function HomeList() {
             )}
             <PullToRefreshScrollView
                 onRefresh={onPullRefresh}
-                isEmpty={!loading && (isFolderListMode ? folderListEntries.length === 0 : filteredItems.length === 0)}
-                emptyText={isFolderListMode ? '暂无文件夹' : '暂无录音文件'}
+                isEmpty={isFolderListEmpty}
+                emptyText="暂无文件夹"
                 isLoadedAll={!loading && !isFolderListMode && filteredItems.length > 0}
                 loadedAllText={isFolderListMode ? '已加载全部文件夹' : '已加载全部录音'}
                 contentContainerStyle={{ paddingBottom: shouldRenderActionMenu ? 96 + insets.bottom : 12 }}>
@@ -596,15 +645,22 @@ export default function HomeList() {
                         onOpenSingleActionForFolder={openSingleActionForFolder}
                     />
                 ) : (
-                    <FileListView
-                        items={filteredItems}
-                        isMultiSelectMode={isMultiSelectMode}
-                        selectedPaths={selectedPaths}
-                        extractFileName={extractFileName}
-                        onToggleSelectPath={toggleSelectPath}
-                        onEnterMultiSelectWithItem={enterMultiSelectWithItem}
-                        onOpenSingleActionForItem={openSingleActionForFile}
-                    />
+                    <>
+                        {isFileListEmpty ? (
+                            <CommonEmptyState text="暂无录音文件" />
+                        ) : (
+                            <FileListView
+                                items={filteredItems}
+                                isMultiSelectMode={isMultiSelectMode}
+                                selectedPaths={selectedPaths}
+                                extractFileName={extractFileName}
+                                onToggleSelectPath={toggleSelectPath}
+                                onEnterMultiSelectWithItem={enterMultiSelectWithItem}
+                                onOpenSingleActionForItem={openSingleActionForFile}
+                                onOpenItem={handleOpenRecording}
+                            />
+                        )}
+                    </>
                 )}
             </PullToRefreshScrollView>
             <ModalMask
@@ -618,10 +674,7 @@ export default function HomeList() {
             {!isSingleMaskVisible && !isSingleSelectClosing && isMultiSelectMode && selectedCount > 0 ? actionMenuLayer : null}
             <NameInputDialog
                 isVisible={renameDialogVisible}
-                onClose={() => {
-                    setRenameError('');
-                    setRenameDialogVisible(false);
-                }}
+                onClose={handleCloseRenameDialog}
                 title={isFolderListMode ? '重命名文件夹' : '重命名文件'}
                 description={isFolderListMode ? '仅修改文件夹名称。' : '只修改显示名称，不会修改原始文件名。'}
                 value={renameValue}
@@ -639,12 +692,7 @@ export default function HomeList() {
             />
             <AlertDialog
                 isVisible={deleteDialogVisible}
-                onClose={() => {
-                    if (deleting) {
-                        return;
-                    }
-                    setDeleteDialogVisible(false);
-                }}
+                onClose={handleCloseDeleteDialog}
                 title="确认删除"
                 confirmText="确认删除"
                 cancelText="取消"
@@ -661,13 +709,7 @@ export default function HomeList() {
             </AlertDialog>
             <NameInputDialog
                 isVisible={createFolderDialogVisible}
-                onClose={() => {
-                    if (creatingFolder) {
-                        return;
-                    }
-                    setCreateFolderError('');
-                    setCreateFolderDialogVisible(false);
-                }}
+                onClose={handleCloseCreateFolderDialog}
                 title="创建文件夹"
                 description="创建后可在文件夹列表中查看。"
                 value={createFolderValue}

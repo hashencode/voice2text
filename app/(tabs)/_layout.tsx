@@ -14,14 +14,14 @@ export default function TabLayout() {
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: 'Home',
+                    title: '首页',
                     tabBarIcon: ({ color }) => <Home color={color} />,
                 }}
             />
             <Tabs.Screen
                 name="setting"
                 options={{
-                    title: 'Setting',
+                    title: '设置',
                     tabBarIcon: ({ color }) => <Smile color={color} />,
                 }}
             />

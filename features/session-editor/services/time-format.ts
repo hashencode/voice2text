@@ -22,7 +22,7 @@ export function formatTime(seconds: number): string {
 export function toDisplayName(rawName?: string | string[]): string {
     const normalizedName = Array.isArray(rawName) ? rawName[0] : rawName;
     if (!normalizedName) {
-        return '导入音频';
+        return '未命名文件';
     }
     const dotIndex = normalizedName.lastIndexOf('.');
     if (dotIndex <= 0) {
