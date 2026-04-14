@@ -1,6 +1,13 @@
 import { getSqliteDb } from '~/data/sqlite/client';
 import type { RecordingMeta, RecordingMetaRow } from '~/data/sqlite/types';
 
+function normalizeRecognitionMode(value: string | null | undefined): 'offline' | 'online' | null {
+    if (value === 'offline' || value === 'online') {
+        return value;
+    }
+    return null;
+}
+
 function toMeta(row: RecordingMetaRow): RecordingMeta {
     return {
         path: row.path,
@@ -11,6 +18,8 @@ function toMeta(row: RecordingMetaRow): RecordingMeta {
         noteRichText: row.note_rich_text,
         transcriptText: row.transcript_text,
         summaryText: row.summary_text,
+        recentRecognitionMode: normalizeRecognitionMode(row.recent_recognition_mode),
+        lastRecognitionAtMs: row.last_recognition_at_ms,
         sampleRate: row.sample_rate,
         numSamples: row.num_samples,
         durationMs: row.duration_ms,
@@ -23,7 +32,7 @@ function toMeta(row: RecordingMetaRow): RecordingMeta {
 export async function listRecordingMeta(): Promise<RecordingMeta[]> {
     const db = await getSqliteDb();
     const rows = await db.getAllAsync<RecordingMetaRow>(
-        'SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason FROM recordings ORDER BY recorded_at_ms DESC, path DESC',
+        'SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, recent_recognition_mode, last_recognition_at_ms, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason FROM recordings ORDER BY recorded_at_ms DESC, path DESC',
     );
     return rows.map(toMeta);
 }
@@ -51,10 +60,11 @@ export async function listRecordingMetaOverview(): Promise<RecordingMetaOverview
 export async function upsertRecordingMeta(meta: RecordingMeta): Promise<void> {
     const db = await getSqliteDb();
     const now = Date.now();
+    const recognitionMode = normalizeRecognitionMode(meta.recentRecognitionMode);
     await db.runAsync(
         `INSERT INTO recordings (
-            path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason, created_at_ms, updated_at_ms
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, recent_recognition_mode, last_recognition_at_ms, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason, created_at_ms, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(path) DO UPDATE SET
             display_name=COALESCE(excluded.display_name, recordings.display_name),
             is_favorite=COALESCE(excluded.is_favorite, recordings.is_favorite),
@@ -63,6 +73,8 @@ export async function upsertRecordingMeta(meta: RecordingMeta): Promise<void> {
             note_rich_text=COALESCE(excluded.note_rich_text, recordings.note_rich_text),
             transcript_text=COALESCE(excluded.transcript_text, recordings.transcript_text),
             summary_text=COALESCE(excluded.summary_text, recordings.summary_text),
+            recent_recognition_mode=COALESCE(excluded.recent_recognition_mode, recordings.recent_recognition_mode),
+            last_recognition_at_ms=excluded.last_recognition_at_ms,
             sample_rate=excluded.sample_rate,
             num_samples=excluded.num_samples,
             duration_ms=excluded.duration_ms,
@@ -78,6 +90,8 @@ export async function upsertRecordingMeta(meta: RecordingMeta): Promise<void> {
         meta.noteRichText ?? null,
         meta.transcriptText ?? null,
         meta.summaryText ?? null,
+        recognitionMode,
+        meta.lastRecognitionAtMs ?? null,
         meta.sampleRate,
         meta.numSamples,
         meta.durationMs,
@@ -111,7 +125,7 @@ export async function findRecordingMetaByPath(path: string): Promise<RecordingMe
     }
     const db = await getSqliteDb();
     const row = await db.getFirstAsync<RecordingMetaRow>(
-        `SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason
+        `SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, recent_recognition_mode, last_recognition_at_ms, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason
          FROM recordings
          WHERE path = ?
          LIMIT 1`,
@@ -127,7 +141,7 @@ export async function findRecordingMetaBySourceFileNameAndFileSize(sourceFileNam
     }
     const db = await getSqliteDb();
     const row = await db.getFirstAsync<RecordingMetaRow>(
-        `SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason
+        `SELECT path, display_name, is_favorite, source_file_name, file_size_bytes, note_rich_text, transcript_text, summary_text, recent_recognition_mode, last_recognition_at_ms, sample_rate, num_samples, duration_ms, recorded_at_ms, session_id, reason
          FROM recordings
          WHERE lower(trim(source_file_name)) = ? AND file_size_bytes = ?
          ORDER BY updated_at_ms DESC, recorded_at_ms DESC

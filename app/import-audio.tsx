@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
+import { ChatBubbleTranslate, DesignPencil, Post, UndoAction } from 'iconoir-react-native';
 import { ArrowLeft, Gauge, RotateCcw, Square } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
@@ -110,10 +110,15 @@ export default function ImportAudioPage() {
         isInitialSessionLoading,
         recognitionLanguage,
         setRecognitionLanguage,
+        recognitionState,
         recognitionStatusIcon,
         recognitionStatusText,
         recognitionProgressPercent,
         isRecognitionBusy,
+        recognitionPickerValue,
+        reRecognitionOptions,
+        cancelRecognition,
+        handleReRecognitionModeChange,
         runOfflineRecognition,
         runOnlineRecognition,
     } = useImportAudioSession({
@@ -137,6 +142,7 @@ export default function ImportAudioPage() {
     const showKeyboardToolbar = editorTab === 'remark' && isNoteFocused;
     const remarkPlaceholder = fromList && isInitialSessionLoading ? '正在读取灵感' : '记录此刻灵感';
     const transcriptHasContent = transcriptText.trim().length > 0;
+    const showStopRecognitionButton = recognitionState === 'preparing' || recognitionState === 'recognizing';
     const recognitionIconColor =
         recognitionStatusIcon === 'warning-triangle'
             ? destructiveColor
@@ -214,16 +220,46 @@ export default function ImportAudioPage() {
 
                             <TabsContent value="transcript" className="flex-1">
                                 {transcriptHasContent ? (
-                                    <TextInput
-                                        value={transcriptText}
-                                        onChangeText={setTranscriptText}
-                                        placeholder="编辑语音识别内容"
-                                        placeholderTextColor={mutedTextColor}
-                                        multiline
-                                        textAlignVertical="top"
-                                        className="flex-1 p-0"
-                                        style={{ color: textColor, fontSize: FONT_SIZE_LG }}
-                                    />
+                                    <View className="flex-1">
+                                        <View className="mb-3 flex-row justify-end">
+                                            {showStopRecognitionButton ? (
+                                                <View className="w-28">
+                                                    <ButtonX size="sm" variant="destructive" onPress={() => void cancelRecognition()}>
+                                                        停止识别
+                                                    </ButtonX>
+                                                </View>
+                                            ) : (
+                                                <Picker
+                                                    value={recognitionPickerValue}
+                                                    modalTitle="重新识别"
+                                                    options={reRecognitionOptions}
+                                                    onValueChange={handleReRecognitionModeChange}
+                                                    disabled={isRecognitionBusy}
+                                                    style={{
+                                                        width: 36,
+                                                        minHeight: 36,
+                                                        borderWidth: 0,
+                                                        backgroundColor: mutedColor,
+                                                        borderRadius: 10,
+                                                        paddingHorizontal: 0,
+                                                        justifyContent: 'center',
+                                                    }}
+                                                    inputStyle={{ width: 0, opacity: 0 }}
+                                                    rightComponent={<UndoAction width={18} height={18} color={textColor} />}
+                                                />
+                                            )}
+                                        </View>
+                                        <TextInput
+                                            value={transcriptText}
+                                            onChangeText={setTranscriptText}
+                                            placeholder="编辑语音识别内容"
+                                            placeholderTextColor={mutedTextColor}
+                                            multiline
+                                            textAlignVertical="top"
+                                            className="flex-1 p-0"
+                                            style={{ color: textColor, fontSize: FONT_SIZE_LG }}
+                                        />
+                                    </View>
                                 ) : (
                                     <View className="flex-1 items-center justify-center px-4">
                                         <View className="items-center gap-3">
@@ -254,27 +290,26 @@ export default function ImportAudioPage() {
                                             />
                                         </View>
 
-                                        <View className="mt-4 w-full max-w-xs flex-row items-center gap-2">
-                                            <View className="flex-1">
-                                                <ButtonX
-                                                    variant="secondary"
-                                                    size="lg"
-                                                    onPress={() => void runOfflineRecognition()}
-                                                    disabled={isRecognitionBusy}
-                                                    loading={isRecognitionBusy}>
-                                                    离线识别
+                                        {showStopRecognitionButton ? (
+                                            <View className="mt-4 w-full max-w-xs">
+                                                <ButtonX size="lg" variant="destructive" onPress={() => void cancelRecognition()}>
+                                                    停止识别
                                                 </ButtonX>
                                             </View>
-                                            <View className="flex-1">
-                                                <ButtonX
-                                                    size="lg"
-                                                    variant="primary"
-                                                    onPress={runOnlineRecognition}
-                                                    disabled={isRecognitionBusy}>
-                                                    在线识别
-                                                </ButtonX>
+                                        ) : (
+                                            <View className="mt-4 w-full max-w-xs flex-row items-center gap-2">
+                                                <View className="flex-1">
+                                                    <ButtonX variant="secondary" size="lg" onPress={() => void runOfflineRecognition()}>
+                                                        离线识别
+                                                    </ButtonX>
+                                                </View>
+                                                <View className="flex-1">
+                                                    <ButtonX size="lg" variant="primary" onPress={runOnlineRecognition}>
+                                                        在线识别
+                                                    </ButtonX>
+                                                </View>
                                             </View>
-                                        </View>
+                                        )}
                                     </View>
                                 )}
                             </TabsContent>

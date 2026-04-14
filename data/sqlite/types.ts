@@ -7,6 +7,8 @@ export type RecordingMeta = {
     noteRichText?: string | null;
     transcriptText?: string | null;
     summaryText?: string | null;
+    recentRecognitionMode?: 'offline' | 'online' | null;
+    lastRecognitionAtMs?: number | null;
     sampleRate: number | null;
     numSamples: number | null;
     durationMs: number | null;
@@ -24,6 +26,8 @@ export type RecordingMetaRow = {
     note_rich_text: string | null;
     transcript_text: string | null;
     summary_text: string | null;
+    recent_recognition_mode: string | null;
+    last_recognition_at_ms: number | null;
     sample_rate: number | null;
     num_samples: number | null;
     duration_ms: number | null;

@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS recordings (
   note_rich_text TEXT,
   transcript_text TEXT,
   summary_text TEXT,
+  recent_recognition_mode TEXT,
+  last_recognition_at_ms INTEGER,
   sample_rate INTEGER,
   num_samples INTEGER,
   duration_ms INTEGER,

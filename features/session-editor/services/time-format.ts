@@ -31,6 +31,16 @@ export function toDisplayName(rawName?: string | string[]): string {
     return normalizedName.slice(0, dotIndex);
 }
 
+export function formatImportAudioDefaultName(ms: number): string {
+    const date = new Date(ms);
+    const year = `${date.getFullYear()}`.slice(-2);
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    const hour = `${date.getHours()}`.padStart(2, '0');
+    const minute = `${date.getMinutes()}`.padStart(2, '0');
+    return `导入音频-${year}${month}${day}${hour}${minute}`;
+}
+
 export function formatSpeed(speed: number): string {
     return (Math.round(speed * 10) / 10).toFixed(1);
 }

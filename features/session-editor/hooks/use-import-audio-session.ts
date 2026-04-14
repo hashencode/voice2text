@@ -12,7 +12,7 @@ import {
     upsertRecordingMeta,
     type RecordingMeta,
 } from '~/data/sqlite/services/recordings.service';
-import { formatSpeed, toDisplayName } from '~/features/session-editor/services/time-format';
+import { formatImportAudioDefaultName, formatSpeed, toDisplayName } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import { transcribeFileWithTiming } from '~/integrations/sherpa/recognition-service';
 import SherpaOnnx, { ensureModelReady, type DownloadModelProgress, type SherpaModelId } from '~/modules/sherpa';
@@ -22,8 +22,10 @@ const MIN_SAVE_OVERLAY_DURATION_MS = 2000;
 const MODEL_BASE_URL = 'https://pub-8a517913a3384e018c89aacd59a7b2db.r2.dev/models/';
 
 type RecognitionLanguage = 'zh' | 'en';
+type RecognitionMode = 'offline' | 'online';
 type RecognitionInstallState = 'ready' | 'installing' | 'failed';
 type RecognitionStatusIcon = 'voice-scan' | 'arrow-down-circle' | 'warning-triangle';
+type RecognitionState = 'idle' | 'preparing' | 'recognizing' | 'stopped' | 'success' | 'failed';
 
 type UseImportAudioSessionOptions = {
     audioUri?: string;
@@ -111,6 +113,14 @@ function toSingleName(name?: string | string[]): string {
     return Array.isArray(name) ? (name[0] ?? '') : (name ?? '');
 }
 
+function resolveInitialDisplayName(rawName?: string | string[], fallbackMs?: number): string {
+    const singleName = toSingleName(rawName).trim();
+    if (!singleName || singleName === '导入音频') {
+        return formatImportAudioDefaultName(fallbackMs ?? Date.now());
+    }
+    return toDisplayName(singleName);
+}
+
 function isSameSnapshot(a: SessionSnapshot, b: SessionSnapshot): boolean {
     return (
         a.displayName === b.displayName &&
@@ -144,6 +154,13 @@ function resolveInstallStatusText(progress: DownloadModelProgress): string {
     return '正在应用模型';
 }
 
+function normalizeRecognitionMode(value: string | null | undefined): RecognitionMode | null {
+    if (value === 'offline' || value === 'online') {
+        return value;
+    }
+    return null;
+}
+
 export function useImportAudioSession({
     audioUri,
     audioName,
@@ -152,7 +169,13 @@ export function useImportAudioSession({
     initialDisplayName,
     initialHeaderAtMs,
 }: UseImportAudioSessionOptions) {
-    const [displayName, setDisplayName] = React.useState(() => initialDisplayName?.trim() || toDisplayName(audioName));
+    const importDefaultDisplayName = React.useMemo(
+        () => formatImportAudioDefaultName(initialHeaderAtMs ?? Date.now()),
+        [initialHeaderAtMs],
+    );
+    const [displayName, setDisplayName] = React.useState(
+        () => initialDisplayName?.trim() || (fromList ? resolveInitialDisplayName(audioName, initialHeaderAtMs) : importDefaultDisplayName),
+    );
     const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
     const [headerAtMs, setHeaderAtMs] = React.useState(() => initialHeaderAtMs ?? Date.now());
     const [remarkText, setRemarkText] = React.useState('');
@@ -175,6 +198,8 @@ export function useImportAudioSession({
     const [recognitionStatusText, setRecognitionStatusText] = React.useState('选择语言和识别方式');
     const [recognitionProgressPercent, setRecognitionProgressPercent] = React.useState<number | null>(null);
     const [isRecognizing, setIsRecognizing] = React.useState(false);
+    const [recognitionState, setRecognitionState] = React.useState<RecognitionState>('idle');
+    const [recentRecognitionMode, setRecentRecognitionMode] = React.useState<RecognitionMode | null>(null);
     const [confirmDialogState, setConfirmDialogState] = React.useState<ConfirmDialogState>({
         isVisible: false,
         title: '',
@@ -199,8 +224,9 @@ export function useImportAudioSession({
     const matchedRecordingRef = React.useRef<RecordingMeta | null>(null);
     const remarkDraftRef = React.useRef('');
     const recognitionRunIdRef = React.useRef(0);
+    const recognitionStartTranscriptRef = React.useRef('');
     const initialSnapshotRef = React.useRef<SessionSnapshot>({
-        displayName: initialDisplayName?.trim() || toDisplayName(audioName),
+        displayName: initialDisplayName?.trim() || (fromList ? resolveInitialDisplayName(audioName, initialHeaderAtMs) : importDefaultDisplayName),
         noteRichText: '',
         transcriptText: '',
         summaryText: '',
@@ -397,10 +423,14 @@ export function useImportAudioSession({
         remarkDraftRef.current = text;
     }, []);
 
-    const stopCurrentRecognition = useCallback(async () => {
+    const cancelRecognition = useCallback(async () => {
         recognitionRunIdRef.current += 1;
         setIsRecognizing(false);
+        setRecognitionInstallState('ready');
+        setRecognitionProgressPercent(null);
+        setRecognitionState('stopped');
         setRecognitionStatusText('识别已终止');
+        setTranscriptText(recognitionStartTranscriptRef.current);
         try {
             await SherpaOnnx.stopRealtimeAsr();
         } catch (error) {
@@ -419,13 +449,16 @@ export function useImportAudioSession({
             });
             return;
         }
-        if (isRecognizing) {
+        if (recognitionState === 'preparing' || recognitionState === 'recognizing') {
             return;
         }
 
         const modelId = resolveOfflineModelId(recognitionLanguage);
+        recognitionStartTranscriptRef.current = transcriptText;
+        setRecentRecognitionMode('offline');
         const runId = recognitionRunIdRef.current + 1;
         recognitionRunIdRef.current = runId;
+        setRecognitionState('preparing');
         setRecognitionInstallState('installing');
         setRecognitionStatusText('正在准备模型');
         setRecognitionProgressPercent(null);
@@ -454,6 +487,7 @@ export function useImportAudioSession({
             installReady = true;
             setRecognitionProgressPercent(null);
             setRecognitionStatusText('正在语音识别');
+            setRecognitionState('recognizing');
             setIsRecognizing(true);
 
             const { transcribe } = await transcribeFileWithTiming({
@@ -466,10 +500,12 @@ export function useImportAudioSession({
 
             setTranscriptText(transcribe.result.text || '');
             setRecognitionStatusText('识别完成');
+            setRecognitionState('success');
         } catch (error) {
             if (recognitionRunIdRef.current !== runId) {
                 return;
             }
+            setTranscriptText(recognitionStartTranscriptRef.current);
             if (!installReady) {
                 setRecognitionInstallState('failed');
                 setRecognitionStatusText((error as Error)?.message ? `安装失败：${(error as Error).message}` : '安装失败');
@@ -477,6 +513,7 @@ export function useImportAudioSession({
                 setRecognitionInstallState('ready');
                 setRecognitionStatusText((error as Error)?.message ? `识别失败：${(error as Error).message}` : '识别失败');
             }
+            setRecognitionState('failed');
             toast({
                 title: '离线识别失败',
                 description: (error as Error)?.message ?? '请稍后重试',
@@ -488,9 +525,10 @@ export function useImportAudioSession({
                 setIsRecognizing(false);
             }
         }
-    }, [isRecognizing, recognitionLanguage, toast]);
+    }, [recognitionLanguage, recognitionState, toast, transcriptText]);
 
     const runOnlineRecognition = useCallback(() => {
+        setRecentRecognitionMode('online');
         setRecognitionStatusText('在线识别暂未接入');
         toast({
             title: '在线识别暂不可用',
@@ -499,6 +537,17 @@ export function useImportAudioSession({
             duration: 2200,
         });
     }, [toast]);
+
+    const handleReRecognitionModeChange = useCallback(
+        (value: string) => {
+            if (value === 'online') {
+                runOnlineRecognition();
+                return;
+            }
+            void runOfflineRecognition();
+        },
+        [runOfflineRecognition, runOnlineRecognition],
+    );
 
     const saveCurrentSession = useCallback(async (): Promise<boolean> => {
         if (saveInFlightRef.current) {
@@ -563,12 +612,14 @@ export function useImportAudioSession({
             const recordedAtMs = matchedRecordingRef.current?.recordedAtMs ?? now;
             await upsertRecordingMeta({
                 path: finalPath,
-                displayName: displayName.trim() || toDisplayName(sourceFileName),
+                displayName: displayName.trim() || importDefaultDisplayName,
                 sourceFileName,
                 fileSizeBytes: sourceFileSizeBytes ?? null,
                 noteRichText: latestRemarkText,
                 transcriptText,
                 summaryText,
+                recentRecognitionMode,
+                lastRecognitionAtMs: recentRecognitionMode ? Date.now() : matchedRecordingRef.current?.lastRecognitionAtMs ?? null,
                 isFavorite: matchedRecordingRef.current?.isFavorite ?? false,
                 sampleRate: matchedRecordingRef.current?.sampleRate ?? null,
                 numSamples: matchedRecordingRef.current?.numSamples ?? null,
@@ -579,7 +630,7 @@ export function useImportAudioSession({
             });
 
             const nextSnapshot: SessionSnapshot = {
-                displayName: displayName.trim() || toDisplayName(sourceFileName),
+                displayName: displayName.trim() || importDefaultDisplayName,
                 noteRichText: latestRemarkText,
                 transcriptText,
                 summaryText,
@@ -597,6 +648,8 @@ export function useImportAudioSession({
                     sessionId: null,
                     reason: null,
                     isFavorite: false,
+                    recentRecognitionMode: null,
+                    lastRecognitionAtMs: null,
                 }),
                 path: finalPath,
                 displayName: nextSnapshot.displayName,
@@ -606,6 +659,8 @@ export function useImportAudioSession({
                 transcriptText: nextSnapshot.transcriptText,
                 summaryText: nextSnapshot.summaryText,
                 recordedAtMs,
+                recentRecognitionMode,
+                lastRecognitionAtMs: recentRecognitionMode ? Date.now() : matchedRecordingRef.current?.lastRecognitionAtMs ?? null,
             };
 
             return true;
@@ -626,7 +681,18 @@ export function useImportAudioSession({
             setSaveOverlayVisible(false);
             saveInFlightRef.current = false;
         }
-    }, [audioName, displayName, getLatestRemarkText, pausePlayerSafely, resolvedAudioUri, summaryText, toast, transcriptText]);
+    }, [
+        audioName,
+        displayName,
+        getLatestRemarkText,
+        importDefaultDisplayName,
+        pausePlayerSafely,
+        recentRecognitionMode,
+        resolvedAudioUri,
+        summaryText,
+        toast,
+        transcriptText,
+    ]);
 
     const closeConfirmDialog = useCallback(() => {
         setConfirmDialogState(prev => ({ ...prev, isVisible: false }));
@@ -642,7 +708,7 @@ export function useImportAudioSession({
             if (saveInFlightRef.current || isPreparingSession) {
                 return;
             }
-            if (isRecognizing) {
+            if (recognitionState === 'preparing' || recognitionState === 'recognizing') {
                 pendingNavActionRef.current = pendingAction ?? null;
                 setConfirmDialogState({
                     isVisible: true,
@@ -653,7 +719,7 @@ export function useImportAudioSession({
                     confirmButtonProps: { variant: 'destructive' },
                     onConfirm: () => {
                         void (async () => {
-                            await stopCurrentRecognition();
+                            await cancelRecognition();
                             const action = pendingNavActionRef.current;
                             pendingNavActionRef.current = null;
                             allowNextRemoveRef.current = true;
@@ -731,7 +797,7 @@ export function useImportAudioSession({
                 },
             });
         },
-        [getCurrentSnapshot, isPreparingSession, isRecognizing, navigation, saveCurrentSession, stopCurrentRecognition],
+        [cancelRecognition, getCurrentSnapshot, isPreparingSession, navigation, recognitionState, saveCurrentSession],
     );
 
     const handleBackPress = useCallback(() => {
@@ -800,6 +866,7 @@ export function useImportAudioSession({
                         remarkDraftRef.current = matchedByPath.noteRichText ?? '';
                         setTranscriptText(matchedByPath.transcriptText ?? '');
                         setSummaryText(matchedByPath.summaryText ?? '');
+                        setRecentRecognitionMode(normalizeRecognitionMode(matchedByPath.recentRecognitionMode));
                         setHeaderAtMs(matchedByPath.recordedAtMs ?? initialHeaderAtMs ?? Date.now());
                         initialSnapshotRef.current = {
                             displayName:
@@ -848,13 +915,14 @@ export function useImportAudioSession({
                 }
 
                 matchedRecordingRef.current = null;
-                const fallbackDisplayName = initialDisplayName?.trim() || toDisplayName(toSingleName(audioName) || sourceFileName);
+                const fallbackDisplayName = initialDisplayName?.trim() || importDefaultDisplayName;
                 setResolvedAudioUri(sourceUri);
                 setDisplayName(fallbackDisplayName);
                 setRemarkText('');
                 remarkDraftRef.current = '';
                 setTranscriptText('');
                 setSummaryText('');
+                setRecentRecognitionMode(null);
                 setHeaderAtMs(initialHeaderAtMs ?? Date.now());
                 initialSnapshotRef.current = {
                     displayName: fallbackDisplayName,
@@ -867,14 +935,14 @@ export function useImportAudioSession({
                 console.warn('[import-audio] prepare session failed', error);
                 matchedRecordingRef.current = null;
                 sourceFileSizeBytesRef.current = null;
-                const fallbackDisplayName =
-                    initialDisplayName?.trim() || toDisplayName(toSingleName(audioName) || sourceFileNameRef.current || sourceUri);
+                const fallbackDisplayName = initialDisplayName?.trim() || importDefaultDisplayName;
                 setResolvedAudioUri(sourceUri);
                 setDisplayName(fallbackDisplayName);
                 setRemarkText('');
                 remarkDraftRef.current = '';
                 setTranscriptText('');
                 setSummaryText('');
+                setRecentRecognitionMode(null);
                 setHeaderAtMs(initialHeaderAtMs ?? Date.now());
                 initialSnapshotRef.current = {
                     displayName: fallbackDisplayName,
@@ -899,7 +967,7 @@ export function useImportAudioSession({
         return () => {
             cancelled = true;
         };
-    }, [audioName, audioUri, fromList, initialDisplayName, initialHeaderAtMs, navigation, toast]);
+    }, [audioName, audioUri, fromList, importDefaultDisplayName, initialDisplayName, initialHeaderAtMs, navigation, toast]);
 
     useEffect(() => {
         if (!resolvedAudioUri) {
@@ -950,7 +1018,24 @@ export function useImportAudioSession({
         }
         return 'voice-scan';
     }, [recognitionInstallState]);
-    const isRecognitionBusy = isRecognizing || recognitionInstallState === 'installing';
+    const isRecognitionBusy = recognitionState === 'preparing' || recognitionState === 'recognizing';
+    const recognitionPickerValue: RecognitionMode = recentRecognitionMode ?? 'offline';
+    const recentRecognitionLabel = recentRecognitionMode === 'online' ? '**在线识别**' : '**离线识别**';
+    const reRecognitionOptions = React.useMemo(
+        () => [
+            {
+                label: '离线识别',
+                value: 'offline',
+                description: `最近一次使用：${recentRecognitionLabel}`,
+            },
+            {
+                label: '在线识别',
+                value: 'online',
+                description: `最近一次使用：${recentRecognitionLabel}`,
+            },
+        ],
+        [recentRecognitionLabel],
+    );
 
     const speedLabel = formatSpeed(playbackRate);
 
@@ -1018,11 +1103,16 @@ export function useImportAudioSession({
         isInitialSessionLoading,
         recognitionLanguage,
         setRecognitionLanguage,
+        recognitionState,
         recognitionStatusIcon,
         recognitionStatusText,
         recognitionProgressPercent,
         isRecognizing,
         isRecognitionBusy,
+        recognitionPickerValue,
+        reRecognitionOptions,
+        cancelRecognition,
+        handleReRecognitionModeChange,
         runOfflineRecognition,
         runOnlineRecognition,
     };

@@ -1,7 +1,7 @@
 import { CheckCheck, FolderPlus, ListChecks, X } from 'lucide-react-native';
 import React from 'react';
 import { View } from 'react-native';
-import ToolbarIconButton from '~/features/home/common/toolbar-icon-button';
+import { IconToolbarButton } from '~/components/ui/icon-toolbar-button';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
 
@@ -41,21 +41,21 @@ export default function FolderListToolbar({
             </View>
             <View className="h-9 flex-row items-center gap-x-2">
                 {!isMultiSelectMode ? (
-                    <ToolbarIconButton backgroundColor={secondaryColor} onPress={onCreateFolder}>
+                    <IconToolbarButton backgroundColor={secondaryColor} onPress={onCreateFolder}>
                         <FolderPlus size={16} color={textColor} />
-                    </ToolbarIconButton>
+                    </IconToolbarButton>
                 ) : null}
                 {isMultiSelectMode ? (
-                    <ToolbarIconButton
+                    <IconToolbarButton
                         backgroundColor={secondaryColor}
                         disabled={isToggleSelectAllDisabled}
                         onPress={onToggleSelectAll}>
                         <CheckCheck size={16} color={textColor} strokeWidth={isAllSelected ? 2.3 : 2} />
-                    </ToolbarIconButton>
+                    </IconToolbarButton>
                 ) : null}
-                <ToolbarIconButton backgroundColor={secondaryColor} onPress={onToggleMultiSelectMode}>
+                <IconToolbarButton backgroundColor={secondaryColor} onPress={onToggleMultiSelectMode}>
                     {isMultiSelectMode ? <X size={16} color={textColor} /> : <ListChecks size={16} color={textColor} />}
-                </ToolbarIconButton>
+                </IconToolbarButton>
             </View>
         </View>
     );
