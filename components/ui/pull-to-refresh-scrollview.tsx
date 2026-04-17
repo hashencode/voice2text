@@ -51,7 +51,7 @@ export function PullToRefreshScrollView({
     isEmpty = false,
     emptyText = '没有数据',
     isLoadedAll = false,
-    loadedAllText = '已加载全部',
+    loadedAllText,
     children,
     onScroll,
     scrollEventThrottle = 16,

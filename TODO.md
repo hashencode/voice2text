@@ -1,5 +1,15 @@
 # TODO
 
+## 语音识别能力接入（业务待实现）
+
+- [ ] 接入说话人分离业务链路（P1）  
+  现状：底层识别层已保留 `enableSpeakerDiarization` 能力，但设置页和全局开关已移除。  
+  目标：在真实业务流程中定义触发时机、结果消费方式（UI 展示/数据落库/导出格式）及错误处理策略。
+
+- [ ] 接入降噪业务链路（P1）  
+  现状：底层识别层已保留 `enableDenoise` 能力，但设置页和全局开关已移除。  
+  目标：在录音或转写业务中明确启用条件、性能预算（耗时/电量）、以及与不同模型组合时的验证策略。
+
 ## Sherpa FFmpeg 迁移后续
 
 - [ ] 迁移 `react-native-sherpa-onnx` 的自动下载 + 版本校验机制（类似 `prebuilt-download.gradle`）到 `modules/sherpa/android`。

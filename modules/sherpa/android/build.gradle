@@ -11,6 +11,12 @@ android {
   defaultConfig {
     minSdkVersion 24
   }
+
+  externalNativeBuild {
+    cmake {
+      path "src/main/cpp/CMakeLists.txt"
+    }
+  }
 }
 
 dependencies {

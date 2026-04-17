@@ -4,21 +4,14 @@ const storage = createMMKV({ id: 'app-config' });
 
 export const APP_CONFIG_KEYS = {
     darkMode: 'app.config.darkMode',
-    speakerDiarizationEnabled: 'app.config.speakerDiarizationEnabled',
-    denoiseEnabled: 'app.config.denoiseEnabled',
     currentRecordingFolderName: 'app.config.currentRecordingFolderName',
 } as const;
 
-type BoolConfigKey =
-    | typeof APP_CONFIG_KEYS.darkMode
-    | typeof APP_CONFIG_KEYS.speakerDiarizationEnabled
-    | typeof APP_CONFIG_KEYS.denoiseEnabled;
+type BoolConfigKey = typeof APP_CONFIG_KEYS.darkMode;
 export type VadEngineId = 'tenvad' | 'silerovad';
 
 const DEFAULT_BOOL_VALUES: Record<BoolConfigKey, boolean> = {
     [APP_CONFIG_KEYS.darkMode]: false,
-    [APP_CONFIG_KEYS.speakerDiarizationEnabled]: false,
-    [APP_CONFIG_KEYS.denoiseEnabled]: false,
 };
 
 function getBool(key: BoolConfigKey): boolean {
@@ -39,22 +32,6 @@ export function getDarkModeEnabled(): boolean {
 
 export function setDarkModeEnabled(value: boolean): void {
     setBool(APP_CONFIG_KEYS.darkMode, value);
-}
-
-export function getSpeakerDiarizationEnabled(): boolean {
-    return getBool(APP_CONFIG_KEYS.speakerDiarizationEnabled);
-}
-
-export function setSpeakerDiarizationEnabled(value: boolean): void {
-    setBool(APP_CONFIG_KEYS.speakerDiarizationEnabled, value);
-}
-
-export function getDenoiseEnabled(): boolean {
-    return getBool(APP_CONFIG_KEYS.denoiseEnabled);
-}
-
-export function setDenoiseEnabled(value: boolean): void {
-    setBool(APP_CONFIG_KEYS.denoiseEnabled, value);
 }
 
 export function getCurrentRecordingFolderName(): string | null {

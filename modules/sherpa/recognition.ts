@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { getDenoiseEnabled, getSpeakerDiarizationEnabled, type VadEngineId } from '~/data/mmkv/app-config';
+import type { VadEngineId } from '~/data/mmkv/app-config';
 import SherpaOnnx, {
     type SherpaDownloadedModelTranscribeWithTiming,
     type SherpaModelId,
@@ -10,6 +10,10 @@ const DEFAULT_SPEAKER_SEGMENTATION_MODEL = 'sherpa/onnx/speaker-diarization.onnx
 const DEFAULT_SPEAKER_EMBEDDING_MODEL = 'sherpa/onnx/speaker-recognition.onnx';
 const TARGET_RECOGNITION_SAMPLE_RATE = 16000;
 const TARGET_RECOGNITION_CHANNELS = 1;
+const DEFAULT_RECOGNITION_PREFERENCE: Required<RecognitionPreference> = {
+    denoiseEnabled: false,
+    speakerDiarizationEnabled: false,
+};
 
 function isWavPath(path: string): boolean {
     const cleanPath = path.split('?')[0]?.toLowerCase() ?? '';
@@ -85,8 +89,8 @@ function resolveVadEngineByModel(modelId: SherpaModelId): VadEngineId {
 
 function resolvePreference(preference?: RecognitionPreference): Required<RecognitionPreference> {
     return {
-        denoiseEnabled: preference?.denoiseEnabled ?? getDenoiseEnabled(),
-        speakerDiarizationEnabled: preference?.speakerDiarizationEnabled ?? getSpeakerDiarizationEnabled(),
+        denoiseEnabled: preference?.denoiseEnabled ?? DEFAULT_RECOGNITION_PREFERENCE.denoiseEnabled,
+        speakerDiarizationEnabled: preference?.speakerDiarizationEnabled ?? DEFAULT_RECOGNITION_PREFERENCE.speakerDiarizationEnabled,
     };
 }
 

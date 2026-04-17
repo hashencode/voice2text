@@ -4,6 +4,44 @@
 
 当前默认 ASR 模型：`moonshine-zh`（`moonshine-v2`）。
 
+## 目录地图
+
+- `app/`: 路由入口层，仅放页面组装与导航。
+- `features/`: 业务模块层，按功能拆分 UI + hooks + 领域逻辑。
+- `components/ui/`: 通用 UI 基元组件。
+- `components/layout/`: 页面级共享布局壳。
+- `data/`: 持久化访问（SQLite/MMKV）与仓储服务。
+- `modules/`: Expo/Native 模块绑定（如 sherpa）。
+- `hooks/`: 跨 feature 复用的全局 hooks。
+- `theme/`: 主题 token 与 provider。
+- `scripts/`: 本地脚本与工程辅助工具。
+- `assets/`: 静态资源与离线模型文件。
+
+## 开发测试（模型准确率）
+
+项目已提供可复用脚本模块：`scripts/recognition-accuracy.ts`。
+
+可在开发代码中直接调用 `runRecognitionAccuracy`，用于：
+- 识别前置检查（权限、模型安装、版本）
+- 执行识别
+- 基于 LCS 计算命中率（准确率）
+
+示例：
+
+```ts
+import { runRecognitionAccuracy } from '~/scripts/recognition-accuracy';
+
+const result = await runRecognitionAccuracy({
+  filePath: wavPath,
+  referenceText,
+  // modelId: 'paraformer-zh', // 可选
+});
+
+console.log('hitRate:', (result.hitRate * 100).toFixed(2) + '%');
+```
+
+说明：该模块依赖 Expo Native 能力，应在 App 运行时调用，不是纯 Node CLI 脚本。
+
 
 
 ## 技术栈

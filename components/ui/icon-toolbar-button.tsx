@@ -13,7 +13,7 @@ type IconToolbarButtonProps = {
 export function IconToolbarButton({ onPress, backgroundColor, disabled = false, className, children }: IconToolbarButtonProps) {
     return (
         <Pressable
-            className={classNames('h-9 w-9 items-center justify-center rounded-xl', disabled && 'opacity-50', className)}
+            className={classNames('h-9 min-w-9 items-center justify-center rounded-xl', disabled && 'opacity-50', className)}
             style={{ backgroundColor }}
             disabled={disabled}
             onPress={onPress}>
@@ -21,4 +21,3 @@ export function IconToolbarButton({ onPress, backgroundColor, disabled = false, 
         </Pressable>
     );
 }
-

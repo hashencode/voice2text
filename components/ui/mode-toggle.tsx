@@ -1,5 +1,5 @@
 import { useColor } from '@/hooks/useColor';
-import { useModeToggle } from '@/hooks/useModeToggle';
+import { useModeToggle } from '@/hooks/use-mode-toggle';
 import { Moon, Sun } from 'lucide-react-native';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 

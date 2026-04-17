@@ -6,7 +6,7 @@ import { Pressable, View } from 'react-native';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
 import { useColor } from '~/hooks/useColor';
-import { useFilePicker } from '~/hooks/useFilePicker';
+import { useFilePicker } from '~/hooks/use-file-picker';
 
 export default function HomeEntrance() {
     const router = useRouter();
@@ -19,7 +19,6 @@ export default function HomeEntrance() {
                 title: '导入失败',
                 description: error,
                 variant: 'error',
-                duration: 3000,
             });
         },
     });
@@ -38,7 +37,6 @@ export default function HomeEntrance() {
                     title: '导入失败',
                     description: '文件不存在或无法访问',
                     variant: 'error',
-                    duration: 3000,
                 });
                 return;
             }
@@ -47,7 +45,6 @@ export default function HomeEntrance() {
                 title: '导入失败',
                 description: (error as Error).message ?? '读取文件失败',
                 variant: 'error',
-                duration: 3000,
             });
             return;
         }

@@ -10,6 +10,7 @@ type SessionHeaderProps = {
     textColor: string;
     mutedTextColor: string;
     headerAtMs: number;
+    editable?: boolean;
 };
 
 export default function SessionHeader({
@@ -18,12 +19,14 @@ export default function SessionHeader({
     textColor,
     mutedTextColor,
     headerAtMs,
+    editable = true,
 }: SessionHeaderProps) {
     return (
         <>
             <TextInput
                 value={displayName}
                 onChangeText={onChangeDisplayName}
+                editable={editable}
                 placeholderTextColor={mutedTextColor}
                 className="p-0 text-3xl font-semibold"
                 style={{ color: textColor }}

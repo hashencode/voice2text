@@ -6,6 +6,7 @@ import { getCurrentRecordingFolderName } from '~/data/mmkv/app-config';
 import { getCurrentModel } from '~/data/mmkv/model-selection';
 import { upsertRecordingMeta } from '~/data/sqlite/services/recordings.service';
 import { useWavRecording } from '~/features/record/hooks/useWavRecording';
+import { useDirtyBackGuard } from '~/features/session-editor/hooks/use-dirty-back-guard';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import SherpaOnnx, { getSherpaDownloadedModelOptions } from '~/modules/sherpa';
 
@@ -65,6 +66,16 @@ export function useRecordSession() {
 
     const navigation = useNavigation();
     const { toast } = useToast();
+    const { resetDirtyBackGuard, runDirtyBackAttempt } = useDirtyBackGuard({
+        timeoutMs: 2000,
+        onFirstBackWhenDirty: () => {
+            toast({
+                message: '再次点击按钮返回',
+                variant: 'warning',
+                preset: 'compact',
+            });
+        },
+    });
 
     const showRecordError = useCallback(
         (description: string) => {
@@ -72,7 +83,6 @@ export function useRecordSession() {
                 title: '录音失败',
                 description,
                 variant: 'error',
-                duration: 5000,
             });
         },
         [toast],
@@ -115,7 +125,6 @@ export function useRecordSession() {
                 toast({
                     title: '录音已保存',
                     variant: 'success',
-                    duration: 3000,
                 });
 
                 try {
@@ -186,27 +195,22 @@ export function useRecordSession() {
             }
 
             event.preventDefault();
-            setConfirmDialogState({
-                isVisible: true,
-                title: '结束录音',
-                description: '当前正在录音，是否结束并返回？',
-                confirmText: '结束并返回',
-                confirmButtonProps: { variant: 'destructive' },
-                onConfirm: () => {
-                    void (async () => {
-                        try {
-                            await stopRecord();
-                            navigation.dispatch(event.data.action);
-                        } catch {
-                            // stopRecord already reports errors via toast
-                        }
-                    })();
+            void runDirtyBackAttempt({
+                isDirty: true,
+                onConfirmed: async () => {
+                    try {
+                        await stopRecord();
+                        resetDirtyBackGuard();
+                        navigation.dispatch(event.data.action);
+                    } catch {
+                        // stopRecord already reports errors via toast
+                    }
                 },
             });
         });
 
         return unsubscribe;
-    }, [navigation, canStop, isStopping, stopRecord]);
+    }, [navigation, canStop, isStopping, stopRecord, runDirtyBackAttempt, resetDirtyBackGuard]);
 
     const closeConfirmDialog = useCallback(() => {
         setConfirmDialogState(prev => ({ ...prev, isVisible: false, onCancel: undefined }));
@@ -218,8 +222,31 @@ export function useRecordSession() {
     }, [confirmDialogState.onCancel]);
 
     const handleBackPress = useCallback(() => {
-        navigation.goBack();
-    }, [navigation]);
+        if (!canStop || isStopping) {
+            resetDirtyBackGuard();
+            navigation.goBack();
+            return;
+        }
+
+        void runDirtyBackAttempt({
+            isDirty: true,
+            onConfirmed: async () => {
+                try {
+                    await stopRecord();
+                    resetDirtyBackGuard();
+                    navigation.goBack();
+                } catch {
+                    // stopRecord already reports errors via toast
+                }
+            },
+        });
+    }, [canStop, isStopping, navigation, stopRecord, runDirtyBackAttempt, resetDirtyBackGuard]);
+
+    useEffect(() => {
+        return () => {
+            resetDirtyBackGuard();
+        };
+    }, [resetDirtyBackGuard]);
 
     return {
         displayName,

@@ -4,20 +4,18 @@ import { ChatBubbleTranslate, DesignPencil, Post, UndoAction } from 'iconoir-rea
 import { ArrowLeft, Gauge, RotateCcw, Square } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import type { EnrichedTextInputInstance, OnChangeStateEvent } from 'react-native-enriched';
+import type { EnrichedTextInputInstance } from 'react-native-enriched';
 import Animated from 'react-native-reanimated';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { ButtonX } from '~/components/ui/buttonx';
+import { CommonEmptyState } from '~/components/ui/common-empty-state';
 import { Picker } from '~/components/ui/picker';
 import { Progress } from '~/components/ui/progress';
-import { LoadingOverlay } from '~/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
-import { useToast } from '~/components/ui/toast';
-import EditorKeyboardToolbar from '~/features/editor/editor-keyboard-toolbar';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
 import SessionHeader from '~/features/session-editor/components/session-header';
 import { useImportAudioSession } from '~/features/session-editor/hooks/use-import-audio-session';
@@ -51,8 +49,6 @@ function TimeLabel({ value, color, align = 'left' }: { value: string; color: str
 }
 
 export default function ImportAudioPage() {
-    const [isNoteFocused, setIsNoteFocused] = React.useState(false);
-    const [noteStyleState, setNoteStyleState] = React.useState<OnChangeStateEvent | null>(null);
     const noteInputRef = React.useRef<EnrichedTextInputInstance | null>(null);
     const params = useLocalSearchParams<{
         uri?: string | string[];
@@ -105,8 +101,6 @@ export default function ImportAudioPage() {
         confirmDialogState,
         closeConfirmDialog,
         cancelConfirmDialog,
-        saveOverlayVisible,
-        saveOverlayLabel,
         isInitialSessionLoading,
         recognitionLanguage,
         setRecognitionLanguage,
@@ -129,8 +123,6 @@ export default function ImportAudioPage() {
         initialDisplayName: fromList ? initialName : undefined,
         initialHeaderAtMs,
     });
-    const { toast } = useToast();
-
     const primaryColor = useColor('primary');
     const primaryForegroundColor = useColor('primaryForeground');
     const destructiveColor = useColor('destructive');
@@ -139,8 +131,6 @@ export default function ImportAudioPage() {
     const mutedTextColor = useColor('textMuted');
     const cardColor = useColor('card');
     const mutedColor = useColor('muted');
-    const showKeyboardToolbar = editorTab === 'remark' && isNoteFocused;
-    const remarkPlaceholder = fromList && isInitialSessionLoading ? '正在读取灵感' : '记录此刻灵感';
     const transcriptHasContent = transcriptText.trim().length > 0;
     const showStopRecognitionButton = recognitionState === 'preparing' || recognitionState === 'recognizing';
     const recognitionIconColor =
@@ -184,6 +174,7 @@ export default function ImportAudioPage() {
                         textColor={textColor}
                         mutedTextColor={mutedTextColor}
                         headerAtMs={headerAtMs}
+                        editable={!isInitialSessionLoading}
                     />
 
                     <View className="mt-3 flex-1">
@@ -207,15 +198,16 @@ export default function ImportAudioPage() {
                             </TabsList>
 
                             <TabsContent value="remark" className="flex-1">
-                                <RichNoteEditor
-                                    key={`remark-${noteEditorSeed}`}
-                                    placeholder={remarkPlaceholder}
-                                    inputRef={noteInputRef}
-                                    initialText={remarkText}
-                                    onTextChange={handleRemarkTextChange}
-                                    onFocusChange={setIsNoteFocused}
-                                    onStyleStateChange={setNoteStyleState}
-                                />
+                                {isInitialSessionLoading ? (
+                                    <CommonEmptyState text="正在载入灵感" Icon={DesignPencil} />
+                                ) : (
+                                    <RichNoteEditor
+                                        key={`remark-${noteEditorSeed}`}
+                                        inputRef={noteInputRef}
+                                        initialText={remarkText}
+                                        onTextChange={handleRemarkTextChange}
+                                    />
+                                )}
                             </TabsContent>
 
                             <TabsContent value="transcript" className="flex-1">
@@ -330,7 +322,7 @@ export default function ImportAudioPage() {
                     </View>
                 </View>
 
-                <View className="flex-shrink-0 rounded-t-[26px]" style={{ backgroundColor: cardColor }}>
+                <View className="flex-shrink-0 rounded-t-3xl" style={{ backgroundColor: cardColor }}>
                     <Animated.View className="p-3" style={toolbarAnimatedStyle}>
                         <Animated.View className="flex-row items-center gap-3" style={toolbarMainRowAnimatedStyle}>
                             {isPlaybackMode ? (
@@ -386,23 +378,6 @@ export default function ImportAudioPage() {
                     <BottomSafeAreaSpacer />
                 </View>
             </View>
-            <EditorKeyboardToolbar
-                visible={showKeyboardToolbar}
-                noteInputRef={noteInputRef}
-                noteStyleState={noteStyleState}
-                primaryColor={primaryColor}
-                textColor={textColor}
-                mutedColor={mutedColor}
-                mutedTextColor={mutedTextColor}
-                onBlocked={() => {
-                    toast({
-                        title: '当前标题样式下不可用',
-                        description: '请先取消标题样式后再使用该格式',
-                        variant: 'error',
-                        duration: 2200,
-                    });
-                }}
-            />
             <AlertDialog
                 isVisible={confirmDialogState.isVisible}
                 title={confirmDialogState.title}
@@ -415,7 +390,6 @@ export default function ImportAudioPage() {
                 onCancel={cancelConfirmDialog}
                 dismissible={false}
             />
-            <LoadingOverlay visible={saveOverlayVisible} variant="bars" size="lg" showLabel label={saveOverlayLabel} />
             {ActionSheet}
         </DefaultLayout>
     );

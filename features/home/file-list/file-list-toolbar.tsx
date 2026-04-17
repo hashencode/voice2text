@@ -33,7 +33,7 @@ export default function FileListToolbar({
     const cardColor = useColor('card');
 
     return (
-        <View className="flex-row items-center justify-between rounded-t-[26px] px-4 py-3" style={{ backgroundColor: cardColor }}>
+        <View className="flex-row items-center justify-between rounded-t-3xl px-4 py-3" style={{ backgroundColor: cardColor }}>
             {isMultiSelectMode ? (
                 <View className="flex-grow flex-row items-center gap-x-2">
                     <TextX variant="title" numberOfLines={1} ellipsizeMode="tail">

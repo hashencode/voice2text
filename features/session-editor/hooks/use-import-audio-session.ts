@@ -14,7 +14,8 @@ import {
 } from '~/data/sqlite/services/recordings.service';
 import { formatImportAudioDefaultName, formatSpeed, toDisplayName } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
-import { transcribeFileWithTiming } from '~/integrations/sherpa/recognition-service';
+import { useDirtyBackGuard } from '~/features/session-editor/hooks/use-dirty-back-guard';
+import { transcribeFileWithTiming } from '~/modules/sherpa/recognition';
 import SherpaOnnx, { ensureModelReady, type DownloadModelProgress, type SherpaModelId } from '~/modules/sherpa';
 
 const PLAYBACK_SPEEDS = [2.0, 1.5, 1.0, 0.9] as const;
@@ -191,8 +192,6 @@ export function useImportAudioSession({
     const [pendingSeekSec, setPendingSeekSec] = React.useState<number | null>(null);
     const [isPreparingSession, setIsPreparingSession] = React.useState(false);
     const [isInitialSessionLoading, setIsInitialSessionLoading] = React.useState(Boolean(audioUri));
-    const [saveOverlayVisible, setSaveOverlayVisible] = React.useState(false);
-    const [saveOverlayLabel, setSaveOverlayLabel] = React.useState('正在保存内容');
     const [recognitionLanguage, setRecognitionLanguage] = React.useState<RecognitionLanguage>('zh');
     const [recognitionInstallState, setRecognitionInstallState] = React.useState<RecognitionInstallState>('ready');
     const [recognitionStatusText, setRecognitionStatusText] = React.useState('选择语言和识别方式');
@@ -214,6 +213,7 @@ export function useImportAudioSession({
     const isUnmountedRef = React.useRef(false);
     const seekPreviewPercentRef = React.useRef<number | null>(null);
     const saveInFlightRef = React.useRef(false);
+    const saveLoadingToastIdRef = React.useRef<string | null>(null);
     const allowNextRemoveRef = React.useRef(false);
     const playbackBarVisible = useSharedValue(0);
     const pendingNavActionRef = React.useRef<unknown>(null);
@@ -235,8 +235,18 @@ export function useImportAudioSession({
     const player = useAudioPlayer(null, { updateInterval: 200 });
     const playerStatus = useAudioPlayerStatus(player);
     const navigation = useNavigation();
-    const { toast } = useToast();
+    const { toast, loading, updateToast, dismiss } = useToast();
     const { show: showActionSheet, ActionSheet } = useActionSheet();
+    const { resetDirtyBackGuard, runDirtyBackAttempt } = useDirtyBackGuard({
+        timeoutMs: 2000,
+        onFirstBackWhenDirty: () => {
+            toast({
+                message: '再次点击按钮返回',
+                variant: 'warning',
+                preset: 'compact',
+            });
+        },
+    });
 
     const durationSec = Math.max(playerStatus.duration ?? 0, 0);
     const currentSec = Math.max(playerStatus.currentTime ?? 0, 0);
@@ -319,7 +329,6 @@ export function useImportAudioSession({
                 title: '播放失败',
                 description: '未获取到音频路径',
                 variant: 'error',
-                duration: 2500,
             });
             return;
         }
@@ -332,7 +341,6 @@ export function useImportAudioSession({
                     title: '播放失败',
                     description: '音频文件不存在',
                     variant: 'error',
-                    duration: 2500,
                 });
                 return;
             }
@@ -356,7 +364,6 @@ export function useImportAudioSession({
                 title: '播放失败',
                 description: (error as Error).message ?? '音频无法播放',
                 variant: 'error',
-                duration: 2500,
             });
         }
     }, [pausePlayerSafely, playbackCompleted, playbackRate, player, playerStatus.playing, resolvedAudioUri, toast]);
@@ -445,7 +452,6 @@ export function useImportAudioSession({
                 title: '识别失败',
                 description: '缺少音频路径',
                 variant: 'error',
-                duration: 2500,
             });
             return;
         }
@@ -518,7 +524,6 @@ export function useImportAudioSession({
                 title: '离线识别失败',
                 description: (error as Error)?.message ?? '请稍后重试',
                 variant: 'error',
-                duration: 2800,
             });
         } finally {
             if (recognitionRunIdRef.current === runId) {
@@ -534,7 +539,6 @@ export function useImportAudioSession({
             title: '在线识别暂不可用',
             description: '请先使用离线识别',
             variant: 'error',
-            duration: 2200,
         });
     }, [toast]);
 
@@ -553,21 +557,23 @@ export function useImportAudioSession({
         if (saveInFlightRef.current) {
             return false;
         }
+        if (isInitialSessionLoading || isPreparingSession) {
+            return false;
+        }
         const sourceUri = selectedSourceUriRef.current;
         if (!sourceUri) {
             toast({
                 title: '保存失败',
                 description: '缺少源音频路径',
                 variant: 'error',
-                duration: 2500,
             });
             return false;
         }
 
         saveInFlightRef.current = true;
         const startedAt = Date.now();
-        setSaveOverlayVisible(true);
-        setSaveOverlayLabel('正在保存内容');
+        const loadingToastId = loading('正在保存内容');
+        saveLoadingToastIdRef.current = loadingToastId;
 
         try {
             await pausePlayerSafely();
@@ -599,7 +605,7 @@ export function useImportAudioSession({
                 const importedDir = `${FileSystem.documentDirectory}recordings/imported/`;
                 await FileSystem.makeDirectoryAsync(importedDir, { intermediates: true });
                 const targetUri = createImportedFileUri(sourceFileName);
-                setSaveOverlayLabel('正在读取文件');
+                updateToast(loadingToastId, { message: '正在读取文件' });
                 await FileSystem.copyAsync({
                     from: ensureFileUri(sourceUri),
                     to: targetUri,
@@ -607,7 +613,7 @@ export function useImportAudioSession({
                 finalPath = targetUri;
             }
 
-            setSaveOverlayLabel('正在写入数据');
+            updateToast(loadingToastId, { message: '正在写入数据' });
             const now = Date.now();
             const recordedAtMs = matchedRecordingRef.current?.recordedAtMs ?? now;
             await upsertRecordingMeta({
@@ -669,7 +675,6 @@ export function useImportAudioSession({
                 title: '保存失败',
                 description: (error as Error)?.message ?? '请稍后重试',
                 variant: 'error',
-                duration: 3000,
             });
             return false;
         } finally {
@@ -678,20 +683,28 @@ export function useImportAudioSession({
             if (remainingMs > 0) {
                 await new Promise(resolve => setTimeout(resolve, remainingMs));
             }
-            setSaveOverlayVisible(false);
+            dismiss(loadingToastId);
+            if (saveLoadingToastIdRef.current === loadingToastId) {
+                saveLoadingToastIdRef.current = null;
+            }
             saveInFlightRef.current = false;
         }
     }, [
         audioName,
         displayName,
+        dismiss,
         getLatestRemarkText,
         importDefaultDisplayName,
+        loading,
         pausePlayerSafely,
         recentRecognitionMode,
         resolvedAudioUri,
         summaryText,
         toast,
         transcriptText,
+        updateToast,
+        isInitialSessionLoading,
+        isPreparingSession,
     ]);
 
     const closeConfirmDialog = useCallback(() => {
@@ -705,7 +718,17 @@ export function useImportAudioSession({
 
     const requestLeaveWithConfirm = useCallback(
         async (pendingAction?: unknown) => {
-            if (saveInFlightRef.current || isPreparingSession) {
+            if (saveInFlightRef.current) {
+                return;
+            }
+            if (isInitialSessionLoading || isPreparingSession) {
+                resetDirtyBackGuard();
+                allowNextRemoveRef.current = true;
+                if (pendingAction) {
+                    navigation.dispatch(pendingAction as never);
+                } else {
+                    navigation.goBack();
+                }
                 return;
             }
             if (recognitionState === 'preparing' || recognitionState === 'recognizing') {
@@ -739,6 +762,7 @@ export function useImportAudioSession({
             const currentSnapshot = await getCurrentSnapshot();
             const isDirty = !isSameSnapshot(currentSnapshot, initialSnapshotRef.current);
             if (!isDirty) {
+                resetDirtyBackGuard();
                 allowNextRemoveRef.current = true;
                 if (pendingAction) {
                     navigation.dispatch(pendingAction as never);
@@ -748,44 +772,16 @@ export function useImportAudioSession({
                 return;
             }
 
-            pendingNavActionRef.current = pendingAction ?? null;
-            setConfirmDialogState({
-                isVisible: true,
-                title: '保存内容修改',
-                description: '离开前是否保存当前修改？',
-                confirmText: '保存修改',
-                cancelText: '放弃修改',
-                confirmButtonProps: { variant: 'primary' },
-                onConfirm: () => {
-                    void (async () => {
-                        const ok = await saveCurrentSession();
-                        if (!ok) {
-                            return;
-                        }
-                        setConfirmDialogState({
-                            isVisible: true,
-                            title: '保存成功',
-                            description: '内容已保存，是否返回上一页？',
-                            confirmText: '返回',
-                            cancelText: '继续编辑',
-                            confirmButtonProps: { variant: 'primary' },
-                            onConfirm: () => {
-                                const action = pendingNavActionRef.current;
-                                pendingNavActionRef.current = null;
-                                allowNextRemoveRef.current = true;
-                                if (action) {
-                                    navigation.dispatch(action as never);
-                                } else {
-                                    navigation.goBack();
-                                }
-                            },
-                            onCancel: () => {
-                                pendingNavActionRef.current = null;
-                            },
-                        });
-                    })();
-                },
-                onCancel: () => {
+            const handledDirtyBack = await runDirtyBackAttempt({
+                isDirty: true,
+                onConfirmed: async () => {
+                    pendingNavActionRef.current = pendingAction ?? null;
+                    const ok = await saveCurrentSession();
+                    if (!ok) {
+                        pendingNavActionRef.current = null;
+                        return;
+                    }
+
                     const action = pendingNavActionRef.current;
                     pendingNavActionRef.current = null;
                     allowNextRemoveRef.current = true;
@@ -796,8 +792,22 @@ export function useImportAudioSession({
                     }
                 },
             });
+
+            if (handledDirtyBack) {
+                return;
+            }
         },
-        [cancelRecognition, getCurrentSnapshot, isPreparingSession, navigation, recognitionState, saveCurrentSession],
+        [
+            cancelRecognition,
+            getCurrentSnapshot,
+            isInitialSessionLoading,
+            isPreparingSession,
+            navigation,
+            recognitionState,
+            resetDirtyBackGuard,
+            runDirtyBackAttempt,
+            saveCurrentSession,
+        ],
     );
 
     const handleBackPress = useCallback(() => {
@@ -810,14 +820,14 @@ export function useImportAudioSession({
                 allowNextRemoveRef.current = false;
                 return;
             }
-            if (saveInFlightRef.current || isPreparingSession) {
+            if (saveInFlightRef.current || isInitialSessionLoading || isPreparingSession) {
                 return;
             }
             event.preventDefault();
             void requestLeaveWithConfirm(event.data.action);
         });
         return unsubscribe;
-    }, [isPreparingSession, navigation, requestLeaveWithConfirm]);
+    }, [isInitialSessionLoading, isPreparingSession, navigation, requestLeaveWithConfirm]);
 
     useEffect(() => {
         let cancelled = false;
@@ -955,7 +965,6 @@ export function useImportAudioSession({
                     title: '导入准备失败',
                     description: (error as Error)?.message ?? '请重新选择文件',
                     variant: 'error',
-                    duration: 3000,
                 });
             } finally {
                 setIsPreparingSession(false);
@@ -999,15 +1008,20 @@ export function useImportAudioSession({
         return () => {
             recognitionRunIdRef.current += 1;
             isUnmountedRef.current = true;
+            resetDirtyBackGuard();
             if (seekThrottleTimerRef.current) {
                 clearTimeout(seekThrottleTimerRef.current);
             }
             if (pendingSeekResetTimerRef.current) {
                 clearTimeout(pendingSeekResetTimerRef.current);
             }
+            if (saveLoadingToastIdRef.current) {
+                dismiss(saveLoadingToastIdRef.current);
+                saveLoadingToastIdRef.current = null;
+            }
             void pausePlayerSafely();
         };
-    }, [pausePlayerSafely]);
+    }, [dismiss, pausePlayerSafely, resetDirtyBackGuard]);
 
     const recognitionStatusIcon: RecognitionStatusIcon = React.useMemo(() => {
         if (recognitionInstallState === 'failed') {
@@ -1097,8 +1111,6 @@ export function useImportAudioSession({
         confirmDialogState,
         closeConfirmDialog,
         cancelConfirmDialog,
-        saveOverlayVisible,
-        saveOverlayLabel,
         isPreparingSession,
         isInitialSessionLoading,
         recognitionLanguage,

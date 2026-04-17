@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
-import { EnrichedTextInput, type EnrichedTextInputInstance, type OnChangeStateEvent } from 'react-native-enriched';
+import { EnrichedTextInput, type EnrichedTextInputInstance } from 'react-native-enriched';
 import { useColor } from '~/hooks/useColor';
 import { FONT_SIZE_LG } from '~/theme/globals';
 
@@ -9,8 +9,6 @@ type Props = {
     inputRef: React.RefObject<EnrichedTextInputInstance | null>;
     initialText?: string;
     onTextChange?: (text: string) => void;
-    onFocusChange?: (focused: boolean) => void;
-    onStyleStateChange?: (state: OnChangeStateEvent | null) => void;
 };
 
 export default function RichNoteEditor({
@@ -18,8 +16,6 @@ export default function RichNoteEditor({
     inputRef,
     initialText = '',
     onTextChange,
-    onFocusChange,
-    onStyleStateChange,
 }: Props) {
     const primaryColor = useColor('primary');
     const textColor = useColor('text');
@@ -30,12 +26,9 @@ export default function RichNoteEditor({
         <View className="flex-1">
             <EnrichedTextInput
                 ref={inputRef}
-                onFocus={() => onFocusChange?.(true)}
-                onBlur={() => onFocusChange?.(false)}
                 onChangeText={event => {
                     onTextChange?.(event.nativeEvent.value);
                 }}
-                onChangeState={event => onStyleStateChange?.(event.nativeEvent)}
                 style={{
                     flex: 1,
                     fontSize: FONT_SIZE_LG,

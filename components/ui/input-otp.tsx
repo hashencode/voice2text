@@ -224,9 +224,7 @@ export const InputOTP = forwardRef<InputOTPRef, InputOTPProps>(
                 />
 
                 {/* OTP Slots */}
-                <View className={`flex-row items-center justify-center ${separator ? 'gap-0' : 'gap-2'}`}>
-                    {slots}
-                </View>
+                <View className={`flex-row items-center justify-center ${separator ? 'gap-0' : 'gap-2'}`}>{slots}</View>
 
                 {/* Error Message */}
                 {error && (
@@ -254,7 +252,15 @@ InputOTP.displayName = 'InputOTP';
 
 // Optional: Export a preset with separator
 export const InputOTPWithSeparator = forwardRef<InputOTPRef, Omit<InputOTPProps, 'separator'>>((props, ref) => (
-    <InputOTP ref={ref} separator={<TextX className="text-[18px]" style={{ color: useColor('textMuted') }}>-</TextX>} {...props} />
+    <InputOTP
+        ref={ref}
+        separator={
+            <TextX className="!text-lg" style={{ color: useColor('textMuted') }}>
+                -
+            </TextX>
+        }
+        {...props}
+    />
 ));
 
 InputOTPWithSeparator.displayName = 'InputOTPWithSeparator';

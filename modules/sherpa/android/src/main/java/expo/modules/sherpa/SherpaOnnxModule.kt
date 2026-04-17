@@ -119,6 +119,8 @@ class SherpaOnnxModule : Module() {
   private val offlineCacheLock = Any()
   private val nativeLibProbeLock = Any()
   private val nativeLibProbeCache = mutableMapOf<String, Boolean>()
+  @Volatile
+  private var isSherpaAudioNativeLoaded = false
   private val wavChunkList = mutableListOf<WavChunkMeta>()
 
   private val wavAudioFocusChangeListener =
@@ -227,7 +229,9 @@ class SherpaOnnxModule : Module() {
   init {
     try {
       System.loadLibrary("sherpaaudio")
+      isSherpaAudioNativeLoaded = true
     } catch (e: UnsatisfiedLinkError) {
+      isSherpaAudioNativeLoaded = false
       println("[sherpa] sherpaaudio native lib is unavailable: ${e.message}")
     }
   }
@@ -321,6 +325,7 @@ class SherpaOnnxModule : Module() {
 
       val requiredLibs =
         listOf(
+          "libsherpaaudio.so",
           "libsherpa-onnx-jni.so",
           "libonnxruntime.so",
           "libonnxruntime4j_jni.so",
@@ -666,6 +671,14 @@ class SherpaOnnxModule : Module() {
     AsyncFunction("convertAudioToWav16k") { inputPath: String, outputPath: String, promise: Promise ->
       executor.execute {
         try {
+          if (!isSherpaAudioNativeLoaded) {
+            promise.reject(
+              "ERR_AUDIO_CONVERT",
+              "sherpaaudio native library is unavailable. Rebuild Android native module with CMake to include libsherpaaudio.so.",
+              null,
+            )
+            return@execute
+          }
           val input = inputPath.removePrefix("file://")
           val output = outputPath.removePrefix("file://")
           val err = nativeConvertAudioToWav16k(input, output)
@@ -674,7 +687,7 @@ class SherpaOnnxModule : Module() {
           } else {
             promise.reject("ERR_AUDIO_CONVERT", err, null)
           }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
           promise.reject("ERR_AUDIO_CONVERT", e.message, e)
         }
       }
@@ -689,6 +702,14 @@ class SherpaOnnxModule : Module() {
       ->
       executor.execute {
         try {
+          if (!isSherpaAudioNativeLoaded) {
+            promise.reject(
+              "ERR_AUDIO_CONVERT_FORMAT",
+              "sherpaaudio native library is unavailable. Rebuild Android native module with CMake to include libsherpaaudio.so.",
+              null,
+            )
+            return@execute
+          }
           val normalizedFormat = normalizeAudioExportFormat(format)
           if (normalizedFormat == null) {
             promise.reject(
@@ -747,7 +768,7 @@ class SherpaOnnxModule : Module() {
           } else {
             promise.reject("ERR_AUDIO_CONVERT_FORMAT", err, null)
           }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
           promise.reject("ERR_AUDIO_CONVERT_FORMAT", e.message, e)
         }
       }
@@ -756,6 +777,14 @@ class SherpaOnnxModule : Module() {
     AsyncFunction("decodeAudioFileToFloatSamples") { inputPath: String, targetSampleRateHz: Double?, promise: Promise ->
       executor.execute {
         try {
+          if (!isSherpaAudioNativeLoaded) {
+            promise.reject(
+              "ERR_AUDIO_DECODE",
+              "sherpaaudio native library is unavailable. Rebuild Android native module with CMake to include libsherpaaudio.so.",
+              null,
+            )
+            return@execute
+          }
           val input = inputPath.removePrefix("file://")
           val targetHz = (targetSampleRateHz ?: 0.0).toInt()
           val result = nativeDecodeAudioFileToFloatSamples(input, targetHz)
@@ -784,7 +813,7 @@ class SherpaOnnxModule : Module() {
               "sampleRate" to sampleRate,
             ),
           )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
           promise.reject("ERR_AUDIO_DECODE", e.message, e)
         }
       }

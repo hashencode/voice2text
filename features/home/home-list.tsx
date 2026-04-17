@@ -55,9 +55,9 @@ function ActionMenuButton({
         <Pressable
             onPress={() => onPress(action.key)}
             disabled={action.disabled}
-            className={`flex-1 items-center justify-center gap-y-1 rounded-xl ${action.disabled ? 'opacity-50' : ''}`}>
+            className={`flex-1 items-center justify-center gap-y-1.5 rounded-xl ${action.disabled ? 'opacity-50' : ''}`}>
             <action.icon size={26} color={textColor} strokeWidth={1.5} />
-            <TextX className="text-[13px]">{action.label}</TextX>
+            <TextX className="!text-sm">{action.label}</TextX>
         </Pressable>
     );
 }
@@ -94,6 +94,7 @@ export default function HomeList() {
     const [isMultiSelectMode, setIsMultiSelectMode] = React.useState(false);
     const [isSingleSelectMode, setIsSingleSelectMode] = React.useState(false);
     const [isSingleSelectClosing, setIsSingleSelectClosing] = React.useState(false);
+    const [clearSelectionOnActionDialogClose, setClearSelectionOnActionDialogClose] = React.useState(false);
     const [renameDialogVisible, setRenameDialogVisible] = React.useState(false);
     const [deleteDialogVisible, setDeleteDialogVisible] = React.useState(false);
     const [createFolderDialogVisible, setCreateFolderDialogVisible] = React.useState(false);
@@ -223,6 +224,7 @@ export default function HomeList() {
         clearSelectedFolderNames();
         setIsSingleSelectMode(false);
         setIsSingleSelectClosing(false);
+        setClearSelectionOnActionDialogClose(false);
     }, [clearSelectedFolderNames, clearSelectedPaths]);
 
     const handleToggleMultiSelectMode = React.useCallback(() => {
@@ -272,11 +274,26 @@ export default function HomeList() {
         setIsSingleSelectClosing(true);
         setIsSingleSelectMode(false);
     }, [isSingleSelectMode]);
+
+    const clearSelectionAfterActionDialogClose = React.useCallback(() => {
+        if (!clearSelectionOnActionDialogClose) {
+            return;
+        }
+        setSelectedPaths([]);
+        setSelectedFolderNames([]);
+        setClearSelectionOnActionDialogClose(false);
+    }, [clearSelectionOnActionDialogClose, setSelectedFolderNames, setSelectedPaths]);
+
     const handleSingleSelectClosed = React.useCallback(() => {
+        if (renameDialogVisible || deleteDialogVisible) {
+            setIsSingleSelectClosing(false);
+            return;
+        }
         setSelectedPaths([]);
         setSelectedFolderNames([]);
         setIsSingleSelectClosing(false);
-    }, [setSelectedFolderNames, setSelectedPaths]);
+        setClearSelectionOnActionDialogClose(false);
+    }, [deleteDialogVisible, renameDialogVisible, setSelectedFolderNames, setSelectedPaths]);
     const openSingleActionForFile = React.useCallback(
         (path: string) => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -394,7 +411,10 @@ export default function HomeList() {
                 selectedFolderNameForRename,
                 setRenaming,
                 setRenameError,
-                closeRenameDialog: () => setRenameDialogVisible(false),
+                closeRenameDialog: () => {
+                    setRenameDialogVisible(false);
+                    clearSelectionAfterActionDialogClose();
+                },
             });
         }
         return confirmRenameFile({
@@ -402,9 +422,19 @@ export default function HomeList() {
             setRenaming,
             setRenameError,
             setRenameValue,
-            closeRenameDialog: () => setRenameDialogVisible(false),
+            closeRenameDialog: () => {
+                setRenameDialogVisible(false);
+                clearSelectionAfterActionDialogClose();
+            },
         });
-    }, [confirmRenameFile, confirmRenameFolder, isFolderListMode, renaming, selectedFolderNameForRename]);
+    }, [
+        clearSelectionAfterActionDialogClose,
+        confirmRenameFile,
+        confirmRenameFolder,
+        isFolderListMode,
+        renaming,
+        selectedFolderNameForRename,
+    ]);
     const handleConfirmCreateFolder = React.useCallback(
         () =>
             confirmCreateFolder({
@@ -420,15 +450,21 @@ export default function HomeList() {
             return confirmDeleteFolders({
                 deleting,
                 setDeleting,
-                closeDeleteDialog: () => setDeleteDialogVisible(false),
+                closeDeleteDialog: () => {
+                    setDeleteDialogVisible(false);
+                    clearSelectionAfterActionDialogClose();
+                },
             });
         }
         return confirmDeleteFiles({
             deleting,
             setDeleting,
-            closeDeleteDialog: () => setDeleteDialogVisible(false),
+            closeDeleteDialog: () => {
+                setDeleteDialogVisible(false);
+                clearSelectionAfterActionDialogClose();
+            },
         });
-    }, [confirmDeleteFiles, confirmDeleteFolders, deleting, isFolderListMode]);
+    }, [clearSelectionAfterActionDialogClose, confirmDeleteFiles, confirmDeleteFolders, deleting, isFolderListMode]);
 
     const handleUpdateFavorite = React.useCallback(
         async (isFavorite: boolean): Promise<void> => {
@@ -464,7 +500,9 @@ export default function HomeList() {
 
     const handleActionPress = React.useCallback(
         (actionKey: ActionMenuItem['key']) => {
+            const fromSingleSelectMenu = isSingleSelectMode || isSingleSelectClosing;
             if (actionKey === 'rename') {
+                setClearSelectionOnActionDialogClose(fromSingleSelectMenu);
                 closeSingleSelectMode();
                 handleOpenRenameDialog();
                 return;
@@ -481,6 +519,7 @@ export default function HomeList() {
                 if (selectedCount <= 0) {
                     return;
                 }
+                setClearSelectionOnActionDialogClose(fromSingleSelectMenu);
                 closeSingleSelectMode();
                 setDeleteDialogVisible(true);
                 return;
@@ -508,6 +547,7 @@ export default function HomeList() {
             handleOpenRenameDialog,
             handleUpdateFavorite,
             isSingleSelectMode,
+            isSingleSelectClosing,
             isSingleTargetFavorited,
             selectedCount,
             selectedPaths,
@@ -576,13 +616,15 @@ export default function HomeList() {
     const handleCloseRenameDialog = React.useCallback(() => {
         setRenameError('');
         setRenameDialogVisible(false);
-    }, []);
+        clearSelectionAfterActionDialogClose();
+    }, [clearSelectionAfterActionDialogClose]);
     const handleCloseDeleteDialog = React.useCallback(() => {
         if (deleting) {
             return;
         }
         setDeleteDialogVisible(false);
-    }, [deleting]);
+        clearSelectionAfterActionDialogClose();
+    }, [clearSelectionAfterActionDialogClose, deleting]);
     const handleCloseCreateFolderDialog = React.useCallback(() => {
         if (creatingFolder) {
             return;
@@ -624,7 +666,6 @@ export default function HomeList() {
                 isEmpty={isFolderListEmpty}
                 emptyText="暂无文件夹"
                 isLoadedAll={!loading && !isFolderListMode && filteredItems.length > 0}
-                loadedAllText={isFolderListMode ? '已加载全部文件夹' : '已加载全部录音'}
                 contentContainerStyle={{ paddingBottom: shouldRenderActionMenu ? 96 + insets.bottom : 12 }}>
                 {isFolderListMode ? (
                     <FolderListView
@@ -702,9 +743,13 @@ export default function HomeList() {
                     return handleConfirmDelete();
                 }}>
                 <TextX>
-                    {isFolderListMode
-                        ? `是否删除已选中的 ${selectedCount} 个文件夹，删除后无法恢复。`
-                        : `是否删除已选中的 ${selectedCount} 个文件，删除后无法恢复。`}
+                    {isSingleSelectMode || isSingleSelectClosing
+                        ? isFolderListMode
+                            ? '是否删除当前文件夹，删除后无法恢复。'
+                            : '是否删除当前文件，删除后无法恢复。'
+                        : isFolderListMode
+                          ? `是否删除已选中的 ${selectedCount} 个文件夹，删除后无法恢复。`
+                          : `是否删除已选中的 ${selectedCount} 个文件，删除后无法恢复。`}
                 </TextX>
             </AlertDialog>
             <NameInputDialog

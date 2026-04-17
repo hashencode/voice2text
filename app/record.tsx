@@ -4,15 +4,13 @@ import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
 import { ArrowLeft, Mic, Square } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import type { EnrichedTextInputInstance, OnChangeStateEvent } from 'react-native-enriched';
+import type { EnrichedTextInputInstance } from 'react-native-enriched';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
-import { useToast } from '~/components/ui/toast';
-import EditorKeyboardToolbar from '~/features/editor/editor-keyboard-toolbar';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
 import LiveTranscriptPanel from '~/features/session-editor/components/live-transcript-panel';
 import SessionHeader from '~/features/session-editor/components/session-header';
@@ -47,8 +45,6 @@ function RoundControlButton({ backgroundColor, disabled = false, onPress, childr
 }
 
 export default function RecordPage() {
-    const [isNoteFocused, setIsNoteFocused] = React.useState(false);
-    const [noteStyleState, setNoteStyleState] = React.useState<OnChangeStateEvent | null>(null);
     const noteInputRef = React.useRef<EnrichedTextInputInstance | null>(null);
     const {
         displayName,
@@ -73,8 +69,6 @@ export default function RecordPage() {
         handleBackPress,
         recordingEndedAtMs,
     } = useRecordSession();
-    const { toast } = useToast();
-
     const primaryColor = useColor('primary');
     const primaryForegroundColor = useColor('primaryForeground');
     const destructiveColor = useColor('destructive');
@@ -83,11 +77,10 @@ export default function RecordPage() {
     const mutedTextColor = useColor('textMuted');
     const cardColor = useColor('card');
     const mutedColor = useColor('muted');
-    const showKeyboardToolbar = editorTab === 'remark' && isNoteFocused;
     const renderRecordStatus = () => {
         if (isRecordingOrPaused) {
             return (
-                <TextX className="text-2xl" style={{ fontVariant: ['tabular-nums'] }}>
+                <TextX className="!text-2xl" style={{ fontVariant: ['tabular-nums'] }}>
                     {elapsedText}
                 </TextX>
             );
@@ -106,12 +99,16 @@ export default function RecordPage() {
                         textColor={textColor}
                         mutedTextColor={mutedTextColor}
                         headerAtMs={headerAtMs}
+                        editable
                     />
 
                     <View className="mt-3 flex-1">
                         <Tabs value={editorTab} onValueChange={value => setEditorTab(value as EditorTabValue)} className="flex-1">
                             <TabsList radius={BORDER_RADIUS_SM} style={{ backgroundColor: mutedColor }}>
-                                <TabsTrigger value="remark" icon={DesignPencil} iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
+                                <TabsTrigger
+                                    value="remark"
+                                    icon={DesignPencil}
+                                    iconProps={{ width: BUTTON_ICON_LG, height: BUTTON_ICON_LG }}>
                                     灵感速记
                                 </TabsTrigger>
                                 <TabsTrigger
@@ -126,12 +123,7 @@ export default function RecordPage() {
                             </TabsList>
 
                             <TabsContent value="remark" className="flex-1">
-                                <RichNoteEditor
-                                    placeholder="编辑录音备注"
-                                    inputRef={noteInputRef}
-                                    onFocusChange={setIsNoteFocused}
-                                    onStyleStateChange={setNoteStyleState}
-                                />
+                                <RichNoteEditor placeholder="编辑录音备注" inputRef={noteInputRef} />
                             </TabsContent>
 
                             <TabsContent value="transcript">
@@ -151,10 +143,13 @@ export default function RecordPage() {
                     </View>
                 </View>
 
-                <View className="flex-shrink-0 rounded-t-[26px]" style={{ backgroundColor: cardColor }}>
+                <View className="flex-shrink-0 rounded-t-3xl" style={{ backgroundColor: cardColor }}>
                     <View className="flex-row items-center gap-3 p-3 pb-4">
                         {isIdleLike ? (
-                            <RoundControlButton backgroundColor={mutedColor} disabled={isStopping || actionLoading} onPress={handleBackPress}>
+                            <RoundControlButton
+                                backgroundColor={mutedColor}
+                                disabled={isStopping || actionLoading}
+                                onPress={handleBackPress}>
                                 <ArrowLeft size={20} color={textColor} />
                             </RoundControlButton>
                         ) : canStop ? (
@@ -167,13 +162,12 @@ export default function RecordPage() {
                             </RoundControlButton>
                         )}
 
-                        <View className="flex-1 items-center justify-center">
-                            {renderRecordStatus()}
-                        </View>
+                        <View className="flex-1 items-center justify-center">{renderRecordStatus()}</View>
 
                         <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
-                            <View className={`h-12 w-12 items-center justify-center rounded-full ${isStopping ? 'opacity-50' : ''}`}
-                                  style={{ backgroundColor: isMicVisualState ? primaryColor : mutedColor }}>
+                            <View
+                                className={`h-12 w-12 items-center justify-center rounded-full ${isStopping ? 'opacity-50' : ''}`}
+                                style={{ backgroundColor: isMicVisualState ? primaryColor : mutedColor }}>
                                 {isIdleLike ? (
                                     <Mic size={22} color={primaryForegroundColor} />
                                 ) : isPaused ? (
@@ -187,23 +181,6 @@ export default function RecordPage() {
                     <BottomSafeAreaSpacer />
                 </View>
             </View>
-            <EditorKeyboardToolbar
-                visible={showKeyboardToolbar}
-                noteInputRef={noteInputRef}
-                noteStyleState={noteStyleState}
-                primaryColor={primaryColor}
-                textColor={textColor}
-                mutedColor={mutedColor}
-                mutedTextColor={mutedTextColor}
-                onBlocked={() => {
-                    toast({
-                        title: '当前标题样式下不可用',
-                        description: '请先取消标题样式后再使用该格式',
-                        variant: 'error',
-                        duration: 2200,
-                    });
-                }}
-            />
             <AlertDialog
                 isVisible={confirmDialogState.isVisible}
                 title={confirmDialogState.title}

@@ -31,9 +31,7 @@ export default function FolderListToolbar({
     const cardColor = useColor('card');
 
     return (
-        <View
-            className="flex-row items-center justify-between rounded-t-[26px] px-4 py-3"
-            style={{ backgroundColor: cardColor }}>
+        <View className="flex-row items-center justify-between rounded-t-3xl px-4 py-3" style={{ backgroundColor: cardColor }}>
             <View className="flex-grow flex-row items-center gap-x-2">
                 <TextX variant="title" numberOfLines={1} ellipsizeMode="tail">
                     {isMultiSelectMode ? actionMenuTitle : currentFolderLabel}
@@ -46,10 +44,7 @@ export default function FolderListToolbar({
                     </IconToolbarButton>
                 ) : null}
                 {isMultiSelectMode ? (
-                    <IconToolbarButton
-                        backgroundColor={secondaryColor}
-                        disabled={isToggleSelectAllDisabled}
-                        onPress={onToggleSelectAll}>
+                    <IconToolbarButton backgroundColor={secondaryColor} disabled={isToggleSelectAllDisabled} onPress={onToggleSelectAll}>
                         <CheckCheck size={16} color={textColor} strokeWidth={isAllSelected ? 2.3 : 2} />
                     </IconToolbarButton>
                 ) : null}
