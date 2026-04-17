@@ -337,6 +337,10 @@ export default function HomeList() {
                 ? '请选择文件夹'
                 : '请选择文件'
             : `已选择 ${selectedCount} 个${isFolderListMode ? '文件夹' : '文件'}`;
+    const deleteTargetCount = Math.max(selectedCount, 1);
+    const deleteDialogDescription = isFolderListMode
+        ? `是否删除已选中的 ${deleteTargetCount} 个文件夹，删除后无法恢复。`
+        : `是否删除已选中的 ${deleteTargetCount} 个文件，删除后无法恢复。`;
 
     const validateRenameName = React.useCallback((name: string): string | null => {
         if (!name) {
@@ -607,6 +611,14 @@ export default function HomeList() {
             resetSelectionState();
         }
     }, [isMultiSelectMode, isSingleSelectMode, resetSelectionState]);
+    const actionableCount = isFolderListMode ? selectableFolderNames.length : filteredItems.length;
+    React.useEffect(() => {
+        if (!isMultiSelectMode || actionableCount > 0) {
+            return;
+        }
+        setIsMultiSelectMode(false);
+        resetSelectionState();
+    }, [actionableCount, isMultiSelectMode, resetSelectionState]);
     const handlePressSearch = React.useCallback(() => {
         toast({
             title: '搜索功能即将上线',
@@ -742,15 +754,7 @@ export default function HomeList() {
                 onConfirm={() => {
                     return handleConfirmDelete();
                 }}>
-                <TextX>
-                    {isSingleSelectMode || isSingleSelectClosing
-                        ? isFolderListMode
-                            ? '是否删除当前文件夹，删除后无法恢复。'
-                            : '是否删除当前文件，删除后无法恢复。'
-                        : isFolderListMode
-                          ? `是否删除已选中的 ${selectedCount} 个文件夹，删除后无法恢复。`
-                          : `是否删除已选中的 ${selectedCount} 个文件，删除后无法恢复。`}
-                </TextX>
+                <TextX>{deleteDialogDescription}</TextX>
             </AlertDialog>
             <NameInputDialog
                 isVisible={createFolderDialogVisible}
