@@ -5,7 +5,7 @@ import {
     type RecognitionRunContext,
 } from '~/modules/sherpa/recognition';
 import type { SherpaModelId, SherpaTranscribeOptions } from '~/modules/sherpa';
-import { runRecognitionPreflight, type RecognitionPreflightKind } from '~/scripts/utils';
+import { runRecognitionPreflight, type RecognitionPreflightKind } from '~/modules/sherpa/recognition-preflight';
 
 export type AccuracyCompareItem = {
     char: string;
@@ -93,7 +93,7 @@ function buildLcsCompare(reference: string, recognized: string): {
 }
 
 /**
- * Dev-only recognition accuracy script:
+ * Dev-only recognition accuracy helper:
  * - Runs preflight checks (permission/model/version)
  * - Performs transcription
  * - Calculates LCS-based hit rate against reference text
@@ -143,4 +143,3 @@ export async function runRecognitionAccuracy(options: RunRecognitionAccuracyOpti
         options: resolvedOptions,
     };
 }
-

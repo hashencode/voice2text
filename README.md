@@ -19,7 +19,7 @@
 
 ## 开发测试（模型准确率）
 
-项目已提供可复用脚本模块：`scripts/recognition-accuracy.ts`。
+项目已提供可复用运行时模块：`modules/sherpa/recognition-accuracy.ts`。
 
 可在开发代码中直接调用 `runRecognitionAccuracy`，用于：
 - 识别前置检查（权限、模型安装、版本）
@@ -29,7 +29,7 @@
 示例：
 
 ```ts
-import { runRecognitionAccuracy } from '~/scripts/recognition-accuracy';
+import { runRecognitionAccuracy } from '~/modules/sherpa/recognition-accuracy';
 
 const result = await runRecognitionAccuracy({
   filePath: wavPath,

@@ -7,7 +7,6 @@
         "ios": "expo run:ios",
         "start": "expo start --port 8083",
         "prebuild": "expo prebuild",
-        "memory:review": "node scripts/memory-review.mjs",
         "lint": "eslint \"**/*.{js,jsx,ts,tsx}\" && prettier -c \"**/*.{js,jsx,ts,tsx,json}\"",
         "format": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix && prettier \"**/*.{js,jsx,ts,tsx,json}\" --write",
         "web": "expo start --web --port 8083"

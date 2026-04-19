@@ -16,6 +16,18 @@ If a statement depends on version behavior, verify against the relevant Expo doc
 
 - `compound-engineering`: Use when setting up or maintaining the Compound Engineering memory loop (`PROFILE.md`, `ACTIVE.md`, `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`) or when wiring memory flow rules through `AGENTS.md`.
 
+## Utility File Splitting Rule
+
+When organizing shared logic across `scripts/`, `utils/`, and feature/module folders:
+
+1. `scripts/` must only contain executable scripts (Node/CLI/tooling entrypoints), not app runtime business logic.
+2. `utils/` should contain pure, side-effect-light reusable helpers only.
+3. If a constant/helper is used by only one file and is tightly coupled to that file's domain, keep it in the same file (or colocated domain file), do not split it into a standalone utility file.
+4. Extract into a standalone file only when at least one of these is true:
+   - reused by multiple modules, or
+   - clear near-term expansion/extension is expected.
+5. Prefer clear ownership over micro-fragmentation: avoid splitting files just for stylistic symmetry.
+
 ## Compound Engineering (Project Local)
 
 Use project-local memory directory:
@@ -56,7 +68,3 @@ Behavior expectations:
 - Do not log trivial typos or one-off noise
 - Prefer concise, action-oriented entries
 
-Automation:
-
-- Run memory maintenance manually with `node scripts/memory-review.mjs`
-- Manual maintenance can update memory files, but must never edit `AGENTS.md` automatically

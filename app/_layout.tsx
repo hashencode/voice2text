@@ -7,7 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ToastProvider } from '~/components/ui/toast';
 import { useRecordingRecovery } from '~/hooks/use-recording-recovery';
-import '~/scripts/interop';
+import '~/app/nativewind-interop';
 import { ThemeProvider } from '~/theme/theme-provider';
 
 export default function RootLayout() {
