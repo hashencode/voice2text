@@ -4,15 +4,18 @@ import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
 import { BORDER_RADIUS, FONT_SIZE } from '@/theme/globals';
+import { Check } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { ActionSheetIOS, Platform, ScrollView, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
 
 export interface ActionSheetOption {
     title: string;
+    description?: string;
     onPress: () => void;
     destructive?: boolean;
     disabled?: boolean;
     icon?: React.ReactNode;
+    selected?: boolean;
 }
 
 interface ActionSheetProps {
@@ -31,7 +34,7 @@ export function ActionSheet({ visible, onClose, title, message, options, cancelB
             return;
         }
 
-        const optionTitles = options.map(option => option.title);
+        const optionTitles = options.map(option => `${option.selected ? '✓ ' : ''}${option.title}`);
         const destructiveButtonIndex = options.findIndex(option => option.destructive);
         const disabledButtonIndices = options.map((option, index) => (option.disabled ? index : -1)).filter(index => index !== -1);
 
@@ -81,6 +84,7 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
     const mutedColor = useColor('textMuted');
     const borderColor = useColor('border');
     const destructiveColor = useColor('red');
+    const primaryColor = useColor('primary');
 
     const handleOptionPress = (option: ActionSheetOption) => {
         if (!option.disabled) {
@@ -128,17 +132,27 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
                                 disabled={option.disabled}
                                 activeOpacity={0.6}>
                                 <View style={styles.optionContent}>
-                                    {option.icon && <View style={styles.optionIcon}>{option.icon}</View>}
-                                    <TextX
-                                        style={[
-                                            styles.optionText,
-                                            {
-                                                color: option.destructive ? destructiveColor : option.disabled ? mutedColor : textColor,
-                                            },
-                                        ]}
-                                        numberOfLines={1}>
-                                        {option.title}
-                                    </TextX>
+                                    <View style={styles.optionMain}>
+                                        {option.icon && <View style={styles.optionIcon}>{option.icon}</View>}
+                                        <View style={styles.optionTextWrap}>
+                                            <TextX
+                                                style={[
+                                                    styles.optionText,
+                                                    {
+                                                        color: option.destructive ? destructiveColor : option.disabled ? mutedColor : textColor,
+                                                    },
+                                                ]}
+                                                numberOfLines={1}>
+                                                {option.title}
+                                            </TextX>
+                                            {option.description ? (
+                                                <TextX style={[styles.optionDescription, { color: mutedColor }]} numberOfLines={1}>
+                                                    {option.description}
+                                                </TextX>
+                                            ) : null}
+                                        </View>
+                                    </View>
+                                    {option.selected ? <Check size={18} color={primaryColor} /> : null}
                                 </View>
                             </TouchableOpacity>
                         ))}
@@ -208,6 +222,15 @@ const styles = StyleSheet.create({
     optionContent: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    optionMain: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    optionTextWrap: {
+        flex: 1,
     },
     optionIcon: {
         marginRight: 12,
@@ -219,6 +242,10 @@ const styles = StyleSheet.create({
     optionText: {
         fontWeight: '500',
         flex: 1,
+    },
+    optionDescription: {
+        marginTop: 2,
+        fontSize: FONT_SIZE - 2,
     },
     cancelContainer: {
         borderTopWidth: StyleSheet.hairlineWidth,

@@ -26,11 +26,7 @@ async function readWavMeta(path: string): Promise<WavFileMeta> {
     const endedAtMs = rawModifiedAt === null ? null : rawModifiedAt > 1e12 ? rawModifiedAt : rawModifiedAt * 1000;
     // 统一 recordedAtMs 语义为“录音开始时间”；恢复场景下文件修改时间更接近结束时间，所以减去时长回推。
     const recordedAtMs =
-        endedAtMs === null
-            ? null
-            : info.durationMs !== null && info.durationMs > 0
-              ? Math.max(0, endedAtMs - info.durationMs)
-              : endedAtMs;
+        endedAtMs === null ? null : info.durationMs !== null && info.durationMs > 0 ? Math.max(0, endedAtMs - info.durationMs) : endedAtMs;
     return {
         path,
         sampleRate: info.sampleRate,
@@ -65,10 +61,8 @@ async function recoverSessions(
 
     for (const session of sessions) {
         let recovered: Awaited<ReturnType<typeof SherpaOnnx.recoverWavRecordingSession>> = null;
-        let attemptNo = 0;
 
         for (let attempt = 1; attempt <= MAX_RECOVERY_ATTEMPTS; attempt += 1) {
-            attemptNo = attempt;
             try {
                 recovered = await SherpaOnnx.recoverWavRecordingSession(session.sessionId);
                 if (recovered?.path) {

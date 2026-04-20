@@ -32,13 +32,6 @@ export interface OnboardingProps {
     children?: React.ReactNode;
 }
 
-// Enhanced Onboarding Step Component for complex layouts
-interface OnboardingStepContentProps {
-    step: OnboardingStep;
-    isActive: boolean;
-    children?: React.ReactNode;
-}
-
 export function Onboarding({
     steps,
     onComplete,

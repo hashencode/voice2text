@@ -1,6 +1,5 @@
 import { View } from '@/components/ui/view';
 import { useColor } from '@/hooks/useColor';
-import { Colors } from '@/theme/colors';
 import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import classNames from 'classnames';
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -179,9 +178,9 @@ export function TabsTrigger({ children, value, disabled = false, className, styl
     const { activeTab, setActiveTab, triggerRadius, orientation } = useTabsContext();
     const isActive = activeTab === value;
 
-    const activeBackgroundColor = useColor('primary');
-    const mutedForegroundColor = useColor('mutedForeground');
-    const activeTextColor = Colors.dark.text;
+    const activeBackgroundColor = useColor('card');
+    const textColor = useColor('text');
+    const activeTextColor = useColor('primary');
 
     const handlePress = () => {
         if (!disabled) {
@@ -200,12 +199,11 @@ export function TabsTrigger({ children, value, disabled = false, className, styl
 
     const triggerTextStyle: TextStyle = {
         fontWeight: '500',
-        color: isActive ? activeTextColor : mutedForegroundColor,
+        color: isActive ? activeTextColor : textColor,
         textAlign: 'center',
         ...textStyle,
     };
-    const triggerTextColor =
-        typeof triggerTextStyle.color === 'string' ? triggerTextStyle.color : isActive ? activeTextColor : mutedForegroundColor;
+    const triggerTextColor = typeof triggerTextStyle.color === 'string' ? triggerTextStyle.color : isActive ? activeTextColor : textColor;
     const IconComp = icon;
 
     return (

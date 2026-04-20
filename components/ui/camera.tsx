@@ -72,7 +72,6 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
         const fadeAnim = useSharedValue(0);
         const settingsAnim = useSharedValue(0);
         const zoomTextAnim = useSharedValue(0);
-        const zoomControlsAnim = useSharedValue(0);
         const zoom = useSharedValue(0);
         const baseZoom = useSharedValue(0);
 
@@ -92,11 +91,10 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
         const [soundEnabled, setSoundEnabled] = useState(true);
         const [showSettings, setShowSettings] = useState(false);
         const [aspectRatioIndex, setAspectRatioIndex] = useState(1);
-        const [zoomControls, setZoomControls] = useState(false);
+        const [zoomControls] = useState(false);
         const [availableZoomFactors] = useState<number[]>([0, 0.25, 0.5, 0.75, 1.0]);
         const [currentZoomIndex, setCurrentZoomIndex] = useState(0);
         const [zoomFactorText, setZoomFactorText] = useState('1×');
-        const [zoomProgress, setZoomProgress] = useState(0);
 
         const backgroundColor = useColor('background');
         const textColor = useColor('text');
@@ -109,7 +107,6 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
             currentValue => {
                 const text = currentValue === 0 ? '1×' : `${(1 + currentValue * 4).toFixed(1)}×`; // Adjusted to .toFixed(1) for smoother feedback
                 runOnJS(setZoomFactorText)(text);
-                runOnJS(setZoomProgress)(currentValue * 100);
             },
             [],
         );
@@ -123,9 +120,6 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
         }));
         const animatedZoomTextStyle = useAnimatedStyle(() => ({
             opacity: zoomTextAnim.value,
-        }));
-        const animatedZoomControlsStyle = useAnimatedStyle(() => ({
-            opacity: zoomControlsAnim.value,
         }));
         const animatedCameraProps = useAnimatedProps(() => ({ zoom: zoom.value }));
 
@@ -173,12 +167,6 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
         useEffect(() => {
             fadeAnim.value = withTiming(1, { duration: 300 });
         }, [fadeAnim]);
-
-        useEffect(() => {
-            zoomControlsAnim.value = withTiming(zoomControls ? 1 : 0, {
-                duration: 300,
-            });
-        }, [zoomControls, zoomControlsAnim]);
 
         useEffect(() => {
             return () => {
@@ -310,12 +298,6 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                 settingsAnim.value = withTiming(newValue ? 1 : 0, { duration: 300 });
                 return newValue;
             });
-        };
-
-        const handleZoomSliderChange = (value: number) => {
-            const newZoom = value / 100;
-            zoom.value = newZoom;
-            baseZoom.value = newZoom;
         };
 
         const formatTime = (seconds: number) => {

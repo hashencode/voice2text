@@ -1,7 +1,6 @@
 import { Ellipsis, Heart } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
 import { FONT_SIZE_LG } from '~/theme/globals';
@@ -51,8 +50,7 @@ export default function HomeListRowBase({
             <View className="shrink-0">
                 {rightSlot ??
                     (showArrow ? (
-                        <BouncyPressable
-                            scaleIn={1.2}
+                        <Pressable
                             onPress={event => {
                                 event.stopPropagation();
                                 onPressMore?.();
@@ -60,7 +58,7 @@ export default function HomeListRowBase({
                             <View className="h-9 w-9 items-center justify-center rounded-xl">
                                 <Ellipsis size={18} color={actionIconColor} />
                             </View>
-                        </BouncyPressable>
+                        </Pressable>
                     ) : null)}
             </View>
         </Pressable>

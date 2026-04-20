@@ -69,7 +69,6 @@ export function DatePicker(props: DatePickerProps) {
         timeFormat = '24',
         variant = 'filled',
         labelStyle,
-        errorStyle,
     } = props;
 
     const mode = props.mode || 'date';

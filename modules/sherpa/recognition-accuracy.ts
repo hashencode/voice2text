@@ -6,6 +6,10 @@ import {
 } from '~/modules/sherpa/recognition';
 import type { SherpaModelId, SherpaTranscribeOptions } from '~/modules/sherpa';
 import { runRecognitionPreflight, type RecognitionPreflightKind } from '~/modules/sherpa/recognition-preflight';
+import {
+    DEFAULT_RECOGNITION_ACCURACY_REFERENCE_TEXT,
+    resolveDefaultRecognitionAccuracyAudioUri,
+} from '~/modules/sherpa/recognition-accuracy-reference';
 
 export type AccuracyCompareItem = {
     char: string;
@@ -33,6 +37,18 @@ export type RecognitionAccuracyResult = {
 export type RunRecognitionAccuracyOptions = {
     filePath: string;
     referenceText: string;
+    modelId?: SherpaModelId;
+    kind?: RecognitionPreflightKind;
+    preference?: RecognitionPreference;
+    overrides?: RecognitionRunContext['overrides'];
+};
+
+export type CompareRecognitionAccuracyOptions = {
+    recognizedText: string;
+    referenceText: string;
+};
+
+export type RunDefaultRecognitionAccuracyOptions = {
     modelId?: SherpaModelId;
     kind?: RecognitionPreflightKind;
     preference?: RecognitionPreference;
@@ -142,4 +158,44 @@ export async function runRecognitionAccuracy(options: RunRecognitionAccuracyOpti
         },
         options: resolvedOptions,
     };
+}
+
+export function compareRecognitionAccuracy(options: CompareRecognitionAccuracyOptions): RecognitionAccuracyResult {
+    const compared = buildLcsCompare(options.referenceText, options.recognizedText);
+    const referenceWithoutPunctuation = compared.referenceItems.filter(item => !isPunctuationChar(item.char));
+    const hitCount = referenceWithoutPunctuation.filter(item => item.matched).length;
+    const totalCount = referenceWithoutPunctuation.length;
+    const hitRate = totalCount > 0 ? hitCount / totalCount : 0;
+
+    return {
+        recognizedText: options.recognizedText,
+        elapsedMs: 0,
+        hitCount,
+        totalCount,
+        hitRate,
+        referenceItems: compared.referenceItems,
+        recognizedItems: compared.recognizedItems,
+        modelId: getCurrentModel(),
+        timing: {
+            provider: 'compare-only',
+            numThreads: 0,
+            availableProcessors: 0,
+            performanceTier: 'n/a',
+        },
+        options: {},
+    };
+}
+
+export async function runDefaultRecognitionAccuracy(
+    options: RunDefaultRecognitionAccuracyOptions = {},
+): Promise<RecognitionAccuracyResult> {
+    const filePath = await resolveDefaultRecognitionAccuracyAudioUri();
+    return runRecognitionAccuracy({
+        filePath,
+        referenceText: DEFAULT_RECOGNITION_ACCURACY_REFERENCE_TEXT,
+        modelId: options.modelId,
+        kind: options.kind,
+        preference: options.preference,
+        overrides: options.overrides,
+    });
 }

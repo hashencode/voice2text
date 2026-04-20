@@ -1,44 +1,28 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { ChatBubbleTranslate, DesignPencil, Post, UndoAction } from 'iconoir-react-native';
-import { ArrowLeft, Gauge, RotateCcw, Square } from 'lucide-react-native';
+import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
+import { ArrowLeft, Gauge, PauseIcon, PlayIcon, RotateCcw, Square } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import type { EnrichedTextInputInstance } from 'react-native-enriched';
 import Animated from 'react-native-reanimated';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
-import { BouncyPressable } from '~/components/ui/bouncy-pressable';
 import { ButtonX } from '~/components/ui/buttonx';
-import { CommonEmptyState } from '~/components/ui/common-empty-state';
+import { IconButton } from '~/components/ui/icon-button';
 import { Picker } from '~/components/ui/picker';
 import { Progress } from '~/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
 import SessionHeader from '~/features/session-editor/components/session-header';
+import { SessionTabStatusCard } from '~/features/session-editor/components/session-tab-status-card';
 import { useImportAudioSession } from '~/features/session-editor/hooks/use-import-audio-session';
+import { getRecognitionPrimaryAction } from '~/features/session-editor/services/import-audio-recognition-ui';
 import { formatTime } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import { useColor } from '~/hooks/useColor';
 import { BORDER_RADIUS_SM, BUTTON_ICON_LG, FONT_SIZE_LG } from '~/theme/globals';
-
-type RoundControlButtonProps = {
-    backgroundColor: string;
-    onPress: () => void;
-    children: React.ReactNode;
-};
-
-function RoundControlButton({ backgroundColor, onPress, children }: RoundControlButtonProps) {
-    return (
-        <Pressable onPress={onPress}>
-            <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor }}>
-                {children}
-            </View>
-        </Pressable>
-    );
-}
 
 function TimeLabel({ value, color, align = 'left' }: { value: string; color: string; align?: 'left' | 'right' }) {
     return (
@@ -104,17 +88,15 @@ export default function ImportAudioPage() {
         isInitialSessionLoading,
         recognitionLanguage,
         setRecognitionLanguage,
+        recognitionMode,
         recognitionState,
         recognitionStatusIcon,
         recognitionStatusText,
         recognitionProgressPercent,
         isRecognitionBusy,
-        recognitionPickerValue,
-        reRecognitionOptions,
+        handleRecognitionModeChange,
+        startRecognition,
         cancelRecognition,
-        handleReRecognitionModeChange,
-        runOfflineRecognition,
-        runOnlineRecognition,
     } = useImportAudioSession({
         audioUri,
         audioName: params.name,
@@ -131,8 +113,10 @@ export default function ImportAudioPage() {
     const mutedTextColor = useColor('textMuted');
     const cardColor = useColor('card');
     const mutedColor = useColor('muted');
-    const transcriptHasContent = transcriptText.trim().length > 0;
-    const showStopRecognitionButton = recognitionState === 'preparing' || recognitionState === 'recognizing';
+    const showStopRecognitionButton = getRecognitionPrimaryAction(recognitionState, recognitionMode) === 'stop';
+    const summaryHasContent = summaryText.trim().length > 0;
+    const hasRecognitionResult = transcriptText.trim().length > 0;
+    const shouldShowRecognitionStatusCard = recognitionState === 'preparing' || recognitionState === 'recognizing' || recognitionState === 'failed';
     const recognitionIconColor =
         recognitionStatusIcon === 'warning-triangle'
             ? destructiveColor
@@ -145,20 +129,20 @@ export default function ImportAudioPage() {
         }
         return (
             <View className="flex-row items-center gap-4">
-                <RoundControlButton backgroundColor={mutedColor} onPress={handleRewind}>
+                <IconButton circular backgroundColor={mutedColor} onPress={handleRewind}>
                     <TextX>-5s</TextX>
-                </RoundControlButton>
+                </IconButton>
 
-                <RoundControlButton backgroundColor={mutedColor} onPress={handleOpenPlaybackRateSheet}>
+                <IconButton circular backgroundColor={mutedColor} onPress={handleOpenPlaybackRateSheet}>
                     {playbackRate === 1.0 ? (
                         <Gauge size={20} strokeWidth={2} color={textColor} />
                     ) : (
                         <TextX style={{ color: primaryColor }}>{speedLabel}x</TextX>
                     )}
-                </RoundControlButton>
-                <RoundControlButton backgroundColor={mutedColor} onPress={handleFastForward}>
+                </IconButton>
+                <IconButton circular backgroundColor={mutedColor} onPress={handleFastForward}>
                     <TextX>+5s</TextX>
-                </RoundControlButton>
+                </IconButton>
             </View>
         );
     };
@@ -197,9 +181,57 @@ export default function ImportAudioPage() {
                                 </TabsTrigger>
                             </TabsList>
 
+                            {editorTab === 'transcript' ? (
+                                <View className="mt-3 gap-2">
+                                    <View className="flex-row items-center gap-2">
+                                        <View className="flex-1">
+                                            <Picker
+                                                value={recognitionLanguage}
+                                                modalTitle="选择识别语言"
+                                                options={[
+                                                    { label: '中文', value: 'zh' },
+                                                    { label: '英文', value: 'en' },
+                                                ]}
+                                                onValueChange={value => {
+                                                    if (value === 'zh' || value === 'en') {
+                                                        setRecognitionLanguage(value);
+                                                    }
+                                                }}
+                                                disabled={isRecognitionBusy}
+                                            />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Picker
+                                                value={recognitionMode}
+                                                modalTitle="选择识别模式"
+                                                options={[
+                                                    { label: '离线识别', value: 'offline' },
+                                                    { label: '在线识别', value: 'online' },
+                                                ]}
+                                                onValueChange={handleRecognitionModeChange}
+                                                disabled={isRecognitionBusy}
+                                            />
+                                        </View>
+                                        <View className="flex-1">
+                                            {showStopRecognitionButton ? (
+                                                <ButtonX variant="destructive" onPress={() => void cancelRecognition()}>
+                                                    停止识别
+                                                </ButtonX>
+                                            ) : (
+                                                <ButtonX variant="primary" onPress={startRecognition}>
+                                                    {hasRecognitionResult ? '重新识别' : '开始识别'}
+                                                </ButtonX>
+                                            )}
+                                        </View>
+                                    </View>
+                                </View>
+                            ) : null}
+
                             <TabsContent value="remark" className="flex-1">
                                 {isInitialSessionLoading ? (
-                                    <CommonEmptyState text="正在载入灵感" Icon={DesignPencil} />
+                                    <View className="flex-1 justify-center">
+                                        <SessionTabStatusCard Icon={DesignPencil} title="正在载入灵感" align="left" iconSize={20} />
+                                    </View>
                                 ) : (
                                     <RichNoteEditor
                                         key={`remark-${noteEditorSeed}`}
@@ -211,112 +243,53 @@ export default function ImportAudioPage() {
                             </TabsContent>
 
                             <TabsContent value="transcript" className="flex-1">
-                                {transcriptHasContent ? (
-                                    <View className="flex-1">
-                                        <View className="mb-3 flex-row justify-end">
-                                            {showStopRecognitionButton ? (
-                                                <View className="w-28">
-                                                    <ButtonX size="sm" variant="destructive" onPress={() => void cancelRecognition()}>
-                                                        停止识别
-                                                    </ButtonX>
-                                                </View>
-                                            ) : (
-                                                <Picker
-                                                    value={recognitionPickerValue}
-                                                    modalTitle="重新识别"
-                                                    options={reRecognitionOptions}
-                                                    onValueChange={handleReRecognitionModeChange}
-                                                    disabled={isRecognitionBusy}
-                                                    style={{
-                                                        width: 36,
-                                                        minHeight: 36,
-                                                        borderWidth: 0,
-                                                        backgroundColor: mutedColor,
-                                                        borderRadius: 10,
-                                                        paddingHorizontal: 0,
-                                                        justifyContent: 'center',
-                                                    }}
-                                                    inputStyle={{ width: 0, opacity: 0 }}
-                                                    rightComponent={<UndoAction width={18} height={18} color={textColor} />}
-                                                />
-                                            )}
-                                        </View>
-                                        <TextInput
-                                            value={transcriptText}
-                                            onChangeText={setTranscriptText}
-                                            placeholder="编辑语音识别内容"
-                                            placeholderTextColor={mutedTextColor}
-                                            multiline
-                                            textAlignVertical="top"
-                                            className="flex-1 p-0"
-                                            style={{ color: textColor, fontSize: FONT_SIZE_LG }}
+                                <View className="flex-1">
+                                    {shouldShowRecognitionStatusCard ? (
+                                        <SessionTabStatusCard
+                                            Icon={ChatBubbleTranslate}
+                                            iconColor={recognitionIconColor}
+                                            title={recognitionStatusText}
+                                            progressText={recognitionProgressPercent !== null ? `${recognitionProgressPercent}%` : null}
+                                            align="left"
+                                            iconSize={20}
                                         />
-                                    </View>
-                                ) : (
-                                    <View className="flex-1 items-center justify-center px-4">
-                                        <View className="items-center gap-3">
-                                            <ChatBubbleTranslate strokeWidth={1} width={62} height={62} color={recognitionIconColor} />
-                                            <TextX style={{ color: mutedTextColor }}>{recognitionStatusText}</TextX>
-                                            {recognitionProgressPercent !== null ? (
-                                                <TextX style={{ color: mutedTextColor }}>{recognitionProgressPercent}%</TextX>
-                                            ) : null}
-                                        </View>
-
-                                        <View className="mt-5 flex w-full max-w-xs">
-                                            <Picker
-                                                value={recognitionLanguage}
-                                                modalTitle="选择识别语言"
-                                                placeholder="选择识别语言"
-                                                showCancelButton
-                                                cancelText="取消"
-                                                disabled={isRecognitionBusy}
-                                                options={[
-                                                    { label: '中文', value: 'zh' },
-                                                    { label: '英文', value: 'en' },
-                                                ]}
-                                                onValueChange={value => {
-                                                    if (value === 'zh' || value === 'en') {
-                                                        setRecognitionLanguage(value);
-                                                    }
-                                                }}
-                                            />
-                                        </View>
-
-                                        {showStopRecognitionButton ? (
-                                            <View className="mt-4 w-full max-w-xs">
-                                                <ButtonX size="lg" variant="destructive" onPress={() => void cancelRecognition()}>
-                                                    停止识别
-                                                </ButtonX>
-                                            </View>
-                                        ) : (
-                                            <View className="mt-4 w-full max-w-xs flex-row items-center gap-2">
-                                                <View className="flex-1">
-                                                    <ButtonX variant="secondary" size="lg" onPress={() => void runOfflineRecognition()}>
-                                                        离线识别
-                                                    </ButtonX>
-                                                </View>
-                                                <View className="flex-1">
-                                                    <ButtonX size="lg" variant="primary" onPress={runOnlineRecognition}>
-                                                        在线识别
-                                                    </ButtonX>
-                                                </View>
-                                            </View>
-                                        )}
-                                    </View>
-                                )}
+                                    ) : null}
+                                    <TextInput
+                                        value={transcriptText}
+                                        onChangeText={setTranscriptText}
+                                        placeholder="编辑语音识别内容"
+                                        placeholderTextColor={mutedTextColor}
+                                        multiline
+                                        textAlignVertical="top"
+                                        editable={!isRecognitionBusy}
+                                        className={`${shouldShowRecognitionStatusCard ? 'mt-2 ' : ''}flex-1 p-0`}
+                                        style={{ color: textColor, fontSize: FONT_SIZE_LG }}
+                                    />
+                                </View>
                             </TabsContent>
 
-                            <TabsContent value="summary">
-                                <TextInput
-                                    value={summaryText}
-                                    onChangeText={setSummaryText}
-                                    placeholder="编辑智能总结内容"
-                                    placeholderTextColor={mutedTextColor}
-                                    multiline
-                                    textAlignVertical="top"
-                                    className="flex-1 p-0 text-base"
-                                    style={{ color: textColor }}
-                                />
+                            <TabsContent value="summary" className="flex-1">
+                                <View className="flex-1">
+                                    {!summaryHasContent ? (
+                                        <SessionTabStatusCard
+                                            Icon={Post}
+                                            title="等待生成智能总结"
+                                            description="智能总结内容将在后续能力接入后显示"
+                                            align="left"
+                                            iconSize={20}
+                                        />
+                                    ) : null}
+                                    <TextInput
+                                        value={summaryText}
+                                        onChangeText={setSummaryText}
+                                        placeholder="编辑智能总结内容"
+                                        placeholderTextColor={mutedTextColor}
+                                        multiline
+                                        textAlignVertical="top"
+                                        className="mt-2 flex-1 p-0 text-base"
+                                        style={{ color: textColor }}
+                                    />
+                                </View>
                             </TabsContent>
                         </Tabs>
                     </View>
@@ -326,35 +299,28 @@ export default function ImportAudioPage() {
                     <Animated.View className="p-3" style={toolbarAnimatedStyle}>
                         <Animated.View className="flex-row items-center gap-3" style={toolbarMainRowAnimatedStyle}>
                             {isPlaybackMode ? (
-                                <RoundControlButton backgroundColor={destructiveColor} onPress={() => void handleStopPlayback()}>
-                                    <Square size={20} strokeWidth={2} color={destructiveForegroundColor} />
-                                </RoundControlButton>
+                                <IconButton
+                                    circular
+                                    backgroundColor={destructiveColor}
+                                    onPress={() => void handleStopPlayback()}
+                                    icon={Square}
+                                    iconProps={{ color: destructiveForegroundColor }}
+                                />
                             ) : (
-                                <RoundControlButton backgroundColor={mutedColor} onPress={handleBackPress}>
-                                    <ArrowLeft size={20} strokeWidth={2} color={textColor} />
-                                </RoundControlButton>
+                                <IconButton circular backgroundColor={mutedColor} onPress={handleBackPress} icon={ArrowLeft} />
                             )}
 
                             <View className="flex-1 items-center justify-center">{renderPlaybackCenter()}</View>
 
-                            <BouncyPressable onPress={startPlayback} scaleIn={1.08}>
-                                <View
-                                    className="h-12 w-12 items-center justify-center rounded-full"
-                                    style={{ backgroundColor: primaryColor }}>
-                                    {playbackCompleted ? (
-                                        <RotateCcw size={22} color={primaryForegroundColor} />
-                                    ) : isPlaying ? (
-                                        <Ionicons name="pause" size={22} color={primaryForegroundColor} />
-                                    ) : (
-                                        <Ionicons
-                                            name="play"
-                                            size={22}
-                                            color={primaryForegroundColor}
-                                            style={{ transform: [{ translateX: 1.5 }] }}
-                                        />
-                                    )}
-                                </View>
-                            </BouncyPressable>
+                            <IconButton
+                                circular
+                                backgroundColor={primaryColor}
+                                onPress={startPlayback}
+                                icon={playbackCompleted ? RotateCcw : isPlaying ? PauseIcon : PlayIcon}
+                                iconProps={{
+                                    color: primaryForegroundColor,
+                                }}
+                            />
                         </Animated.View>
 
                         <Animated.View style={playbackBarAnimatedStyle} pointerEvents={isPlaybackMode ? 'auto' : 'none'}>

@@ -107,8 +107,8 @@ export const useImageZoom = ({ enableZoom, onSetCanSwipe, shouldReset = false }:
     const doubleTapGesture = Gesture.Tap()
         .numberOfTaps(2)
         .onEnd(event => {
+            'worklet';
             if (!enableZoom) return; // Only process if zoom is enabled
-            ('worklet');
 
             // If already zoomed in (beyond a small threshold), reset to original size
             if (scale.value > 1.1) {
@@ -152,16 +152,16 @@ export const useImageZoom = ({ enableZoom, onSetCanSwipe, shouldReset = false }:
     // Gesture for pinching to zoom
     const pinchGesture = Gesture.Pinch()
         .onStart(() => {
+            'worklet';
             if (!enableZoom) return;
-            ('worklet');
             // Save current state at the start of the pinch
             savedScale.value = scale.value;
             savedTranslateX.value = translateX.value;
             savedTranslateY.value = translateY.value;
         })
         .onUpdate(event => {
+            'worklet';
             if (!enableZoom) return;
-            ('worklet');
 
             // Calculate new scale, clamping it between min and max
             const newScale = Math.max(minScale, Math.min(maxScale, savedScale.value * event.scale));
@@ -188,8 +188,8 @@ export const useImageZoom = ({ enableZoom, onSetCanSwipe, shouldReset = false }:
             runOnJS(onSetCanSwipe)(newScale <= 1.1); // FlatList scrollable if not zoomed
         })
         .onEnd(() => {
+            'worklet';
             if (!enableZoom) return;
-            ('worklet');
 
             // If zoomed out too much, reset to original size
             if (scale.value < 1) {

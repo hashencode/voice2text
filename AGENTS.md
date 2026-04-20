@@ -28,6 +28,23 @@ When organizing shared logic across `scripts/`, `utils/`, and feature/module fol
    - clear near-term expansion/extension is expected.
 5. Prefer clear ownership over micro-fragmentation: avoid splitting files just for stylistic symmetry.
 
+## UI Styling Rule (NativeWind First)
+
+For React Native UI styling in this project:
+
+1. Prefer NativeWind `className` as the default styling approach.
+2. If a style can be expressed with NativeWind utilities, do not use inline `style`.
+3. Use `style` only for cases NativeWind cannot represent cleanly (for example dynamic runtime values such as computed colors, dimensions, transforms, or animated styles).
+4. When `style` is required, keep it minimal and place as much static styling as possible in `className`.
+
+## Parameter Defaults Rule
+
+For function/component calls in this project:
+
+1. If an argument value equals the callee's default value, omit that argument.
+2. Pass default-valued arguments only when it improves readability in an exceptional context.
+3. In code review, treat "explicitly passing defaults everywhere" as noise and prefer concise calls.
+
 ## Compound Engineering (Project Local)
 
 Use project-local memory directory:
@@ -67,4 +84,3 @@ Behavior expectations:
 - Default to Chinese for memory entries unless user asks otherwise
 - Do not log trivial typos or one-off noise
 - Prefer concise, action-oriented entries
-

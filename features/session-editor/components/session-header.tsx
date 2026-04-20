@@ -28,7 +28,7 @@ export default function SessionHeader({
                 onChangeText={onChangeDisplayName}
                 editable={editable}
                 placeholderTextColor={mutedTextColor}
-                className="p-0 text-3xl font-semibold"
+                className="p-0 text-2xl font-semibold"
                 style={{ color: textColor }}
             />
 

@@ -158,9 +158,7 @@ export const Video = forwardRef<VideoView, VideoProps>(
         const [currentTime, setCurrentTime] = useState(0);
         const [duration, setDuration] = useState(0);
         const [isMuted, setIsMuted] = useState(muted);
-        const [currentSubtitle, setCurrentSubtitle] = useState<string>('');
         const [isVideoEnded, setIsVideoEnded] = useState(false);
-        const [showPlayIcon, setShowPlayIcon] = useState(false);
         const [showCustomControls, setShowCustomControls] = useState(false);
         const [isSeeking, setIsSeeking] = useState(false);
 
@@ -199,9 +197,6 @@ export const Video = forwardRef<VideoView, VideoProps>(
                     if (dur > 0 && time >= dur - 0.25 && !loop) setIsVideoEnded(true);
                     else setIsVideoEnded(false);
 
-                    const activeSubtitle = subtitles.find(s => time >= s.start && time <= s.end);
-                    setCurrentSubtitle(activeSubtitle?.text || '');
-
                     onPlaybackStatusUpdate?.({
                         currentTime: time,
                         duration: dur,
@@ -215,10 +210,6 @@ export const Video = forwardRef<VideoView, VideoProps>(
 
         const controlsAnimatedStyle = useAnimatedStyle(() => ({
             opacity: controlsOpacity.value,
-        }));
-
-        const playIconAnimatedStyle = useAnimatedStyle(() => ({
-            opacity: playIconOpacity.value,
         }));
 
         const showControls = useCallback(() => {
@@ -239,13 +230,12 @@ export const Video = forwardRef<VideoView, VideoProps>(
         }, [controlsOpacity]);
 
         const showPlayIconAnimation = useCallback(() => {
-            setShowPlayIcon(true);
             playIconOpacity.value = withTiming(1, { duration: 200 });
 
             if (hidePlayIconTimeout.current) clearTimeout(hidePlayIconTimeout.current);
             hidePlayIconTimeout.current = setTimeout(() => {
                 playIconOpacity.value = withTiming(0, { duration: 200 }, isFinished => {
-                    if (isFinished) runOnJS(setShowPlayIcon)(false);
+                    if (!isFinished) return;
                 });
             }, 1000);
         }, [playIconOpacity]);
@@ -257,7 +247,11 @@ export const Video = forwardRef<VideoView, VideoProps>(
                 player.play();
                 setIsVideoEnded(false);
             } else {
-                player.playing ? player.pause() : player.play();
+                if (player.playing) {
+                    player.pause();
+                } else {
+                    player.play();
+                }
             }
             showPlayIconAnimation();
             showControls();

@@ -4,8 +4,8 @@ import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { acquireOverlayInteractionLock } from '@/hooks/use-overlay-interaction-lock';
 import { useColor } from '@/hooks/useColor';
-import { BORDER_RADIUS, BUTTON_HEIGHT, BUTTON_ICON, BUTTON_PADDING_HORIZON } from '@/theme/globals';
-import { Check, ChevronDown, LucideProps } from 'lucide-react-native';
+import { BORDER_RADIUS, BUTTON_ICON } from '@/theme/globals';
+import { Check, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
@@ -62,7 +62,6 @@ export function Picker({
     value,
     values = [],
     error,
-    variant = 'filled',
     placeholder = 'Select an option...',
     onValueChange,
     onValuesChange,
@@ -162,15 +161,6 @@ export function Picker({
         return selectedOptions[0]?.label || placeholder;
     };
 
-    const triggerStyle: ViewStyle = {
-        paddingHorizontal: variant === 'group' ? 0 : BUTTON_PADDING_HORIZON,
-        borderWidth: variant === 'group' ? 0 : 1,
-        borderColor: variant === 'outline' ? borderColor : cardColor,
-        backgroundColor: variant === 'filled' ? cardColor : 'transparent',
-        minHeight: variant === 'group' ? 'auto' : BUTTON_HEIGHT,
-        opacity: disabled ? 0.5 : 1,
-    };
-
     const renderOption = (option: PickerOption, sectionIndex: number, optionIndex: number, isLastOption: boolean) => {
         const isSelected = multiple ? values.includes(option.value) : value === option.value;
 
@@ -186,7 +176,7 @@ export function Picker({
                 }}
                 disabled={option.disabled}
                 activeOpacity={optionActiveOpacity}>
-                <View className="w-full flex-row items-center justify-between py-5">
+                <View className="w-full flex-row items-center justify-between p-5">
                     <View>
                         <TextX className="text-center">{option.label}</TextX>
                         {option.description && (
@@ -204,8 +194,8 @@ export function Picker({
     return (
         <>
             <TouchableOpacity
-                className="w-full flex-row items-center rounded-full"
-                style={[triggerStyle, style]}
+                className="w-full flex-row items-center"
+                style={[{ opacity: disabled ? 0.5 : 1 }, style]}
                 onPress={() => !disabled && setOpen(true)}
                 disabled={disabled}
                 activeOpacity={triggerActiveOpacity}>
@@ -240,9 +230,7 @@ export function Picker({
                             ) : (
                                 rightComponent
                             )
-                        ) : (
-                            <ChevronDown size={BUTTON_ICON} color={error ? danger : muted} />
-                        )}
+                        ) : null}
                     </View>
                 </View>
             </TouchableOpacity>
@@ -283,7 +271,7 @@ export function Picker({
                         <View style={{ height: resolvedOptionsHeight }}>
                             <ScrollView
                                 showsVerticalScrollIndicator={false}
-                                contentContainerStyle={{ padding: BUTTON_PADDING_HORIZON }}
+                                // contentContainerStyle={{ padding: BUTTON_PADDING_HORIZON }}
                                 nestedScrollEnabled
                                 keyboardShouldPersistTaps="handled"
                                 directionalLockEnabled
@@ -313,7 +301,7 @@ export function Picker({
                                             style={{
                                                 color: textMutedColor,
                                             }}>
-                                            No options available
+                                            无可用选项
                                         </TextX>
                                     </View>
                                 )}

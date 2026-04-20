@@ -1,14 +1,13 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { ChatBubbleTranslate, DesignPencil, Post } from 'iconoir-react-native';
-import { ArrowLeft, Mic, Square } from 'lucide-react-native';
+import { ArrowLeft, Mic, PauseIcon, PlayIcon, Square } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import type { EnrichedTextInputInstance } from 'react-native-enriched';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
-import { BouncyPressable } from '~/components/ui/bouncy-pressable';
+import { IconButton } from '~/components/ui/icon-button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
 import RichNoteEditor from '~/features/editor/rich-note-editor';
@@ -18,31 +17,6 @@ import { useRecordSession } from '~/features/session-editor/hooks/use-record-ses
 import type { EditorTabValue } from '~/features/session-editor/types';
 import { useColor } from '~/hooks/useColor';
 import { BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
-
-type RoundControlButtonProps = {
-    backgroundColor: string;
-    disabled?: boolean;
-    onPress?: () => void;
-    children: React.ReactNode;
-};
-
-function RoundControlButton({ backgroundColor, disabled = false, onPress, children }: RoundControlButtonProps) {
-    const container = (
-        <View className={`h-12 w-12 items-center justify-center rounded-full ${disabled ? 'opacity-50' : ''}`} style={{ backgroundColor }}>
-            {children}
-        </View>
-    );
-
-    if (!onPress) {
-        return container;
-    }
-
-    return (
-        <Pressable onPress={onPress} disabled={disabled}>
-            {container}
-        </Pressable>
-    );
-}
 
 export default function RecordPage() {
     const noteInputRef = React.useRef<EnrichedTextInputInstance | null>(null);
@@ -99,7 +73,6 @@ export default function RecordPage() {
                         textColor={textColor}
                         mutedTextColor={mutedTextColor}
                         headerAtMs={headerAtMs}
-                        editable
                     />
 
                     <View className="mt-3 flex-1">
@@ -146,37 +119,45 @@ export default function RecordPage() {
                 <View className="flex-shrink-0 rounded-t-3xl" style={{ backgroundColor: cardColor }}>
                     <View className="flex-row items-center gap-3 p-3 pb-4">
                         {isIdleLike ? (
-                            <RoundControlButton
+                            <IconButton
+                                circular
                                 backgroundColor={mutedColor}
                                 disabled={isStopping || actionLoading}
-                                onPress={handleBackPress}>
-                                <ArrowLeft size={20} color={textColor} />
-                            </RoundControlButton>
+                                onPress={handleBackPress}
+                                icon={ArrowLeft}
+                                iconProps={{ color: textColor }}
+                            />
                         ) : canStop ? (
-                            <RoundControlButton backgroundColor={destructiveColor} disabled={isStopping} onPress={handleConfirmStop}>
-                                <Square size={20} color={destructiveForegroundColor} />
-                            </RoundControlButton>
+                            <IconButton
+                                circular
+                                backgroundColor={destructiveColor}
+                                disabled={isStopping}
+                                onPress={handleConfirmStop}
+                                icon={Square}
+                                iconProps={{ color: destructiveForegroundColor }}
+                            />
                         ) : (
-                            <RoundControlButton backgroundColor={mutedColor} disabled>
-                                <Square size={20} color={destructiveColor} />
-                            </RoundControlButton>
+                            <IconButton
+                                circular
+                                backgroundColor={mutedColor}
+                                disabled
+                                icon={Square}
+                                iconProps={{ color: destructiveColor }}
+                            />
                         )}
 
                         <View className="flex-1 items-center justify-center">{renderRecordStatus()}</View>
 
-                        <BouncyPressable onPress={handleLeftAction} disabled={actionLoading || isStopping} scaleIn={1.08}>
-                            <View
-                                className={`h-12 w-12 items-center justify-center rounded-full ${isStopping ? 'opacity-50' : ''}`}
-                                style={{ backgroundColor: isMicVisualState ? primaryColor : mutedColor }}>
-                                {isIdleLike ? (
-                                    <Mic size={22} color={primaryForegroundColor} />
-                                ) : isPaused ? (
-                                    <Ionicons name="play" size={22} color={textColor} style={{ transform: [{ translateX: 1.5 }] }} />
-                                ) : (
-                                    <Ionicons name="pause" size={22} color={textColor} />
-                                )}
-                            </View>
-                        </BouncyPressable>
+                        <IconButton
+                            circular
+                            backgroundColor={isMicVisualState ? primaryColor : mutedColor}
+                            onPress={handleLeftAction}
+                            icon={isIdleLike ? Mic : isPaused ? PlayIcon : PauseIcon}
+                            disabled={actionLoading || isStopping}
+                            iconProps={{
+                                color: primaryForegroundColor,
+                            }}
+                        />
                     </View>
                     <BottomSafeAreaSpacer />
                 </View>

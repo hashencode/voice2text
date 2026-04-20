@@ -149,7 +149,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                 if (status !== 'granted') {
                     onError?.('Media library permission is required to access photos and videos');
                 }
-            } catch (error) {
+            } catch {
                 onError?.('Failed to request permissions');
                 setHasPermission(false);
             }
@@ -202,7 +202,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                 setHasNextPage(result.hasNextPage);
                 setGalleryCursor(result.hasNextPage ? result.endCursor : null);
                 return result.assets;
-            } catch (error) {
+            } catch {
                 onError?.('Failed to load gallery assets');
                 return [];
             } finally {
@@ -307,7 +307,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
 
                     handleAssetSelection(newAssets);
                 }
-            } catch (error) {
+            } catch {
                 onError?.('Failed to pick media from gallery');
             }
         };
@@ -497,7 +497,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                                 )}
 
                                 <View style={[styles.bottomControlBar, { borderTopColor: borderColor, backgroundColor: cardColor }]}>
-                                    <ButtonX size="default" variant="secondary" onPress={requestCloseGalleryModal}>
+                                    <ButtonX variant="secondary" onPress={requestCloseGalleryModal}>
                                         取消
                                     </ButtonX>
                                     {multiple ? (
@@ -507,7 +507,7 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                                     ) : (
                                         <View />
                                     )}
-                                    <ButtonX size="default" variant="primary" onPress={applyDraftSelection}>
+                                    <ButtonX variant="primary" onPress={applyDraftSelection}>
                                         确认
                                     </ButtonX>
                                 </View>

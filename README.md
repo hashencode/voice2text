@@ -21,10 +21,12 @@
 
 项目已提供可复用运行时模块：`modules/sherpa/recognition-accuracy.ts`。
 
-可在开发代码中直接调用 `runRecognitionAccuracy`，用于：
+可在开发代码中直接调用：
 - 识别前置检查（权限、模型安装、版本）
 - 执行识别
 - 基于 LCS 计算命中率（准确率）
+- 跳过识别，直接比较“已有识别文案 vs 标准文案”
+- 使用项目内置 `assets/sherpa/wav/test.wav` + 标准文案一键测试
 
 示例：
 
@@ -38,6 +40,26 @@ const result = await runRecognitionAccuracy({
 });
 
 console.log('hitRate:', (result.hitRate * 100).toFixed(2) + '%');
+```
+
+也可直接比较已有识别文案（跳过识别）：
+
+```ts
+import { compareRecognitionAccuracy } from '~/modules/sherpa/recognition-accuracy';
+import { DEFAULT_RECOGNITION_ACCURACY_REFERENCE_TEXT } from '~/modules/sherpa/recognition-accuracy-reference';
+
+const result = compareRecognitionAccuracy({
+  recognizedText: someTranscriptText,
+  referenceText: DEFAULT_RECOGNITION_ACCURACY_REFERENCE_TEXT,
+});
+```
+
+也可直接跑项目内置测试音频 `test.wav`：
+
+```ts
+import { runDefaultRecognitionAccuracy } from '~/modules/sherpa/recognition-accuracy';
+
+const result = await runDefaultRecognitionAccuracy();
 ```
 
 说明：该模块依赖 Expo Native 能力，应在 App 运行时调用，不是纯 Node CLI 脚本。

@@ -1,7 +1,7 @@
 import { ArrowLeft, CheckCheck, ListChecks, Search, X } from 'lucide-react-native';
 import React from 'react';
 import { View } from 'react-native';
-import { IconToolbarButton } from '~/components/ui/icon-toolbar-button';
+import { IconButton } from '~/components/ui/icon-button';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/useColor';
 
@@ -28,7 +28,6 @@ export default function FileListToolbar({
     onToggleSelectAll,
     onToggleMultiSelectMode,
 }: FileListToolbarProps) {
-    const textColor = useColor('text');
     const secondaryColor = useColor('secondary');
     const cardColor = useColor('card');
 
@@ -42,9 +41,7 @@ export default function FileListToolbar({
                 </View>
             ) : (
                 <View className="flex-grow flex-row items-center gap-x-2">
-                    <IconToolbarButton className="h-8 w-8" backgroundColor={secondaryColor} onPress={onPressFolderTitle}>
-                        <ArrowLeft size={16} strokeWidth={2.5} color={textColor} />
-                    </IconToolbarButton>
+                    <IconButton icon={ArrowLeft} size="sm" backgroundColor={secondaryColor} onPress={onPressFolderTitle} />
 
                     <TextX variant="title" numberOfLines={1} ellipsizeMode="tail">
                         {currentFolderLabel}
@@ -53,18 +50,24 @@ export default function FileListToolbar({
             )}
             <View className="h-9 flex-row items-center gap-x-2">
                 {!isMultiSelectMode ? (
-                    <IconToolbarButton backgroundColor={secondaryColor} onPress={onPressSearch}>
-                        <Search size={16} color={textColor} />
-                    </IconToolbarButton>
+                    <IconButton icon={Search} size="sm" backgroundColor={secondaryColor} onPress={onPressSearch} />
                 ) : null}
                 {isMultiSelectMode ? (
-                    <IconToolbarButton backgroundColor={secondaryColor} disabled={isToggleSelectAllDisabled} onPress={onToggleSelectAll}>
-                        <CheckCheck size={16} color={textColor} strokeWidth={isAllSelected ? 2.3 : 2} />
-                    </IconToolbarButton>
+                    <IconButton
+                        icon={CheckCheck}
+                        size="sm"
+                        backgroundColor={secondaryColor}
+                        disabled={isToggleSelectAllDisabled}
+                        onPress={onToggleSelectAll}
+                        active={isAllSelected}
+                    />
                 ) : null}
-                <IconToolbarButton backgroundColor={secondaryColor} onPress={onToggleMultiSelectMode}>
-                    {isMultiSelectMode ? <X size={16} color={textColor} /> : <ListChecks size={16} color={textColor} />}
-                </IconToolbarButton>
+                <IconButton
+                    icon={isMultiSelectMode ? X : ListChecks}
+                    size="sm"
+                    backgroundColor={secondaryColor}
+                    onPress={onToggleMultiSelectMode}
+                />
             </View>
         </View>
     );
