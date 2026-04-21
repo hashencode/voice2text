@@ -6,27 +6,24 @@ import type { EnrichedTextInputInstance } from 'react-native-enriched';
 import { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { useToast } from '~/components/ui/toast';
+import { getCurrentRecordingFolderName } from '~/data/mmkv/app-config';
 import {
     findRecordingMetaByPath,
     findRecordingMetaBySourceFileNameAndFileSize,
     upsertRecordingMeta,
     type RecordingMeta,
 } from '~/data/sqlite/services/recordings.service';
-import { formatImportAudioDefaultName, formatSpeed, toDisplayName } from '~/features/session-editor/services/time-format';
+import { useDirtyBackGuard } from '~/features/session-editor/hooks/use-dirty-back-guard';
 import {
     isRecognitionBusyState,
     type RecognitionLanguage,
     type RecognitionMode,
     type RecognitionState,
 } from '~/features/session-editor/services/import-audio-recognition-ui';
+import { formatImportAudioDefaultName, formatSpeed, toDisplayName } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
-import { useDirtyBackGuard } from '~/features/session-editor/hooks/use-dirty-back-guard';
+import { ensureModelReady, type DownloadModelProgress, type SherpaModelId } from '~/modules/sherpa';
 import { transcribeFileWithTiming } from '~/modules/sherpa/recognition';
-import SherpaOnnx, {
-    ensureModelReady,
-    type DownloadModelProgress,
-    type SherpaModelId,
-} from '~/modules/sherpa';
 
 const PLAYBACK_SPEEDS = [2.0, 1.5, 1.0, 0.9] as const;
 const MIN_SAVE_OVERLAY_DURATION_MS = 2000;
@@ -234,7 +231,8 @@ export function useImportAudioSession({
     const recognitionRunIdRef = React.useRef(0);
     const recognitionStartTranscriptRef = React.useRef('');
     const initialSnapshotRef = React.useRef<SessionSnapshot>({
-        displayName: initialDisplayName?.trim() || (fromList ? resolveInitialDisplayName(audioName, initialHeaderAtMs) : importDefaultDisplayName),
+        displayName:
+            initialDisplayName?.trim() || (fromList ? resolveInitialDisplayName(audioName, initialHeaderAtMs) : importDefaultDisplayName),
         noteRichText: '',
         transcriptText: '',
         summaryText: '',
@@ -398,14 +396,17 @@ export function useImportAudioSession({
         });
     }, [playbackRate, player, showActionSheet]);
 
-    const handleRecognitionModeChange = useCallback((value: string) => {
-        if (isRecognitionBusyState(recognitionState)) {
-            return;
-        }
-        if (value === 'offline' || value === 'online') {
-            setRecognitionMode(value);
-        }
-    }, [recognitionState]);
+    const handleRecognitionModeChange = useCallback(
+        (value: string) => {
+            if (isRecognitionBusyState(recognitionState)) {
+                return;
+            }
+            if (value === 'offline' || value === 'online') {
+                setRecognitionMode(value);
+            }
+        },
+        [recognitionState],
+    );
 
     const handleStopPlayback = useCallback(async () => {
         await pausePlayerSafely();
@@ -635,13 +636,14 @@ export function useImportAudioSession({
             await upsertRecordingMeta({
                 path: finalPath,
                 displayName: displayName.trim() || importDefaultDisplayName,
+                groupName: matchedRecordingRef.current?.groupName ?? getCurrentRecordingFolderName(),
                 sourceFileName,
                 fileSizeBytes: sourceFileSizeBytes ?? null,
                 noteRichText: latestRemarkText,
                 transcriptText,
                 summaryText,
                 recentRecognitionMode,
-                lastRecognitionAtMs: recentRecognitionMode ? Date.now() : matchedRecordingRef.current?.lastRecognitionAtMs ?? null,
+                lastRecognitionAtMs: recentRecognitionMode ? Date.now() : (matchedRecordingRef.current?.lastRecognitionAtMs ?? null),
                 isFavorite: matchedRecordingRef.current?.isFavorite ?? false,
                 sampleRate: matchedRecordingRef.current?.sampleRate ?? null,
                 numSamples: matchedRecordingRef.current?.numSamples ?? null,
@@ -682,7 +684,7 @@ export function useImportAudioSession({
                 summaryText: nextSnapshot.summaryText,
                 recordedAtMs,
                 recentRecognitionMode,
-                lastRecognitionAtMs: recentRecognitionMode ? Date.now() : matchedRecordingRef.current?.lastRecognitionAtMs ?? null,
+                lastRecognitionAtMs: recentRecognitionMode ? Date.now() : (matchedRecordingRef.current?.lastRecognitionAtMs ?? null),
             };
 
             return true;

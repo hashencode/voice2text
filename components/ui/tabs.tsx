@@ -43,6 +43,7 @@ interface TabsTriggerProps {
     textStyle?: TextStyle;
     icon?: React.ComponentType<Record<string, unknown>>;
     iconProps?: Record<string, unknown>;
+    fullWidth?: boolean;
 }
 
 interface TabsContentProps {
@@ -174,7 +175,17 @@ export function TabsList({ children, style, scrollable = false, radius }: TabsLi
     );
 }
 
-export function TabsTrigger({ children, value, disabled = false, className, style, textStyle, icon, iconProps }: TabsTriggerProps) {
+export function TabsTrigger({
+    children,
+    value,
+    disabled = false,
+    className,
+    style,
+    textStyle,
+    icon,
+    iconProps,
+    fullWidth = true,
+}: TabsTriggerProps) {
     const { activeTab, setActiveTab, triggerRadius, orientation } = useTabsContext();
     const isActive = activeTab === value;
 
@@ -211,7 +222,7 @@ export function TabsTrigger({ children, value, disabled = false, className, styl
             className={classNames(
                 'items-center justify-center px-3 py-2',
                 {
-                    'flex-1': orientation === 'horizontal',
+                    'flex-1': orientation === 'horizontal' && fullWidth,
                     'mb-1 py-2': orientation === 'vertical',
                 },
                 className,

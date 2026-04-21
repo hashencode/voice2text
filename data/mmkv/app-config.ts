@@ -5,6 +5,7 @@ const storage = createMMKV({ id: 'app-config' });
 export const APP_CONFIG_KEYS = {
     darkMode: 'app.config.darkMode',
     currentRecordingFolderName: 'app.config.currentRecordingFolderName',
+    selectedRecordingGroupId: 'app.config.selectedRecordingGroupId',
 } as const;
 
 type BoolConfigKey = typeof APP_CONFIG_KEYS.darkMode;
@@ -42,4 +43,14 @@ export function getCurrentRecordingFolderName(): string | null {
 export function setCurrentRecordingFolderName(value: string | null): void {
     const normalizedValue = value?.trim() ?? '';
     storage.set(APP_CONFIG_KEYS.currentRecordingFolderName, normalizedValue);
+}
+
+export function getSelectedRecordingGroupId(): string {
+    const value = storage.getString(APP_CONFIG_KEYS.selectedRecordingGroupId)?.trim() ?? '';
+    return value || 'all';
+}
+
+export function setSelectedRecordingGroupId(value: string): void {
+    const normalizedValue = value.trim();
+    storage.set(APP_CONFIG_KEYS.selectedRecordingGroupId, normalizedValue || 'all');
 }

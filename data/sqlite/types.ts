@@ -1,6 +1,8 @@
 export type RecordingMeta = {
     path: string;
     displayName?: string | null;
+    groupName?: string | null;
+    deletedAtMs?: number | null;
     isFavorite?: boolean;
     sourceFileName?: string | null;
     fileSizeBytes?: number | null;
@@ -20,6 +22,8 @@ export type RecordingMeta = {
 export type RecordingMetaRow = {
     path: string;
     display_name: string | null;
+    group_name: string | null;
+    deleted_at_ms: number | null;
     is_favorite: number;
     source_file_name: string | null;
     file_size_bytes: number | null;

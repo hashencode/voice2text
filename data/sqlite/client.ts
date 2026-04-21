@@ -6,6 +6,8 @@ const initSql = `
 CREATE TABLE IF NOT EXISTS recordings (
   path TEXT PRIMARY KEY NOT NULL,
   display_name TEXT,
+  group_name TEXT,
+  deleted_at_ms INTEGER,
   is_favorite INTEGER NOT NULL DEFAULT 0,
   source_file_name TEXT,
   file_size_bytes INTEGER,
@@ -25,6 +27,8 @@ CREATE TABLE IF NOT EXISTS recordings (
 );
 CREATE INDEX IF NOT EXISTS idx_recordings_recorded_at ON recordings(recorded_at_ms DESC);
 CREATE INDEX IF NOT EXISTS idx_recordings_session_id ON recordings(session_id);
+CREATE INDEX IF NOT EXISTS idx_recordings_group_name ON recordings(group_name);
+CREATE INDEX IF NOT EXISTS idx_recordings_deleted_at_ms ON recordings(deleted_at_ms);
 CREATE TABLE IF NOT EXISTS folders (
   name TEXT PRIMARY KEY NOT NULL,
   created_at_ms INTEGER NOT NULL,
@@ -64,7 +68,9 @@ async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
         await db.execAsync('ALTER TABLE recordings ADD COLUMN summary_text TEXT;');
     }
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recordings_source_file_name ON recordings(source_file_name);');
-    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recordings_source_file_name_file_size ON recordings(source_file_name, file_size_bytes);');
+    await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_recordings_source_file_name_file_size ON recordings(source_file_name, file_size_bytes);',
+    );
 
     const foldersTableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(folders)');
     const hasFolderFavoriteColumn = foldersTableInfo.some(column => column.name === 'is_favorite');

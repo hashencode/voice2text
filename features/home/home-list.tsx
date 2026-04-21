@@ -1,42 +1,50 @@
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { FolderInput, Heart, HeartOff, PencilLine, Share2, Trash2 } from 'lucide-react-native';
+import { CheckCheck, FolderInput, Heart, HeartOff, PencilLine, RotateCcw, Share2, Trash2, X } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActionSheetOption, useActionSheet } from '~/components/ui/action-sheet';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 import { CommonEmptyState } from '~/components/ui/common-empty-state';
-import { ModalMask } from '~/components/ui/modal-mask';
+import { IconButton } from '~/components/ui/icon-button';
 import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
+import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
-import { setCurrentRecordingFolderName } from '~/data/mmkv/app-config';
+import { getSelectedRecordingGroupId, setCurrentRecordingFolderName, setSelectedRecordingGroupId } from '~/data/mmkv/app-config';
+import { getGroupLabel, isSystemGroupId, SYSTEM_GROUPS } from '~/data/sqlite/group-model';
 import type { Folder } from '~/data/sqlite/services/folders.service';
-import { listFolders, updateFolderFavorite } from '~/data/sqlite/services/folders.service';
-import { listRecordingMetaOverview, updateRecordingFavorite } from '~/data/sqlite/services/recordings.service';
+import { listFolders } from '~/data/sqlite/services/folders.service';
+import {
+    hardDeleteRecordingMeta,
+    listActiveRecordingMetaOverview,
+    listDeletedRecordingMetaOverview,
+    restoreRecordingMeta,
+    softDeleteRecordingMeta,
+    updateRecordingDisplayName,
+    updateRecordingFavorite,
+} from '~/data/sqlite/services/recordings.service';
 import NameInputDialog from '~/features/home/common/name-input-dialog';
-import FileListToolbar from '~/features/home/file-list/file-list-toolbar';
 import FileListView from '~/features/home/file-list/file-list-view';
-import FolderListToolbar from '~/features/home/folder-list/folder-list-toolbar';
-import FolderListView from '~/features/home/folder-list/folder-list-view';
-import { useFileActions } from '~/features/home/hooks/use-file-actions';
 import { useFileSelection } from '~/features/home/hooks/use-file-selection';
-import { useFolderActions } from '~/features/home/hooks/use-folder-actions';
-import { useFolderSelection } from '~/features/home/hooks/use-folder-selection';
 import { useItemActions } from '~/features/home/hooks/use-item-actions';
 import { useColor } from '~/hooks/useColor';
 
 type HomeRecordingItem = {
     path: string;
     displayName: string | null;
+    groupName: string | null;
+    deletedAtMs: number | null;
     isFavorite: boolean;
     durationMs: number | null;
     recordedAtMs: number | null;
 };
 
 type ActionMenuItem = {
-    key: 'rename' | 'move' | 'favorite' | 'share' | 'delete';
+    key: 'move' | 'share' | 'delete';
     label: string;
     icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
     disabled: boolean;
@@ -62,8 +70,6 @@ function ActionMenuButton({
     );
 }
 
-const ALL_FOLDERS_KEY = '__all_folders__';
-
 function extractFileName(path: string): string {
     const name = path.split('/').pop() ?? path;
     const dotIndex = name.lastIndexOf('.');
@@ -73,13 +79,11 @@ function extractFileName(path: string): string {
     return name.slice(0, dotIndex);
 }
 
-function extractFolder(path: string): string {
-    const normalizedPath = path.replace(/\\/g, '/');
-    const parts = normalizedPath.split('/').filter(Boolean);
-    if (parts.length <= 1) {
-        return '根目录';
+function normalizeGroupNameForWrite(groupId: string): string | null {
+    if (groupId === SYSTEM_GROUPS.all || groupId === SYSTEM_GROUPS.recentlyDeleted) {
+        return null;
     }
-    return parts[parts.length - 2] ?? '根目录';
+    return groupId;
 }
 
 export default function HomeList() {
@@ -89,55 +93,64 @@ export default function HomeList() {
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
     const [folders, setFolders] = React.useState<Folder[]>([]);
     const [loading, setLoading] = React.useState(true);
-    const [selectedFolder, setSelectedFolder] = React.useState<string>(ALL_FOLDERS_KEY);
-    const [isFolderListMode, setIsFolderListMode] = React.useState(false);
+    const [selectedGroupId, setSelectedGroupId] = React.useState<string>(() => getSelectedRecordingGroupId());
     const [isMultiSelectMode, setIsMultiSelectMode] = React.useState(false);
-    const [isSingleSelectMode, setIsSingleSelectMode] = React.useState(false);
-    const [isSingleSelectClosing, setIsSingleSelectClosing] = React.useState(false);
-    const [clearSelectionOnActionDialogClose, setClearSelectionOnActionDialogClose] = React.useState(false);
     const [renameDialogVisible, setRenameDialogVisible] = React.useState(false);
     const [deleteDialogVisible, setDeleteDialogVisible] = React.useState(false);
-    const [createFolderDialogVisible, setCreateFolderDialogVisible] = React.useState(false);
     const [renameValue, setRenameValue] = React.useState('');
     const [renameError, setRenameError] = React.useState('');
-    const [createFolderValue, setCreateFolderValue] = React.useState('');
-    const [createFolderError, setCreateFolderError] = React.useState('');
     const [renaming, setRenaming] = React.useState(false);
-    const [creatingFolder, setCreatingFolder] = React.useState(false);
     const [deleting, setDeleting] = React.useState(false);
+
     const textColor = useColor('text');
+    const destructiveColor = useColor('red');
     const cardColor = useColor('card');
     const borderColor = useColor('border');
-    const { sharing, shareSingleFile } = useItemActions({ toastApi: { toast } });
+    const secondaryColor = useColor('secondary');
 
-    const refreshList = React.useCallback(async (mode: 'focus' | 'pull' = 'focus') => {
-        if (mode === 'focus') {
-            setLoading(true);
-        }
-        try {
-            const [rows, folderRows] = await Promise.all([listRecordingMetaOverview(), listFolders()]);
-            setItems(
-                rows.map(item => ({
-                    path: item.path,
-                    displayName: item.displayName ?? null,
-                    isFavorite: item.isFavorite === true,
-                    durationMs: item.durationMs,
-                    recordedAtMs: item.recordedAtMs,
-                })),
-            );
-            setFolders(folderRows);
-        } catch (error) {
-            setItems([]);
-            setFolders([]);
-            if (mode === 'pull') {
-                throw error;
-            }
-        } finally {
+    const { sharing, shareSingleFile } = useItemActions({ toastApi: { toast } });
+    const { show: showActionSheet, ActionSheet, isVisible: isActionSheetVisible } = useActionSheet();
+
+    const refreshList = React.useCallback(
+        async (mode: 'focus' | 'pull' = 'focus') => {
             if (mode === 'focus') {
-                setLoading(false);
+                setLoading(true);
             }
-        }
-    }, []);
+            try {
+                const [rows, folderRows] = await Promise.all([
+                    selectedGroupId === SYSTEM_GROUPS.recentlyDeleted
+                        ? listDeletedRecordingMetaOverview()
+                        : selectedGroupId === SYSTEM_GROUPS.all
+                          ? listActiveRecordingMetaOverview()
+                          : listActiveRecordingMetaOverview(selectedGroupId),
+                    listFolders(),
+                ]);
+                setItems(
+                    rows.map(item => ({
+                        path: item.path,
+                        displayName: item.displayName ?? null,
+                        groupName: item.groupName ?? null,
+                        deletedAtMs: item.deletedAtMs ?? null,
+                        isFavorite: item.isFavorite === true,
+                        durationMs: item.durationMs,
+                        recordedAtMs: item.recordedAtMs,
+                    })),
+                );
+                setFolders(folderRows);
+            } catch (error) {
+                setItems([]);
+                setFolders([]);
+                if (mode === 'pull') {
+                    throw error;
+                }
+            } finally {
+                if (mode === 'focus') {
+                    setLoading(false);
+                }
+            }
+        },
+        [selectedGroupId],
+    );
 
     useFocusEffect(
         React.useCallback(() => {
@@ -148,200 +161,39 @@ export default function HomeList() {
         }, [refreshList]),
     );
 
-    const onPullRefresh = React.useCallback(() => refreshList('pull'), [refreshList]);
-    const folderListEntries = React.useMemo(
-        () => [
-            { name: ALL_FOLDERS_KEY, createdAtMs: 0 as number, isFavorite: false },
-            ...folders.filter(folder => folder.name !== ALL_FOLDERS_KEY),
-        ],
-        [folders],
-    );
-    const currentFolderLabel = isFolderListMode ? '文件夹列表' : selectedFolder === ALL_FOLDERS_KEY ? '全部文件' : selectedFolder;
-
-    const filteredItems = React.useMemo(() => {
-        if (selectedFolder === ALL_FOLDERS_KEY) {
-            return items;
-        }
-        return items.filter(item => extractFolder(item.path) === selectedFolder);
-    }, [items, selectedFolder]);
-    const fileCountByFolderName = React.useMemo(() => {
-        const countMap: Record<string, number> = {
-            [ALL_FOLDERS_KEY]: items.length,
-        };
-        items.forEach(item => {
-            const folderName = extractFolder(item.path);
-            countMap[folderName] = (countMap[folderName] ?? 0) + 1;
+    React.useEffect(() => {
+        refreshList('focus').catch(() => {
+            setItems([]);
+            setLoading(false);
         });
-        return countMap;
-    }, [items]);
-    const selectableFolderNames = React.useMemo(
-        () => folderListEntries.filter(folder => folder.name !== ALL_FOLDERS_KEY).map(folder => folder.name),
-        [folderListEntries],
-    );
+    }, [refreshList]);
+
+    React.useEffect(() => {
+        setSelectedRecordingGroupId(selectedGroupId);
+        const folderName = normalizeGroupNameForWrite(selectedGroupId);
+        setCurrentRecordingFolderName(folderName);
+    }, [selectedGroupId]);
+
+    const groupTabs = React.useMemo(() => {
+        const customGroups = folders.map(folder => folder.name.trim()).filter(name => name && !isSystemGroupId(name));
+
+        return [SYSTEM_GROUPS.all, SYSTEM_GROUPS.meeting, ...customGroups, SYSTEM_GROUPS.recentlyDeleted];
+    }, [folders]);
+
+    const onPullRefresh = React.useCallback(() => refreshList('pull'), [refreshList]);
+
     const {
         selectedPaths,
         setSelectedPaths,
         toggleSelectPath,
         clearSelectedPaths,
         addSelectedPath,
-        isAllFilteredSelected: isAllFilesSelected,
+        isAllFilteredSelected,
         toggleSelectAllFiltered,
-    } = useFileSelection(filteredItems.map(item => item.path));
-    const {
-        selectedFolderNames,
-        setSelectedFolderNames,
-        toggleSelectFolderName,
-        clearSelectedFolderNames,
-        addSelectedFolderName,
-        isAllFoldersSelected,
-        toggleSelectAllFolders,
-    } = useFolderSelection(selectableFolderNames, ALL_FOLDERS_KEY);
-    const selectedCount = isFolderListMode ? selectedFolderNames.length : selectedPaths.length;
-    const isSingleMaskVisible = isSingleSelectMode;
-    const shouldRenderActionMenu = (isMultiSelectMode && selectedCount > 0) || isSingleSelectMode || isSingleSelectClosing;
+    } = useFileSelection(items.map(item => item.path));
+
+    const selectedCount = selectedPaths.length;
     const selectedPathForRename = selectedCount === 1 ? selectedPaths[0] : null;
-    const selectedItemForRename = React.useMemo(
-        () => (selectedPathForRename ? items.find(item => item.path === selectedPathForRename) : undefined),
-        [items, selectedPathForRename],
-    );
-    const selectedFolderNameForRename = selectedCount === 1 ? selectedFolderNames[0] : null;
-    const isAllFilteredSelected = isFolderListMode ? isAllFoldersSelected : isAllFilesSelected;
-    const isSingleTargetFavorited = React.useMemo(() => {
-        if (!isSingleSelectMode || selectedCount !== 1) {
-            return false;
-        }
-        if (isFolderListMode) {
-            if (!selectedFolderNameForRename) {
-                return false;
-            }
-            return folders.some(folder => folder.name === selectedFolderNameForRename && folder.isFavorite);
-        }
-        return selectedItemForRename?.isFavorite === true;
-    }, [folders, isFolderListMode, isSingleSelectMode, selectedCount, selectedFolderNameForRename, selectedItemForRename]);
-
-    const resetSelectionState = React.useCallback(() => {
-        clearSelectedPaths();
-        clearSelectedFolderNames();
-        setIsSingleSelectMode(false);
-        setIsSingleSelectClosing(false);
-        setClearSelectionOnActionDialogClose(false);
-    }, [clearSelectedFolderNames, clearSelectedPaths]);
-
-    const handleToggleMultiSelectMode = React.useCallback(() => {
-        resetSelectionState();
-        setIsMultiSelectMode(prev => !prev);
-    }, [resetSelectionState]);
-
-    const handleToggleSelectAll = React.useCallback(() => {
-        if (isFolderListMode) {
-            toggleSelectAllFolders();
-            return;
-        }
-        toggleSelectAllFiltered();
-    }, [isFolderListMode, toggleSelectAllFiltered, toggleSelectAllFolders]);
-
-    const enterMultiSelectWithItem = React.useCallback(
-        (path: string) => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            setIsSingleSelectMode(false);
-            setIsSingleSelectClosing(false);
-            setIsMultiSelectMode(true);
-            addSelectedPath(path);
-        },
-        [addSelectedPath],
-    );
-
-    const enterMultiSelectWithFolder = React.useCallback(
-        (name: string) => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            setIsSingleSelectMode(false);
-            setIsSingleSelectClosing(false);
-            setIsMultiSelectMode(true);
-            if (name !== ALL_FOLDERS_KEY) {
-                addSelectedFolderName(name);
-            }
-        },
-        [addSelectedFolderName],
-    );
-    React.useEffect(() => {
-        const recordingFolderName = !isFolderListMode && selectedFolder !== ALL_FOLDERS_KEY ? selectedFolder : null;
-        setCurrentRecordingFolderName(recordingFolderName);
-    }, [isFolderListMode, selectedFolder]);
-    const closeSingleSelectMode = React.useCallback(() => {
-        if (!isSingleSelectMode) {
-            return;
-        }
-        setIsSingleSelectClosing(true);
-        setIsSingleSelectMode(false);
-    }, [isSingleSelectMode]);
-
-    const clearSelectionAfterActionDialogClose = React.useCallback(() => {
-        if (!clearSelectionOnActionDialogClose) {
-            return;
-        }
-        setSelectedPaths([]);
-        setSelectedFolderNames([]);
-        setClearSelectionOnActionDialogClose(false);
-    }, [clearSelectionOnActionDialogClose, setSelectedFolderNames, setSelectedPaths]);
-
-    const handleSingleSelectClosed = React.useCallback(() => {
-        if (renameDialogVisible || deleteDialogVisible) {
-            setIsSingleSelectClosing(false);
-            return;
-        }
-        setSelectedPaths([]);
-        setSelectedFolderNames([]);
-        setIsSingleSelectClosing(false);
-        setClearSelectionOnActionDialogClose(false);
-    }, [deleteDialogVisible, renameDialogVisible, setSelectedFolderNames, setSelectedPaths]);
-    const openSingleActionForFile = React.useCallback(
-        (path: string) => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            resetSelectionState();
-            setSelectedPaths([path]);
-            setIsSingleSelectMode(true);
-        },
-        [resetSelectionState, setSelectedPaths],
-    );
-    const handleOpenRecording = React.useCallback(
-        (item: HomeRecordingItem) => {
-            const initialName = item.displayName ?? extractFileName(item.path);
-            router.push({
-                pathname: '/import-audio',
-                params: {
-                    uri: item.path,
-                    name: initialName,
-                    recordedAtMs: item.recordedAtMs ? String(item.recordedAtMs) : undefined,
-                    source: 'list',
-                },
-            });
-        },
-        [router],
-    );
-    const openSingleActionForFolder = React.useCallback(
-        (name: string) => {
-            if (name === ALL_FOLDERS_KEY) {
-                return;
-            }
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            resetSelectionState();
-            setSelectedFolderNames([name]);
-            setIsSingleSelectMode(true);
-        },
-        [resetSelectionState, setSelectedFolderNames],
-    );
-
-    const actionMenuTitle =
-        selectedCount <= 0
-            ? isFolderListMode
-                ? '请选择文件夹'
-                : '请选择文件'
-            : `已选择 ${selectedCount} 个${isFolderListMode ? '文件夹' : '文件'}`;
-    const deleteTargetCount = Math.max(selectedCount, 1);
-    const deleteDialogDescription = isFolderListMode
-        ? `是否删除已选中的 ${deleteTargetCount} 个文件夹，删除后无法恢复。`
-        : `是否删除已选中的 ${deleteTargetCount} 个文件，删除后无法恢复。`;
-
     const validateRenameName = React.useCallback((name: string): string | null => {
         if (!name) {
             return '名称不能为空';
@@ -360,376 +212,361 @@ export default function HomeList() {
         }
         return null;
     }, []);
-    const { confirmRenameFile, confirmDeleteFiles } = useFileActions({
-        items,
-        selectedPaths,
-        selectedPathForRename,
-        renameValue,
-        validateName: validateRenameName,
-        extractFileName,
-        toastApi: { toast },
-        setItems,
-        setSelectedPaths,
-    });
-    const { confirmRenameFolder, confirmCreateFolder, confirmDeleteFolders } = useFolderActions({
-        allFoldersKey: ALL_FOLDERS_KEY,
-        folders,
-        selectedFolder,
-        selectedFolderNames,
-        renameValue,
-        createFolderValue,
-        validateName: validateRenameName,
-        toastApi: { toast },
-        setFolders,
-        setSelectedFolder,
-        setSelectedFolderNames,
-    });
 
-    const handleOpenRenameDialog = React.useCallback(() => {
-        if (isFolderListMode) {
-            if (!selectedFolderNameForRename) {
+    const handleToggleMultiSelectMode = React.useCallback(() => {
+        setIsMultiSelectMode(prev => !prev);
+        clearSelectedPaths();
+    }, [clearSelectedPaths]);
+
+    const enterMultiSelectWithItem = React.useCallback(
+        (path: string) => {
+            if (isActionSheetVisible) {
                 return;
             }
-            setRenameValue(selectedFolderNameForRename);
-            setRenameError('');
-            setRenameDialogVisible(true);
-            return;
-        }
-        if (!selectedItemForRename) {
-            return;
-        }
-        setRenameValue(selectedItemForRename.displayName?.trim() || extractFileName(selectedItemForRename.path));
-        setRenameError('');
-        setRenameDialogVisible(true);
-    }, [isFolderListMode, selectedFolderNameForRename, selectedItemForRename]);
-
-    const handleOpenCreateFolderDialog = React.useCallback(() => {
-        setCreateFolderValue('');
-        setCreateFolderError('');
-        setCreateFolderDialogVisible(true);
-    }, []);
-    const handleConfirmRename = React.useCallback(async (): Promise<boolean> => {
-        if (isFolderListMode) {
-            return confirmRenameFolder({
-                renaming,
-                selectedFolderNameForRename,
-                setRenaming,
-                setRenameError,
-                closeRenameDialog: () => {
-                    setRenameDialogVisible(false);
-                    clearSelectionAfterActionDialogClose();
-                },
-            });
-        }
-        return confirmRenameFile({
-            renaming,
-            setRenaming,
-            setRenameError,
-            setRenameValue,
-            closeRenameDialog: () => {
-                setRenameDialogVisible(false);
-                clearSelectionAfterActionDialogClose();
-            },
-        });
-    }, [
-        clearSelectionAfterActionDialogClose,
-        confirmRenameFile,
-        confirmRenameFolder,
-        isFolderListMode,
-        renaming,
-        selectedFolderNameForRename,
-    ]);
-    const handleConfirmCreateFolder = React.useCallback(
-        () =>
-            confirmCreateFolder({
-                creatingFolder,
-                setCreatingFolder,
-                setCreateFolderError,
-                closeCreateDialog: () => setCreateFolderDialogVisible(false),
-            }),
-        [confirmCreateFolder, creatingFolder],
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            setIsMultiSelectMode(true);
+            addSelectedPath(path);
+        },
+        [addSelectedPath, isActionSheetVisible],
     );
-    const handleConfirmDelete = React.useCallback(async (): Promise<boolean> => {
-        if (isFolderListMode) {
-            return confirmDeleteFolders({
-                deleting,
-                setDeleting,
-                closeDeleteDialog: () => {
-                    setDeleteDialogVisible(false);
-                    clearSelectionAfterActionDialogClose();
-                },
-            });
-        }
-        return confirmDeleteFiles({
-            deleting,
-            setDeleting,
-            closeDeleteDialog: () => {
-                setDeleteDialogVisible(false);
-                clearSelectionAfterActionDialogClose();
-            },
-        });
-    }, [clearSelectionAfterActionDialogClose, confirmDeleteFiles, confirmDeleteFolders, deleting, isFolderListMode]);
 
-    const handleUpdateFavorite = React.useCallback(
-        async (isFavorite: boolean): Promise<void> => {
-            if (selectedCount <= 0) {
+    const openSingleActions = React.useCallback(
+        (path: string) => {
+            const target = items.find(item => item.path === path);
+            if (!target) {
+                toast({ title: '目标已变化，请重试', variant: 'warning' });
                 return;
             }
 
-            if (isFolderListMode) {
-                const targetNames = selectedFolderNames.filter(name => name !== ALL_FOLDERS_KEY);
-                if (targetNames.length <= 0) {
-                    return;
-                }
-                await Promise.all(targetNames.map(name => updateFolderFavorite(name, isFavorite)));
-                const targetSet = new Set(targetNames);
-                setFolders(prev => prev.map(folder => (targetSet.has(folder.name) ? { ...folder, isFavorite } : folder)));
-                toast({
-                    title: isFavorite ? '已收藏文件夹' : '已取消收藏文件夹',
-                    variant: 'success',
+            const options: ActionSheetOption[] = [];
+            if (selectedGroupId === SYSTEM_GROUPS.recentlyDeleted) {
+                options.push({
+                    title: '恢复',
+                    icon: <RotateCcw size={18} color={textColor} />,
+                    onPress: () => {
+                        const customGroupExists = target.groupName ? folders.some(folder => folder.name === target.groupName) : false;
+                        const restoredGroupName =
+                            !target.groupName || target.groupName === SYSTEM_GROUPS.all || !customGroupExists ? null : target.groupName;
+                        restoreRecordingMeta(target.path, restoredGroupName)
+                            .then(() => {
+                                setItems(prev => prev.filter(item => item.path !== target.path));
+                                toast({
+                                    title: restoredGroupName ? '已恢复' : '原分组不存在，已恢复到全部录音',
+                                    variant: 'success',
+                                });
+                            })
+                            .catch(() => {
+                                toast({ title: '恢复失败，请重试', variant: 'error' });
+                            });
+                    },
                 });
-                return;
+                options.push({
+                    title: '彻底删除',
+                    destructive: true,
+                    icon: <Trash2 size={18} color={destructiveColor} />,
+                    onPress: () => {
+                        setSelectedPaths([target.path]);
+                        setDeleteDialogVisible(true);
+                    },
+                });
+            } else {
+                const favoriteTitle = target.isFavorite ? '取消收藏' : '收藏';
+                const favoriteIcon = target.isFavorite ? HeartOff : Heart;
+                options.push(
+                    {
+                        title: '重命名',
+                        icon: <PencilLine size={18} color={textColor} />,
+                        onPress: () => {
+                            setSelectedPaths([target.path]);
+                            setRenameValue(target.displayName?.trim() || extractFileName(target.path));
+                            setRenameError('');
+                            setRenameDialogVisible(true);
+                        },
+                    },
+                    {
+                        title: '移动到',
+                        icon: <FolderInput size={18} color={textColor} />,
+                        onPress: () => {
+                            toast({ title: '移动功能即将上线', variant: 'info' });
+                        },
+                    },
+                    {
+                        title: favoriteTitle,
+                        icon: React.createElement(favoriteIcon, { size: 18, color: textColor }),
+                        onPress: () => {
+                            updateRecordingFavorite(target.path, !target.isFavorite)
+                                .then(() => {
+                                    setItems(prev =>
+                                        prev.map(item => (item.path === target.path ? { ...item, isFavorite: !target.isFavorite } : item)),
+                                    );
+                                    toast({ title: !target.isFavorite ? '已收藏文件' : '已取消收藏文件', variant: 'success' });
+                                })
+                                .catch(() => {
+                                    toast({
+                                        title: !target.isFavorite ? '收藏失败' : '取消收藏失败',
+                                        description: '请稍后重试',
+                                        variant: 'error',
+                                    });
+                                });
+                        },
+                    },
+                    {
+                        title: '分享',
+                        icon: <Share2 size={18} color={textColor} />,
+                        onPress: () => {
+                            shareSingleFile([target.path]).catch(() => {});
+                        },
+                    },
+                    {
+                        title: '删除',
+                        destructive: true,
+                        icon: <Trash2 size={18} color={destructiveColor} />,
+                        onPress: () => {
+                            setSelectedPaths([target.path]);
+                            setDeleteDialogVisible(true);
+                        },
+                    },
+                );
             }
 
-            await Promise.all(selectedPaths.map(path => updateRecordingFavorite(path, isFavorite)));
-            const targetSet = new Set(selectedPaths);
-            setItems(prev => prev.map(item => (targetSet.has(item.path) ? { ...item, isFavorite } : item)));
-            toast({
-                title: isFavorite ? '已收藏文件' : '已取消收藏文件',
-                variant: 'success',
+            showActionSheet({
+                title: target.displayName?.trim() || extractFileName(target.path),
+                options,
+                cancelButtonTitle: '取消',
             });
         },
-        [isFolderListMode, selectedCount, selectedFolderNames, selectedPaths, toast],
+        [destructiveColor, folders, items, selectedGroupId, setSelectedPaths, shareSingleFile, showActionSheet, textColor, toast],
     );
 
-    const handleActionPress = React.useCallback(
-        (actionKey: ActionMenuItem['key']) => {
-            const fromSingleSelectMenu = isSingleSelectMode || isSingleSelectClosing;
-            if (actionKey === 'rename') {
-                setClearSelectionOnActionDialogClose(fromSingleSelectMenu);
-                closeSingleSelectMode();
-                handleOpenRenameDialog();
-                return;
-            }
-            if (actionKey === 'move') {
-                closeSingleSelectMode();
-                toast({
-                    title: '移动功能即将上线',
-                    variant: 'info',
-                });
-                return;
-            }
-            if (actionKey === 'delete') {
-                if (selectedCount <= 0) {
-                    return;
+    const performDelete = React.useCallback(async (): Promise<boolean> => {
+        if (deleting || selectedPaths.length === 0) {
+            return false;
+        }
+
+        setDeleting(true);
+        const deletedPaths: string[] = [];
+        const failedPaths: string[] = [];
+
+        try {
+            for (const path of selectedPaths) {
+                try {
+                    if (selectedGroupId === SYSTEM_GROUPS.recentlyDeleted) {
+                        const fileInfo = await FileSystem.getInfoAsync(path);
+                        if (fileInfo.exists) {
+                            await FileSystem.deleteAsync(path);
+                        }
+                        await hardDeleteRecordingMeta(path);
+                    } else {
+                        await softDeleteRecordingMeta(path);
+                    }
+                    deletedPaths.push(path);
+                } catch {
+                    failedPaths.push(path);
                 }
-                setClearSelectionOnActionDialogClose(fromSingleSelectMenu);
-                closeSingleSelectMode();
-                setDeleteDialogVisible(true);
+            }
+
+            if (deletedPaths.length > 0) {
+                const deletedSet = new Set(deletedPaths);
+                setItems(prev => prev.filter(item => !deletedSet.has(item.path)));
+                setSelectedPaths(prev => prev.filter(path => !deletedSet.has(path)));
+            }
+
+            if (failedPaths.length > 0) {
+                toast({
+                    title: '删除未完全成功',
+                    description: `${failedPaths.length} 个文件删除失败，请重试`,
+                    variant: 'warning',
+                });
+            } else {
+                toast({
+                    title: selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '已彻底删除' : '已移入最近删除',
+                    description: `已处理 ${deletedPaths.length} 个文件`,
+                    variant: 'success',
+                });
+            }
+            return true;
+        } finally {
+            setDeleting(false);
+        }
+    }, [deleting, selectedGroupId, selectedPaths, setSelectedPaths, toast]);
+
+    const handleConfirmRename = React.useCallback(async (): Promise<boolean> => {
+        if (renaming || !selectedPathForRename) {
+            return false;
+        }
+        const sanitizedName = renameValue.trim();
+        const validationError = validateRenameName(sanitizedName);
+        if (validationError) {
+            setRenameError(validationError);
+            return false;
+        }
+        const duplicateExists = items.some(item => {
+            if (item.path === selectedPathForRename) {
+                return false;
+            }
+            const existingName = (item.displayName?.trim() || extractFileName(item.path)).toLowerCase();
+            return existingName === sanitizedName.toLowerCase();
+        });
+        if (duplicateExists) {
+            setRenameError('名称已存在，请使用其他名称');
+            return false;
+        }
+
+        setRenaming(true);
+        try {
+            await updateRecordingDisplayName(selectedPathForRename, sanitizedName);
+            setItems(prev => prev.map(item => (item.path === selectedPathForRename ? { ...item, displayName: sanitizedName } : item)));
+            setRenameDialogVisible(false);
+            clearSelectedPaths();
+            toast({ title: '重命名成功', variant: 'success' });
+            return true;
+        } catch {
+            setRenameError('保存名称时发生错误，请稍后重试');
+            return false;
+        } finally {
+            setRenaming(false);
+        }
+    }, [clearSelectedPaths, items, renameValue, renaming, selectedPathForRename, toast, validateRenameName]);
+
+    const deleteDialogDescription =
+        selectedGroupId === SYSTEM_GROUPS.recentlyDeleted
+            ? `是否彻底删除已选中的 ${Math.max(selectedCount, 1)} 个文件？删除后无法恢复。`
+            : `是否将已选中的 ${Math.max(selectedCount, 1)} 个文件移入最近删除？`;
+
+    const actionMenuActions: ActionMenuItem[] = [
+        { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
+        { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
+        {
+            key: 'delete',
+            label: selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '彻底删除' : '删除',
+            icon: Trash2,
+            disabled: selectedCount === 0,
+        },
+    ];
+
+    const handleMultiActionPress = React.useCallback(
+        (actionKey: ActionMenuItem['key']) => {
+            if (actionKey === 'move') {
+                toast({ title: '移动功能即将上线', variant: 'info' });
                 return;
             }
             if (actionKey === 'share') {
-                closeSingleSelectMode();
                 shareSingleFile(selectedPaths).catch(() => {});
                 return;
             }
-            if (actionKey === 'favorite') {
-                const shouldFavorite = !(isSingleSelectMode && isSingleTargetFavorited);
-                handleUpdateFavorite(shouldFavorite).catch(() => {
-                    toast({
-                        title: shouldFavorite ? '收藏失败' : '取消收藏失败',
-                        description: '请稍后重试',
-                        variant: 'error',
-                    });
-                });
-                closeSingleSelectMode();
-                return;
+            if (actionKey === 'delete') {
+                setDeleteDialogVisible(true);
             }
         },
-        [
-            closeSingleSelectMode,
-            handleOpenRenameDialog,
-            handleUpdateFavorite,
-            isSingleSelectMode,
-            isSingleSelectClosing,
-            isSingleTargetFavorited,
-            selectedCount,
-            selectedPaths,
-            shareSingleFile,
-            toast,
-        ],
+        [selectedPaths, shareSingleFile, toast],
     );
-    const favoriteAction: ActionMenuItem =
-        isSingleSelectMode && isSingleTargetFavorited
-            ? { key: 'favorite', label: '取消收藏', icon: HeartOff, disabled: selectedCount === 0 }
-            : { key: 'favorite', label: '收藏', icon: Heart, disabled: selectedCount === 0 };
-    const actionMenuActions: ActionMenuItem[] = isFolderListMode
-        ? isMultiSelectMode
-            ? [{ key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 }]
-            : [
-                  { key: 'rename', label: '重命名', icon: PencilLine, disabled: selectedCount === 0 },
-                  favoriteAction,
-                  { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
-              ]
-        : isMultiSelectMode
-          ? [
-                { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
-                { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
-                { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
-            ]
-          : [
-                { key: 'rename', label: '重命名', icon: PencilLine, disabled: selectedCount === 0 },
-                { key: 'move', label: '移动到', icon: FolderInput, disabled: selectedCount === 0 },
-                favoriteAction,
-                { key: 'share', label: '分享', icon: Share2, disabled: selectedCount === 0 || sharing },
-                { key: 'delete', label: '删除', icon: Trash2, disabled: selectedCount === 0 },
-            ];
-    const actionMenuContent = (
-        <View className="border-t pb-4 pt-4" style={{ borderTopColor: borderColor }}>
-            <View className="flex-row justify-between">
-                {actionMenuActions.map(action => (
-                    <ActionMenuButton key={action.key} action={action} textColor={textColor} onPress={handleActionPress} />
-                ))}
-            </View>
-            <BottomSafeAreaSpacer />
-        </View>
-    );
-    const actionMenuLayer = (
-        <View
-            pointerEvents={shouldRenderActionMenu ? 'auto' : 'none'}
-            className="absolute bottom-0 left-0 right-0"
-            style={{
-                backgroundColor: cardColor,
-            }}>
-            {actionMenuContent}
-        </View>
-    );
-    const handleEnterFolderListMode = React.useCallback(() => {
-        setIsFolderListMode(true);
-        if (isMultiSelectMode || isSingleSelectMode) {
-            setIsMultiSelectMode(false);
-            resetSelectionState();
-        }
-    }, [isMultiSelectMode, isSingleSelectMode, resetSelectionState]);
-    const actionableCount = isFolderListMode ? selectableFolderNames.length : filteredItems.length;
+
     React.useEffect(() => {
-        if (!isMultiSelectMode || actionableCount > 0) {
+        if (!isMultiSelectMode || items.length > 0) {
             return;
         }
         setIsMultiSelectMode(false);
-        resetSelectionState();
-    }, [actionableCount, isMultiSelectMode, resetSelectionState]);
-    const handlePressSearch = React.useCallback(() => {
-        toast({
-            title: '搜索功能即将上线',
-            variant: 'info',
-        });
-    }, [toast]);
-    const handleCloseRenameDialog = React.useCallback(() => {
-        setRenameError('');
-        setRenameDialogVisible(false);
-        clearSelectionAfterActionDialogClose();
-    }, [clearSelectionAfterActionDialogClose]);
-    const handleCloseDeleteDialog = React.useCallback(() => {
-        if (deleting) {
-            return;
-        }
-        setDeleteDialogVisible(false);
-        clearSelectionAfterActionDialogClose();
-    }, [clearSelectionAfterActionDialogClose, deleting]);
-    const handleCloseCreateFolderDialog = React.useCallback(() => {
-        if (creatingFolder) {
-            return;
-        }
-        setCreateFolderError('');
-        setCreateFolderDialogVisible(false);
-    }, [creatingFolder]);
-    const isFolderListEmpty = !loading && isFolderListMode && folderListEntries.length === 0;
-    const isFileListEmpty = !loading && !isFolderListMode && filteredItems.length === 0;
+        clearSelectedPaths();
+    }, [clearSelectedPaths, isMultiSelectMode, items.length]);
 
     return (
         <View className="flex-1">
-            {isFolderListMode ? (
-                <FolderListToolbar
-                    isMultiSelectMode={isMultiSelectMode}
-                    actionMenuTitle={actionMenuTitle}
-                    currentFolderLabel={currentFolderLabel}
-                    onCreateFolder={handleOpenCreateFolderDialog}
-                    isAllSelected={isAllFilteredSelected}
-                    isToggleSelectAllDisabled={!isMultiSelectMode || selectableFolderNames.length === 0}
-                    onToggleSelectAll={handleToggleSelectAll}
-                    onToggleMultiSelectMode={handleToggleMultiSelectMode}
-                />
-            ) : (
-                <FileListToolbar
-                    isMultiSelectMode={isMultiSelectMode}
-                    actionMenuTitle={actionMenuTitle}
-                    currentFolderLabel={currentFolderLabel}
-                    onPressFolderTitle={handleEnterFolderListMode}
-                    onPressSearch={handlePressSearch}
-                    isAllSelected={isAllFilteredSelected}
-                    isToggleSelectAllDisabled={!isMultiSelectMode || filteredItems.length === 0}
-                    onToggleSelectAll={handleToggleSelectAll}
-                    onToggleMultiSelectMode={handleToggleMultiSelectMode}
-                />
-            )}
+            <View className="rounded-t-3xl px-4 py-3" style={{ backgroundColor: cardColor }}>
+                {isMultiSelectMode ? (
+                    <View className="flex-row items-center justify-between gap-x-2">
+                        <TextX variant="title" numberOfLines={1} className="flex-1">
+                            {selectedCount <= 0 ? '请选择文件' : `已选择 ${selectedCount} 个文件`}
+                        </TextX>
+                        <View className="h-9 flex-row items-center gap-x-2">
+                            <IconButton
+                                icon={CheckCheck}
+                                size="sm"
+                                backgroundColor={secondaryColor}
+                                disabled={items.length === 0}
+                                onPress={toggleSelectAllFiltered}
+                                active={isAllFilteredSelected}
+                            />
+                            <IconButton icon={X} size="sm" backgroundColor={secondaryColor} onPress={handleToggleMultiSelectMode} />
+                        </View>
+                    </View>
+                ) : (
+                    <View className="flex-row items-center gap-x-2">
+                        <IconButton
+                            icon={FolderInput}
+                            size="sm"
+                            backgroundColor={secondaryColor}
+                            onPress={() => router.push('/recording-groups' as never)}
+                        />
+                        <View className="flex-1">
+                            <Tabs value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                                <TabsList scrollable radius={12}>
+                                    {groupTabs.map(groupId => (
+                                        <TabsTrigger key={groupId} value={groupId} fullWidth={false}>
+                                            {getGroupLabel(groupId)}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                            </Tabs>
+                        </View>
+                    </View>
+                )}
+            </View>
+
             <PullToRefreshScrollView
                 onRefresh={onPullRefresh}
-                isEmpty={isFolderListEmpty}
-                emptyText="暂无文件夹"
-                isLoadedAll={!loading && !isFolderListMode && filteredItems.length > 0}
-                contentContainerStyle={{ paddingBottom: shouldRenderActionMenu ? 96 + insets.bottom : 12 }}>
-                {isFolderListMode ? (
-                    <FolderListView
-                        folders={folderListEntries}
-                        selectedFolder={selectedFolder}
-                        selectedFolderNames={selectedFolderNames}
-                        allFoldersKey={ALL_FOLDERS_KEY}
+                isEmpty={!loading && items.length === 0}
+                emptyText={null}
+                isLoadedAll={!loading && items.length > 0}
+                contentContainerStyle={{ paddingBottom: isMultiSelectMode && selectedCount > 0 ? 96 + insets.bottom : 12 }}>
+                {items.length > 0 ? (
+                    <FileListView
+                        items={items}
                         isMultiSelectMode={isMultiSelectMode}
-                        fileCountByFolderName={fileCountByFolderName}
-                        onSelectFolder={name => {
-                            setSelectedFolder(name);
-                            setIsFolderListMode(false);
-                            setIsSingleSelectMode(false);
-                            setSelectedFolderNames([]);
+                        selectedPaths={selectedPaths}
+                        extractFileName={extractFileName}
+                        onToggleSelectPath={toggleSelectPath}
+                        onEnterMultiSelectWithItem={enterMultiSelectWithItem}
+                        onOpenSingleActionForItem={openSingleActions}
+                        onOpenItem={item => {
+                            const initialName = item.displayName ?? extractFileName(item.path);
+                            router.push({
+                                pathname: '/import-audio',
+                                params: {
+                                    uri: item.path,
+                                    name: initialName,
+                                    recordedAtMs: item.recordedAtMs ? String(item.recordedAtMs) : undefined,
+                                    source: 'list',
+                                },
+                            });
                         }}
-                        onToggleSelectFolderName={toggleSelectFolderName}
-                        onEnterMultiSelectWithFolder={enterMultiSelectWithFolder}
-                        onOpenSingleActionForFolder={openSingleActionForFolder}
                     />
                 ) : (
-                    <>
-                        {isFileListEmpty ? (
-                            <CommonEmptyState text="暂无录音文件" />
-                        ) : (
-                            <FileListView
-                                items={filteredItems}
-                                isMultiSelectMode={isMultiSelectMode}
-                                selectedPaths={selectedPaths}
-                                extractFileName={extractFileName}
-                                onToggleSelectPath={toggleSelectPath}
-                                onEnterMultiSelectWithItem={enterMultiSelectWithItem}
-                                onOpenSingleActionForItem={openSingleActionForFile}
-                                onOpenItem={handleOpenRecording}
-                            />
-                        )}
-                    </>
+                    <CommonEmptyState text={selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '最近删除为空' : '暂无录音文件'} />
                 )}
             </PullToRefreshScrollView>
-            <ModalMask
-                isVisible={isSingleMaskVisible}
-                onPressMask={closeSingleSelectMode}
-                onClose={handleSingleSelectClosed}
-                contentTransitionPreset="slide-up"
-                mode="light">
-                {actionMenuLayer}
-            </ModalMask>
-            {!isSingleMaskVisible && !isSingleSelectClosing && isMultiSelectMode && selectedCount > 0 ? actionMenuLayer : null}
+
+            {isMultiSelectMode && selectedCount > 0 ? (
+                <View className="absolute bottom-0 left-0 right-0" style={{ backgroundColor: cardColor }}>
+                    <View className="border-t pb-4 pt-4" style={{ borderTopColor: borderColor }}>
+                        <View className="flex-row justify-between">
+                            {actionMenuActions.map(action => (
+                                <ActionMenuButton key={action.key} action={action} textColor={textColor} onPress={handleMultiActionPress} />
+                            ))}
+                        </View>
+                        <BottomSafeAreaSpacer />
+                    </View>
+                </View>
+            ) : null}
+
             <NameInputDialog
                 isVisible={renameDialogVisible}
-                onClose={handleCloseRenameDialog}
-                title={isFolderListMode ? '重命名文件夹' : '重命名文件'}
-                description={isFolderListMode ? '仅修改文件夹名称。' : '只修改显示名称，不会修改原始文件名。'}
+                onClose={() => {
+                    setRenameDialogVisible(false);
+                    setRenameError('');
+                    clearSelectedPaths();
+                }}
+                title="重命名文件"
+                description="只修改显示名称，不会修改原始文件名。"
                 value={renameValue}
                 error={renameError}
                 placeholder="输入新的文件名"
@@ -743,37 +580,32 @@ export default function HomeList() {
                 }}
                 onConfirm={handleConfirmRename}
             />
+
             <AlertDialog
                 isVisible={deleteDialogVisible}
-                onClose={handleCloseDeleteDialog}
-                title="确认删除"
-                confirmText="确认删除"
+                onClose={() => {
+                    if (deleting) {
+                        return;
+                    }
+                    setDeleteDialogVisible(false);
+                    clearSelectedPaths();
+                }}
+                title={selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '确认彻底删除' : '确认删除'}
+                confirmText={selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '彻底删除' : '确认删除'}
                 cancelText="取消"
                 confirmButtonProps={{ variant: 'destructive', disabled: deleting }}
                 cancelButtonProps={{ disabled: deleting }}
-                onConfirm={() => {
-                    return handleConfirmDelete();
+                onConfirm={async () => {
+                    const done = await performDelete();
+                    if (done) {
+                        setDeleteDialogVisible(false);
+                    }
+                    return done;
                 }}>
                 <TextX>{deleteDialogDescription}</TextX>
             </AlertDialog>
-            <NameInputDialog
-                isVisible={createFolderDialogVisible}
-                onClose={handleCloseCreateFolderDialog}
-                title="创建文件夹"
-                description="创建后可在文件夹列表中查看。"
-                value={createFolderValue}
-                error={createFolderError}
-                placeholder="输入文件夹名称"
-                isSubmitting={creatingFolder}
-                onChangeText={text => {
-                    setCreateFolderValue(text);
-                    if (createFolderError) {
-                        const validationError = validateRenameName(text.trim());
-                        setCreateFolderError(validationError ?? '');
-                    }
-                }}
-                onConfirm={handleConfirmCreateFolder}
-            />
+
+            {ActionSheet}
         </View>
     );
 }

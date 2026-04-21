@@ -113,8 +113,10 @@ export function useRecordSession() {
 
             try {
                 const recordedAtMs = recordingStartedAtRef.current ?? Date.now();
+                const recordingGroupName = getCurrentRecordingFolderName();
                 await upsertRecordingMeta({
                     path: wavResult.path,
+                    groupName: recordingGroupName,
                     sampleRate: wavResult.sampleRate,
                     numSamples: wavResult.numSamples,
                     durationMs,
