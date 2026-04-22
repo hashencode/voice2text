@@ -4,29 +4,62 @@
 
 For Expo/React Native coding tasks, always prefer Expo's LLM-friendly docs before general web search:
 
-1. `https://docs.expo.dev/llms.txt` (index)
-2. `https://docs.expo.dev/llms-sdk.txt` (latest SDK)
-3. `https://docs.expo.dev/llms-eas.txt` (EAS)
-4. Per-page markdown with `/index.md` suffix, for example:
+1. SDK-versioned docs matching this project first (for this repo, Expo 55): `https://docs.expo.dev/llms-sdk-v55.0.0.txt`
+2. `https://docs.expo.dev/llms.txt` (index/navigation)
+3. `https://docs.expo.dev/llms-sdk.txt` (latest SDK, for cross-checking recent changes)
+4. `https://docs.expo.dev/llms-eas.txt` (EAS)
+5. Per-page markdown with `/index.md` suffix, for example:
    `https://documentation.expo.dev/develop/development-builds/create-a-build/index.md`
 
 If a statement depends on version behavior, verify against the relevant Expo doc page and state the exact SDK/EAS version context.
+
+To reduce repeated network access, local cache of Expo docs is allowed. Refresh the cache when SDK/EAS version changes, when version-sensitive behavior is involved, or when the cached content may be stale.
 
 ## Additional Skills
 
 - `compound-engineering`: Use when setting up or maintaining the Compound Engineering memory loop (`PROFILE.md`, `ACTIVE.md`, `LEARNINGS.md`, `ERRORS.md`, `FEATURE_REQUESTS.md`) or when wiring memory flow rules through `AGENTS.md`.
 
-## Utility File Splitting Rule
+## Execution Principles (from CLAUDE.md)
 
-When organizing shared logic across `scripts/`, `utils/`, and feature/module folders:
+These principles are merged as cross-task behavior guidelines.
 
-1. `scripts/` must only contain executable scripts (Node/CLI/tooling entrypoints), not app runtime business logic.
-2. `utils/` should contain pure, side-effect-light reusable helpers only.
-3. If a constant/helper is used by only one file and is tightly coupled to that file's domain, keep it in the same file (or colocated domain file), do not split it into a standalone utility file.
-4. Extract into a standalone file only when at least one of these is true:
-   - reused by multiple modules, or
-   - clear near-term expansion/extension is expected.
-5. Prefer clear ownership over micro-fragmentation: avoid splitting files just for stylistic symmetry.
+### 1. Think Before Coding
+
+- State key assumptions explicitly before implementation.
+- If multiple valid interpretations exist, present them instead of picking silently.
+- If a simpler approach exists, call it out.
+- If ambiguity can materially change the outcome, stop and ask for clarification.
+- If ambiguity is low-risk, state assumptions and proceed.
+
+### 2. Simplicity First
+
+- Implement the minimum code needed to solve the requested problem.
+- Do not add speculative features, configurability, or abstractions that were not requested.
+- Avoid single-use abstractions unless there is clear near-term expansion.
+- Keep error handling proportional to realistic failure modes in this project stage.
+
+### 3. Surgical Changes
+
+- Touch only lines directly related to the request.
+- Do not refactor or restyle unrelated nearby code without explicit request.
+- Match existing local style and conventions.
+- Remove only unused code/imports introduced by your own changes.
+- If unrelated dead code is found, mention it separately instead of deleting it by default.
+
+### 4. Goal-Driven Execution
+
+- Define concrete, verifiable success criteria for non-trivial tasks.
+- For bug fixes, prefer: reproduce first, fix second, verify third.
+- For multi-step work, briefly list steps with corresponding verification checks.
+
+## Root Folder Creation Rule
+
+When organizing files and modules:
+
+1. Before creating any new top-level folder in the repository root, confirm with the user first.
+2. Prefer existing folders and feature-local colocation by default.
+3. If a constant/helper is used by only one file and is tightly coupled to that file's domain, keep it in the same file (or colocated domain file).
+4. Extract to a standalone shared file only when it is reused by multiple modules or has clear near-term expansion.
 
 ## UI Styling Rule (NativeWind First)
 
