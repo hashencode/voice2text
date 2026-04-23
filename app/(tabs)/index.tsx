@@ -1,33 +1,34 @@
-import { Stack } from 'expo-router';
-import { Search } from 'lucide-react-native';
+import { Stack, useRouter } from 'expo-router';
+import { Microphone } from 'iconoir-react-native';
 import React from 'react';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { IconButton } from '~/components/ui/icon-button';
-import { ModeToggle } from '~/components/ui/mode-toggle';
-import { useToast } from '~/components/ui/toast';
-import HomeEntrance from '~/features/home/home-entrance';
 import HomeList from '~/features/home/home-list';
 import { useColor } from '~/hooks/useColor';
 
 export default function Home() {
-    const { toast } = useToast();
-    const secondaryColor = useColor('secondary');
+    const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const primaryColor = useColor('primary');
+    const primaryForegroundColor = useColor('primaryForeground');
 
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View className="flex-row justify-end gap-x-2 px-4 pt-4">
+            <HomeList bottomInset={insets.bottom} />
+
+            <View className="absolute p-4" pointerEvents="box-none" style={{ bottom: insets.bottom }}>
                 <IconButton
-                    icon={Search}
-                    size="sm"
-                    backgroundColor={secondaryColor}
-                    onPress={() => toast({ title: '搜索功能即将上线', variant: 'info' })}
-                />
-                <ModeToggle />
+                    circular
+                    size="default"
+                    backgroundColor={primaryColor}
+                    onPress={() => router.push('/record')}
+                    className="!h-20 !w-20 shadow-sm">
+                    <Microphone width={34} height={34} color={primaryForegroundColor} />
+                </IconButton>
             </View>
-            <HomeEntrance />
-            <HomeList />
         </DefaultLayout>
     );
 }

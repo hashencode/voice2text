@@ -28,8 +28,6 @@ These principles are merged as cross-task behavior guidelines.
 - State key assumptions explicitly before implementation.
 - If multiple valid interpretations exist, present them instead of picking silently.
 - If a simpler approach exists, call it out.
-- If ambiguity can materially change the outcome, stop and ask for clarification.
-- If ambiguity is low-risk, state assumptions and proceed.
 
 ### 2. Simplicity First
 

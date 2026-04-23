@@ -8,8 +8,8 @@ export type SystemGroupId = (typeof SYSTEM_GROUPS)[keyof typeof SYSTEM_GROUPS];
 export type RecordingGroupId = SystemGroupId | string;
 
 export const SYSTEM_GROUP_LABELS: Record<SystemGroupId, string> = {
-    [SYSTEM_GROUPS.all]: '全部录音',
-    [SYSTEM_GROUPS.meeting]: '会议录音',
+    [SYSTEM_GROUPS.all]: '全部音频',
+    [SYSTEM_GROUPS.meeting]: '会议音频',
     [SYSTEM_GROUPS.recentlyDeleted]: '最近删除',
 };
 

@@ -2,9 +2,12 @@ import { CheckCircle, Refresh } from 'iconoir-react-native';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { PanResponder, ScrollView, ScrollViewProps, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { CommonEmptyState } from '~/components/ui/common-empty-state';
 import { TextX } from '~/components/ui/textx';
 import { useOverlayInteractionLocked } from '~/hooks/use-overlay-interaction-lock';
 import { useColor } from '~/hooks/useColor';
+
+type EmptyStateIcon = React.ComponentType<{ width?: number; height?: number; strokeWidth?: number; color?: string }>;
 
 type PullToRefreshScrollViewProps = ScrollViewProps & {
     // Backward compatibility: no longer required/used after internalized refresh state.
@@ -19,7 +22,8 @@ type PullToRefreshScrollViewProps = ScrollViewProps & {
     idleIconOpacity?: number;
     indicatorSize?: number;
     isEmpty?: boolean;
-    emptyText?: string;
+    emptyText?: string | null;
+    emptyIcon?: EmptyStateIcon;
     isLoadedAll?: boolean;
     loadedAllText?: string;
 };
@@ -50,6 +54,7 @@ export function PullToRefreshScrollView({
     indicatorSize = 26,
     isEmpty = false,
     emptyText = '没有数据',
+    emptyIcon,
     isLoadedAll = false,
     loadedAllText,
     children,
@@ -70,7 +75,8 @@ export function PullToRefreshScrollView({
     const iconColor = useColor('text');
     const footerTextColor = useColor('textMuted');
     const refreshBackgroundColor = useColor('card');
-    const footerText = isEmpty ? emptyText : isLoadedAll ? loadedAllText : null;
+    const showEmptyState = isEmpty && emptyText !== null;
+    const showLoadedAll = !isEmpty && isLoadedAll && !!loadedAllText;
 
     useEffect(() => {
         refreshingRef.current = refreshing;
@@ -195,10 +201,11 @@ export function PullToRefreshScrollView({
                     scrollEventThrottle={scrollEventThrottle}
                     onScroll={handleScroll}>
                     {children}
-                    {footerText ? (
+                    {showEmptyState ? <CommonEmptyState text={emptyText ?? '没有数据'} Icon={emptyIcon} /> : null}
+                    {showLoadedAll ? (
                         <View style={styles.footer}>
                             <TextX variant="description" style={{ color: footerTextColor }}>
-                                {footerText}
+                                {loadedAllText}
                             </TextX>
                         </View>
                     ) : null}

@@ -12,7 +12,7 @@ import { useToast } from '~/components/ui/toast';
 import { getSelectedRecordingGroupId, setCurrentRecordingFolderName, setSelectedRecordingGroupId } from '~/data/mmkv/app-config';
 import { getGroupLabel, isReservedGroupName, SYSTEM_GROUPS } from '~/data/sqlite/group-model';
 import { createFolder, deleteFolder, listFolders, updateFolderName } from '~/data/sqlite/services/folders.service';
-import NameInputDialog from '~/features/home/common/name-input-dialog';
+import NameInputDialog from '~/features/home/components/name-input-dialog';
 
 type GroupItem = {
     id: string;
@@ -185,11 +185,11 @@ export default function RecordingGroupsPage() {
         <DefaultLayout
             safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}
             scrollable={false}
-            headTitle="录音分组"
+            headTitle="分组"
             headExtra={<IconButton icon={Plus} size="sm" onPress={() => setCreatingVisible(true)} />}>
             <View className="px-4 pt-4">
                 <TextX variant="subtitle" className="mb-2">
-                    全部录音
+                    全部音频
                 </TextX>
                 <Pressable className="rounded-2xl border px-4 py-3" onPress={() => setSelectedGroup(SYSTEM_GROUPS.all)}>
                     <TextX className={selectedGroupId === SYSTEM_GROUPS.all ? 'font-semibold' : ''}>
