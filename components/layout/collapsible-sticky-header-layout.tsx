@@ -5,6 +5,8 @@ import Animated, {
     Easing,
     Extrapolation,
     interpolate,
+    scrollTo,
+    useAnimatedRef,
     useAnimatedScrollHandler,
     useAnimatedStyle,
     useDerivedValue,
@@ -14,9 +16,13 @@ import { TextX } from '~/components/ui/textx';
 import CollapsibleHeaderSlot from '~/features/home/components/collapsible-header-slot';
 import { useColor } from '~/hooks/useColor';
 
-const COLLAPSE_DISTANCE = 180;
 const DOCK_ENTER_THRESHOLD = 72;
 const DOCK_EXIT_THRESHOLD = 56;
+const TITLE_COLLAPSE_DISTANCE = DOCK_ENTER_THRESHOLD;
+const SNAP_COLLAPSE_TARGET = DOCK_ENTER_THRESHOLD;
+const SNAP_THRESHOLD = 52;
+const SNAP_VELOCITY_TOLERANCE = 0.2;
+const SNAP_DIRECTION_VELOCITY = 0.35;
 
 type CollapsibleStickyHeaderLayoutProps = {
     title: string;
@@ -67,6 +73,9 @@ export default function CollapsibleStickyHeaderLayout({
     const [reduceMotion, setReduceMotion] = React.useState(false);
 
     const dockScale = titleDockFontSize / titleFontSize;
+    const listModeEnabled = Boolean(listData && renderListItem);
+    const listRef = useAnimatedRef<Animated.FlatList<unknown>>();
+    const scrollViewRef = useAnimatedRef<Animated.ScrollView>();
 
     const scrollOffsetY = useSharedValue(0);
     const reduceMotionValue = useSharedValue(0);
@@ -95,8 +104,43 @@ export default function CollapsibleStickyHeaderLayout({
         reduceMotionValue.value = reduceMotion ? 1 : 0;
     }, [reduceMotion, reduceMotionValue]);
 
-    const onScroll = useAnimatedScrollHandler(event => {
-        scrollOffsetY.value = Math.max(0, event.contentOffset.y);
+    const snapToNearestState = React.useCallback(
+        (offsetY: number, velocityY: number) => {
+            'worklet';
+            const normalizedOffsetY = Math.max(0, offsetY);
+            const targetY =
+                velocityY >= SNAP_DIRECTION_VELOCITY
+                    ? SNAP_COLLAPSE_TARGET
+                    : velocityY <= -SNAP_DIRECTION_VELOCITY
+                      ? 0
+                      : normalizedOffsetY >= SNAP_THRESHOLD
+                        ? SNAP_COLLAPSE_TARGET
+                        : 0;
+            if (Math.abs(normalizedOffsetY - targetY) <= 1) {
+                return;
+            }
+            if (listModeEnabled) {
+                scrollTo(listRef, 0, targetY, true);
+                return;
+            }
+            scrollTo(scrollViewRef, 0, targetY, true);
+        },
+        [listModeEnabled, listRef, scrollOffsetY, scrollViewRef],
+    );
+
+    const onScroll = useAnimatedScrollHandler({
+        onScroll: event => {
+            scrollOffsetY.value = Math.max(0, event.contentOffset.y);
+        },
+        onEndDrag: event => {
+            const velocityY = event.velocity?.y ?? 0;
+            if (Math.abs(velocityY) <= SNAP_VELOCITY_TOLERANCE) {
+                snapToNearestState(event.contentOffset.y, velocityY);
+            }
+        },
+        onMomentumEnd: event => {
+            snapToNearestState(event.contentOffset.y, 0);
+        },
     });
 
     useDerivedValue(() => {
@@ -118,7 +162,7 @@ export default function CollapsibleStickyHeaderLayout({
         const rawProgress =
             reduceMotionValue.value === 1
                 ? dockedState.value
-                : interpolate(scrollOffsetY.value, [0, COLLAPSE_DISTANCE], [0, 1], Extrapolation.CLAMP);
+                : interpolate(scrollOffsetY.value, [0, TITLE_COLLAPSE_DISTANCE], [0, 1], Extrapolation.CLAMP);
         const easedProgress = Easing.out(Easing.cubic)(rawProgress);
         const scale = 1 - easedProgress * (1 - dockScale);
         const translateY = centerY - sourceHeight / 2;
@@ -133,7 +177,7 @@ export default function CollapsibleStickyHeaderLayout({
         const rawProgress =
             reduceMotionValue.value === 1
                 ? dockedState.value
-                : interpolate(scrollOffsetY.value, [0, COLLAPSE_DISTANCE], [0, 1], Extrapolation.CLAMP);
+                : interpolate(scrollOffsetY.value, [0, TITLE_COLLAPSE_DISTANCE], [0, 1], Extrapolation.CLAMP);
         const easedProgress = Easing.out(Easing.cubic)(rawProgress);
         return {
             opacity: 1 - easedProgress,
@@ -194,7 +238,6 @@ export default function CollapsibleStickyHeaderLayout({
         </View>
     );
 
-    const listModeEnabled = Boolean(listData && renderListItem);
     const stickyMarker = React.useMemo(() => ({ __sticky: true }), []);
     const composedData = React.useMemo(() => {
         if (!listModeEnabled || !listData) {
@@ -215,6 +258,7 @@ export default function CollapsibleStickyHeaderLayout({
 
             {listModeEnabled && composedData ? (
                 <Animated.FlatList
+                    ref={listRef}
                     data={composedData}
                     onScroll={onScroll}
                     scrollEventThrottle={16}
@@ -257,6 +301,7 @@ export default function CollapsibleStickyHeaderLayout({
                 />
             ) : (
                 <Animated.ScrollView
+                    ref={scrollViewRef}
                     onScroll={onScroll}
                     scrollEventThrottle={16}
                     stickyHeaderIndices={headerBottom ? [1] : undefined}
