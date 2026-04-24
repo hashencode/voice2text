@@ -20,9 +20,11 @@ export default function CollapsibleHeaderSlot({ title, description, titleStyle, 
                 }}>
                 <TextX style={[titleStyle, { opacity: 0 }]}>{title}</TextX>
             </View>
-            <TextX variant="description" className="px-1">
-                {description}
-            </TextX>
+            {description ? (
+                <TextX variant="description" className="px-1">
+                    {description}
+                </TextX>
+            ) : null}
         </View>
     );
 }

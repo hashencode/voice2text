@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { CassetteTape } from 'lucide-react-native';
 import React from 'react';
-import { LayoutRectangle, ListRenderItemInfo, View } from 'react-native';
+import { LayoutRectangle, ListRenderItemInfo, type StyleProp, type TextStyle, View } from 'react-native';
 import CollapsibleStickyHeaderLayout from '~/components/layout/collapsible-sticky-header-layout';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { AlertDialog } from '~/components/ui/alert-dialog';
@@ -23,6 +23,7 @@ import {
     updateRecordingDisplayName,
 } from '~/data/sqlite/services/recordings.service';
 import type { RecordingListItem } from '~/features/home/components/file-list-view';
+import CollapsibleHeaderSlot from '~/features/home/components/collapsible-header-slot';
 import { FileListRow } from '~/features/home/components/file-list-view';
 import GroupControlBar from '~/features/home/components/group-control-bar';
 import HomeTopActions from '~/features/home/components/home-top-actions';
@@ -152,11 +153,11 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
         toggleSelectPath,
         clearSelectedPaths,
         addSelectedPath,
-        isAllFilteredSelected,
         toggleSelectAllFiltered,
     } = useFileSelection(items.map(item => item.path));
 
     const selectedCount = selectedPaths.length;
+    const multiSelectLabel = `已选择${selectedCount}项`;
     const selectedPathForRename = selectedCount === 1 ? selectedPaths[0] : null;
     const validateRenameName = React.useCallback((name: string): string | null => {
         if (!name) {
@@ -307,20 +308,6 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
             ? `是否彻底删除已选中的 ${Math.max(selectedCount, 1)} 个文件？删除后无法恢复。`
             : `是否将已选中的 ${Math.max(selectedCount, 1)} 个文件移入最近删除？`;
 
-    const handleMoveSelected = React.useCallback(() => {
-        if (selectedCount <= 0) {
-            return;
-        }
-        toast({ title: '移动功能即将上线', variant: 'info' });
-    }, [selectedCount, toast]);
-
-    const handleDeleteSelected = React.useCallback(() => {
-        if (selectedCount <= 0) {
-            return;
-        }
-        setDeleteDialogVisible(true);
-    }, [selectedCount]);
-
     const handleOpenGroups = React.useCallback(() => {
         router.push('/recording-groups' as never);
     }, [router]);
@@ -341,22 +328,47 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
         [router],
     );
 
-    const renderHeaderTop = React.useCallback(
-        ({
-            onDockLayout,
-            onHeightChange,
-        }: {
+    const renderTopActions = React.useCallback(
+        (params: {
             onDockLayout: (layout: LayoutRectangle) => void;
             onHeightChange: (height: number) => void;
+            isHeaderCollapsed: boolean;
         }) => {
-            return <HomeTopActions onDockLayout={onDockLayout} onHeightChange={onHeightChange} />;
+            return (
+                <HomeTopActions
+                    onDockLayout={params.onDockLayout}
+                    onHeightChange={params.onHeightChange}
+                    isMultiSelectMode={isMultiSelectMode}
+                    canSelectAll={items.length > 0}
+                    onCloseMultiSelect={handleToggleMultiSelectMode}
+                    onToggleSelectAllFiltered={toggleSelectAllFiltered}
+                />
+            );
+        },
+        [handleToggleMultiSelectMode, isMultiSelectMode, items.length, toggleSelectAllFiltered],
+    );
+
+    const renderHeroHeader = React.useCallback(
+        (params: {
+            title: string;
+            description: string;
+            titleStyle: StyleProp<TextStyle>;
+            onTitleLayout: (width: number, height: number, x: number, y: number) => void;
+        }) => {
+            return (
+                <CollapsibleHeaderSlot
+                    title={params.title}
+                    description={params.description}
+                    titleStyle={params.titleStyle}
+                    onTitleLayout={params.onTitleLayout}
+                />
+            );
         },
         [],
     );
 
     const renderListItem = React.useCallback(
-        ({ item }: ListRenderItemInfo<unknown>) => {
-            const row = item as HomeRecordingItem;
+        ({ item: row }: ListRenderItemInfo<HomeRecordingItem>) => {
             return (
                 <>
                     <FileListRow
@@ -387,29 +399,24 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
     return (
         <View className="flex-1">
             <CollapsibleStickyHeaderLayout
-                title="音频"
-                description="n个音频"
+                title={isMultiSelectMode ? multiSelectLabel : '音频'}
+                description={isMultiSelectMode ? '' : 'n个音频'}
+                titleDockAlign={isMultiSelectMode ? 'center' : 'left'}
+                titleDockVerticalAlign="dock"
                 titleDockFontSize={18}
-                contentPaddingBottom={bottomInset}
-                renderHeaderTop={renderHeaderTop}
-                headerBottom={
+                contentPaddingBottom={bottomInset + 500}
+                renderTopActions={renderTopActions}
+                renderHeroHeader={renderHeroHeader}
+                renderStickyBar={
                     <GroupControlBar
-                        isMultiSelectMode={isMultiSelectMode}
                         groupTabs={groupTabs}
                         selectedGroupId={selectedGroupId}
-                        selectedCount={selectedCount}
-                        canSelectAll={items.length > 0}
-                        isAllFilteredSelected={isAllFilteredSelected}
                         onPressGroup={setSelectedGroupId}
                         onOpenGroups={handleOpenGroups}
-                        onToggleSelectAllFiltered={toggleSelectAllFiltered}
-                        onMoveSelected={handleMoveSelected}
-                        onDeleteSelected={handleDeleteSelected}
-                        onCloseMultiSelect={handleToggleMultiSelectMode}
                     />
                 }
                 listData={items}
-                listKeyExtractor={item => (item as HomeRecordingItem).path}
+                listKeyExtractor={item => item.path}
                 listEmptyComponent={
                     !loading ? (
                         <CommonEmptyState
