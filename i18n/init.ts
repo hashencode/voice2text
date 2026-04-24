@@ -1,8 +1,8 @@
 import { createInstance, Resource } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-import { fallbackChecker } from './fallbackChecker';
-import { languageDetector } from './languageDetector';
+import { fallbackChecker } from './fallback-checker';
+import { languageDetector } from './language-detector';
 
 type Init18n = {
     resources: Resource;

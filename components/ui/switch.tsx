@@ -1,4 +1,4 @@
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import React from 'react';
 
 import { Switch as RNSwitch, SwitchProps as RNSwitchProps } from 'react-native';

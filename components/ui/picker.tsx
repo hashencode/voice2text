@@ -3,7 +3,7 @@ import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { acquireOverlayInteractionLock } from '@/hooks/use-overlay-interaction-lock';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_ICON } from '@/theme/globals';
 import { Check, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';

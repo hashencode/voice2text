@@ -1,5 +1,5 @@
 import { TextX } from '@/components/ui/textx';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { CORNERS, FONT_SIZE } from '@/theme/globals';
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
 import {

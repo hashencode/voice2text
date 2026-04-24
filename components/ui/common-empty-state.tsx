@@ -2,7 +2,7 @@ import { SearchEngine } from 'iconoir-react-native';
 import React from 'react';
 import { View } from 'react-native';
 import { TextX } from '~/components/ui/textx';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 
 type CommonEmptyStateProps = {
     text: string;

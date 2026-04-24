@@ -1,6 +1,6 @@
 import { ButtonX } from '@/components/ui/buttonx';
 import { ModalMask } from '@/components/ui/modal-mask';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS } from '@/theme/globals';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Dimensions, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';

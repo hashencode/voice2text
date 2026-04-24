@@ -10,7 +10,7 @@ import {
     type CollapsibleStickyHeaderThresholds,
     useCollapsibleStickyHeader,
 } from '~/components/layout/use-collapsible-sticky-header';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 
 type StickyMarker = { __sticky: true };
 type ListItem<T> = StickyMarker | T;

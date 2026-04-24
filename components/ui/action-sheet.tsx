@@ -2,7 +2,7 @@ import { BottomSafeAreaSpacer } from '@/components/ui/bottom-safe-area-spacer';
 import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, FONT_SIZE } from '@/theme/globals';
 import { Check } from 'lucide-react-native';
 import React, { useEffect } from 'react';

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import { IconButton } from '~/components/ui/icon-button';
 import HomeList from '~/features/home/home-list';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 
 export default function Home() {
     const router = useRouter();

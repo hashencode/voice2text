@@ -1,7 +1,7 @@
 import { Image } from '@/components/ui/image';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { ImageProps, ImageSource } from 'expo-image';
 import { TextStyle, ViewStyle } from 'react-native';
 

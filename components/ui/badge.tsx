@@ -1,5 +1,5 @@
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { CORNERS } from '@/theme/globals';
 import { TextStyle, ViewStyle } from 'react-native';
 import { TextX } from '~/components/ui/textx';

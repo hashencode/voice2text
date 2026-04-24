@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { ReactNode } from 'react';
 import { ButtonX } from '~/components/ui/buttonx';
 import { TextX } from '~/components/ui/textx';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 
 export interface HeadProps {
     title?: ReactNode; // 标题

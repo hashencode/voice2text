@@ -5,7 +5,7 @@ import { Pressable, View } from 'react-native';
 import { Checkbox } from '~/components/ui/checkbox';
 import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 import { FONT_SIZE_LG } from '~/theme/globals';
 
 export type RecordingListItem = {

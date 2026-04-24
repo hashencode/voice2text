@@ -1,6 +1,6 @@
 import { Icon } from '@/components/ui/icon';
 import { TextX } from '@/components/ui/textx';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_HEIGHT, BUTTON_HEIGHT_LG, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { LucideProps, X } from 'lucide-react-native';
 import React, { forwardRef, ReactElement, useRef, useState } from 'react';

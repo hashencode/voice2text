@@ -15,7 +15,7 @@ import LiveTranscriptPanel from '~/features/session-editor/components/live-trans
 import SessionHeader from '~/features/session-editor/components/session-header';
 import { useRecordSession } from '~/features/session-editor/hooks/use-record-session';
 import type { EditorTabValue } from '~/features/session-editor/types';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 import { BORDER_RADIUS_SM, BUTTON_ICON_LG } from '~/theme/globals';
 
 export default function RecordPage() {

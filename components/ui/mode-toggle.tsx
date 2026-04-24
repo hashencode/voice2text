@@ -1,6 +1,6 @@
 import { IconButton } from '@/components/ui/icon-button';
 import { useModeToggle } from '@/hooks/use-mode-toggle';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { Moon, Sun } from 'lucide-react-native';
 import type { IconButtonSize } from '~/components/ui/icon-button';
 

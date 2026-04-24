@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { TextX } from '~/components/ui/textx';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 
 type StatusIconComponent = React.ComponentType<{
     width?: number;

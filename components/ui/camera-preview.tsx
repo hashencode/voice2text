@@ -4,7 +4,7 @@ import { Image } from '@/components/ui/image';
 import { TextX } from '@/components/ui/textx';
 import { Video } from '@/components/ui/video';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import * as MediaLibrary from 'expo-media-library';
 import { Download, Upload, X } from 'lucide-react-native';
 import { useState } from 'react';

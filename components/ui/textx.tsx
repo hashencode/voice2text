@@ -1,4 +1,4 @@
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import {
     FONT_SIZE,
     FONT_SIZE_LG,

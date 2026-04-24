@@ -1,6 +1,6 @@
 import { Icon } from '@/components/ui/icon';
 import { ButtonSpinner, SpinnerVariant } from '@/components/ui/spinner';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import {
     BUTTON_HEIGHT,
     BUTTON_HEIGHT_LG,

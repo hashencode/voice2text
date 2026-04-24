@@ -1,7 +1,7 @@
 import { Icon } from '@/components/ui/icon';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import { LucideProps } from 'lucide-react-native';
 import React from 'react';

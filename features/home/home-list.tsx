@@ -23,7 +23,7 @@ import {
     updateRecordingDisplayName,
 } from '~/data/sqlite/services/recordings.service';
 import type { RecordingListItem } from '~/features/home/components/file-list-view';
-import CollapsibleHeaderSlot from '~/features/home/components/collapsible-header-slot';
+import CollapsibleHeroHeaderSlot from '~/components/layout/collapsible-hero-header-slot';
 import { FileListRow } from '~/features/home/components/file-list-view';
 import GroupControlBar from '~/features/home/components/group-control-bar';
 import HomeTopActions from '~/features/home/components/home-top-actions';
@@ -31,7 +31,7 @@ import NameInputDialog from '~/features/home/components/name-input-dialog';
 import { useFileSelection } from '~/features/home/hooks/use-file-selection';
 import { useItemActions } from '~/features/home/hooks/use-item-actions';
 import { useSingleItemActions } from '~/features/home/hooks/use-single-item-actions';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 
 type HomeRecordingItem = {
     path: string;
@@ -356,7 +356,7 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
             onTitleLayout: (width: number, height: number, x: number, y: number) => void;
         }) => {
             return (
-                <CollapsibleHeaderSlot
+                <CollapsibleHeroHeaderSlot
                     title={params.title}
                     description={params.description}
                     titleStyle={params.titleStyle}

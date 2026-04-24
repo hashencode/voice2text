@@ -5,7 +5,7 @@ import { IconButton } from '~/components/ui/icon-button';
 import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
 import { getGroupLabel } from '~/data/sqlite/group-model';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 import { BUTTON_HEIGHT } from '~/theme/globals';
 
 type GroupControlBarProps = {

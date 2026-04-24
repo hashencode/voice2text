@@ -1,6 +1,6 @@
 import { TextX } from '@/components/ui/textx';
 import { Spinner } from '@/components/ui/spinner';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import type { LucideProps } from 'lucide-react-native';
 import { CircleCheck, CircleX, Info, TriangleAlert } from 'lucide-react-native';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';

@@ -3,7 +3,7 @@ import { ButtonSize, ButtonVariant, ButtonX } from '@/components/ui/buttonx';
 import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { CORNERS } from '@/theme/globals';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';

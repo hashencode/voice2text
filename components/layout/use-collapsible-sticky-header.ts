@@ -1,15 +1,18 @@
 import React from 'react';
 import { AccessibilityInfo, LayoutRectangle } from 'react-native';
 import Animated, {
+    cancelAnimation,
     Easing,
     Extrapolation,
     interpolate,
     runOnJS,
     scrollTo,
+    useAnimatedReaction,
     useAnimatedRef,
     useAnimatedScrollHandler,
     useAnimatedStyle,
     useSharedValue,
+    withTiming,
 } from 'react-native-reanimated';
 
 export type CollapsibleStickyHeaderThresholds = {
@@ -28,6 +31,7 @@ export const DEFAULT_COLLAPSIBLE_STICKY_HEADER_THRESHOLDS: CollapsibleStickyHead
 
 const SNAP_VELOCITY_TOLERANCE = 0.2;
 const SNAP_DIRECTION_VELOCITY = 0.35;
+const SNAP_LINEAR_DURATION_MS = 180;
 
 type UseCollapsibleStickyHeaderParams = {
     listModeEnabled: boolean;
@@ -64,6 +68,7 @@ export function useCollapsibleStickyHeader<TListItem>({
     const scrollOffsetY = useSharedValue(0);
     const reduceMotionValue = useSharedValue(0);
     const dockedState = useSharedValue(0);
+    const snapAnimatedOffsetY = useSharedValue(0);
 
     const handleHeaderCollapsedChange = React.useCallback((next: boolean) => {
         if (isHeaderCollapsedRef.current === next) {
@@ -115,13 +120,29 @@ export function useCollapsibleStickyHeader<TListItem>({
             if (Math.abs(normalizedOffsetY - targetY) <= 1) {
                 return;
             }
-            if (listModeEnabled) {
-                scrollTo(listRef, 0, targetY, true);
+            cancelAnimation(snapAnimatedOffsetY);
+            snapAnimatedOffsetY.value = normalizedOffsetY;
+            snapAnimatedOffsetY.value = withTiming(targetY, {
+                duration: SNAP_LINEAR_DURATION_MS,
+                easing: Easing.linear,
+            });
+        },
+        [snapAnimatedOffsetY, thresholds.snapTarget, thresholds.snapThreshold],
+    );
+
+    useAnimatedReaction(
+        () => snapAnimatedOffsetY.value,
+        (nextY, prevY) => {
+            if (prevY === null || Math.abs(nextY - prevY) < 0.1) {
                 return;
             }
-            scrollTo(scrollViewRef, 0, targetY, true);
+            if (listModeEnabled) {
+                scrollTo(listRef, 0, nextY, false);
+                return;
+            }
+            scrollTo(scrollViewRef, 0, nextY, false);
         },
-        [listModeEnabled, listRef, scrollViewRef, thresholds.snapTarget, thresholds.snapThreshold],
+        [listModeEnabled, listRef, scrollViewRef],
     );
 
     const onScroll = useAnimatedScrollHandler({
@@ -160,12 +181,12 @@ export function useCollapsibleStickyHeader<TListItem>({
             reduceMotionValue.value === 1
                 ? dockedState.value
                 : interpolate(scrollOffsetY.value, [0, thresholds.dockEnter], [0, 1], Extrapolation.CLAMP);
-        const easedProgress = Easing.out(Easing.cubic)(rawProgress);
-        const scale = 1 - easedProgress * (1 - dockScale);
+        const progress = rawProgress;
+        const scale = 1 - progress * (1 - dockScale);
         const scaledWidth = sourceWidth * scale;
         const centeredTargetX = dockLayout.x + Math.max(0, (dockLayout.width - scaledWidth) / 2);
         const targetX = titleDockAlign === 'center' ? centeredTargetX : sourceX;
-        const translateX = sourceX + (targetX - sourceX) * easedProgress;
+        const translateX = sourceX + (targetX - sourceX) * progress;
         const translateY = centerY - sourceHeight / 2;
 
         return {
@@ -179,10 +200,10 @@ export function useCollapsibleStickyHeader<TListItem>({
             reduceMotionValue.value === 1
                 ? dockedState.value
                 : interpolate(scrollOffsetY.value, [0, thresholds.dockEnter], [0, 1], Extrapolation.CLAMP);
-        const easedProgress = Easing.out(Easing.cubic)(rawProgress);
+        const progress = rawProgress;
         return {
-            opacity: 1 - easedProgress,
-            transform: [{ translateY: -12 * easedProgress }],
+            opacity: 1 - progress,
+            transform: [{ translateY: -12 * progress }],
         };
     }, [thresholds.dockEnter]);
 

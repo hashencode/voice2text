@@ -1,6 +1,6 @@
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS } from '@/theme/globals';
 import React from 'react';
 import { Alert as RNAlert, TextStyle, ViewStyle } from 'react-native';

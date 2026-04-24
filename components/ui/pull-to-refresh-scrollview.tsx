@@ -5,7 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTim
 import { CommonEmptyState } from '~/components/ui/common-empty-state';
 import { TextX } from '~/components/ui/textx';
 import { useOverlayInteractionLocked } from '~/hooks/use-overlay-interaction-lock';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 
 type EmptyStateIcon = React.ComponentType<{ width?: number; height?: number; strokeWidth?: number; color?: string }>;
 

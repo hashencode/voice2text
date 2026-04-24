@@ -1,8 +1,8 @@
 import { ModalMask } from '@/components/ui/modal-mask';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
-import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'; // Make sure this path is correct
+import { useColor } from '@/hooks/use-color';
+import { useKeyboardHeight } from '@/hooks/use-keyboard-height'; // Make sure this path is correct
 import { BORDER_RADIUS } from '@/theme/globals';
 import React, { useEffect } from 'react';
 import { Dimensions, ScrollView, TouchableWithoutFeedback, ViewStyle } from 'react-native';

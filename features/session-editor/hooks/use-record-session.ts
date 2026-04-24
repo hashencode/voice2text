@@ -5,7 +5,7 @@ import { useToast } from '~/components/ui/toast';
 import { getCurrentRecordingFolderName } from '~/data/mmkv/app-config';
 import { getCurrentModel } from '~/data/mmkv/model-selection';
 import { upsertRecordingMeta } from '~/data/sqlite/services/recordings.service';
-import { useWavRecording } from '~/features/record/hooks/useWavRecording';
+import { useWavRecording } from '~/features/record/hooks/use-wav-recording';
 import { useDirtyBackGuard } from '~/features/session-editor/hooks/use-dirty-back-guard';
 import type { EditorTabValue } from '~/features/session-editor/types';
 import SherpaOnnx, { getSherpaDownloadedModelOptions } from '~/modules/sherpa';

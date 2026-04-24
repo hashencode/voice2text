@@ -21,7 +21,7 @@ import { useImportAudioSession } from '~/features/session-editor/hooks/use-impor
 import { getRecognitionPrimaryAction } from '~/features/session-editor/services/import-audio-recognition-ui';
 import { formatTime } from '~/features/session-editor/services/time-format';
 import type { EditorTabValue } from '~/features/session-editor/types';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 import { BORDER_RADIUS_SM, BUTTON_ICON_LG, FONT_SIZE_LG } from '~/theme/globals';
 
 function TimeLabel({ value, color, align = 'left' }: { value: string; color: string; align?: 'left' | 'right' }) {

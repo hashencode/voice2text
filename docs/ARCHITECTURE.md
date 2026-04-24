@@ -43,5 +43,5 @@ Phase 1 completed:
 
 Current split:
 
-- moved to feature: `features/record/hooks/useWavRecording.ts`
-- kept global: `useColor`, `useColorScheme`, `useKeyboardHeight`, `use-file-picker`, `use-mode-toggle`, `use-recording-recovery`, `use-bottom-tab-overflow`, `use-overlay-interaction-lock`
+- moved to feature: `features/record/hooks/use-wav-recording.ts`
+- kept global: `use-color`, `use-color-scheme`, `use-keyboard-height`, `use-file-picker`, `use-mode-toggle`, `use-recording-recovery`, `use-bottom-tab-overflow`, `use-overlay-interaction-lock`

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { EnrichedTextInput, type EnrichedTextInputInstance } from 'react-native-enriched';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 import { FONT_SIZE_LG } from '~/theme/globals';
 
 type Props = {

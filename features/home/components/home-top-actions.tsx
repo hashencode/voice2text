@@ -8,7 +8,7 @@ import { ModeToggle } from '~/components/ui/mode-toggle';
 import { useToast } from '~/components/ui/toast';
 import TextButton from '~/features/home/components/text-button';
 import { useFilePicker } from '~/hooks/use-file-picker';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 import { BUTTON_HEIGHT_LG } from '~/theme/globals';
 
 type HomeTopActionsProps = {

@@ -1,5 +1,5 @@
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import classNames from 'classnames';
 import React, { createContext, useContext, useEffect, useState } from 'react';

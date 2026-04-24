@@ -1,6 +1,6 @@
 import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import React, { useRef, useState } from 'react';
 import { Dimensions, ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';

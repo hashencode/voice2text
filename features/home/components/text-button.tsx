@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable } from 'react-native';
 import { TextX } from '~/components/ui/textx';
-import { BUTTON_HEIGHT_LG } from '~/theme/globals';
+import { BUTTON_HEIGHT_LG, FONT_SIZE_LG } from '~/theme/globals';
 
 type TextButtonProps = {
     text: string;
@@ -12,12 +12,8 @@ type TextButtonProps = {
 
 export default function TextButton({ text, color, disabled = false, onPress }: TextButtonProps) {
     return (
-        <Pressable
-            disabled={disabled}
-            onPress={onPress}
-            className="justify-center rounded-full px-2"
-            style={{ height: BUTTON_HEIGHT_LG }}>
-            <TextX className={disabled ? 'opacity-50' : ''} style={{ color }}>
+        <Pressable disabled={disabled} onPress={onPress} className="justify-center rounded-full px-2" style={{ height: BUTTON_HEIGHT_LG }}>
+            <TextX className={disabled ? 'opacity-50' : ''} style={{ fontSize: FONT_SIZE_LG, color }}>
                 {text}
             </TextX>
         </Pressable>

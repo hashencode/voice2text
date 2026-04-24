@@ -3,7 +3,7 @@ import { LucideProps } from 'lucide-react-native';
 import React from 'react';
 import { Pressable } from 'react-native';
 import { Icon } from '~/components/ui/icon';
-import { useColor } from '~/hooks/useColor';
+import { useColor } from '~/hooks/use-color';
 import { BUTTON_HEIGHT, BUTTON_HEIGHT_LG, BUTTON_HEIGHT_SM, BUTTON_ICON, BUTTON_ICON_LG, BUTTON_ICON_SM } from '~/theme/globals';
 
 export type IconButtonSize = 'sm' | 'default' | 'lg';

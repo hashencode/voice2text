@@ -1,5 +1,5 @@
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import React from 'react';
 import { ViewStyle } from 'react-native';
 

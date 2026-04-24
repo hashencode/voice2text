@@ -2,14 +2,14 @@ import React from 'react';
 import { StyleProp, TextStyle, View } from 'react-native';
 import { TextX } from '~/components/ui/textx';
 
-type CollapsibleHeaderSlotProps = {
+type CollapsibleHeroHeaderSlotProps = {
     title: string;
     description: string;
     titleStyle?: StyleProp<TextStyle>;
     onTitleLayout?: (width: number, height: number, x: number, y: number) => void;
 };
 
-export default function CollapsibleHeaderSlot({ title, description, titleStyle, onTitleLayout }: CollapsibleHeaderSlotProps) {
+export default function CollapsibleHeroHeaderSlot({ title, description, titleStyle, onTitleLayout }: CollapsibleHeroHeaderSlotProps) {
     return (
         <View className="px-4 pb-2 pt-1">
             <View
@@ -21,7 +21,7 @@ export default function CollapsibleHeaderSlot({ title, description, titleStyle, 
                 <TextX style={[titleStyle, { opacity: 0 }]}>{title}</TextX>
             </View>
             {description ? (
-                <TextX variant="description" className="px-1">
+                <TextX variant="description" className="px-1 !text-base">
                     {description}
                 </TextX>
             ) : null}

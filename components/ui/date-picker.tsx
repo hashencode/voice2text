@@ -4,7 +4,7 @@ import { Icon } from '@/components/ui/icon';
 import { ScrollView } from '@/components/ui/scroll-view';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import { ArrowRight, Calendar, CalendarClock, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';

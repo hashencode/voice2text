@@ -1,6 +1,6 @@
 import { ButtonSize, ButtonVariant, ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { Share as ShareIcon } from 'lucide-react-native';
 import React, { useCallback, useMemo } from 'react';
 import { Alert, Platform, Share as RNShare, ShareOptions, TextStyle, View } from 'react-native';

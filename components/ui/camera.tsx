@@ -1,6 +1,6 @@
 import { ButtonX } from '@/components/ui/buttonx';
 import { TextX } from '@/components/ui/textx';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS } from '@/theme/globals';
 import { CameraMode, CameraRatio, CameraType, CameraView, useCameraPermissions } from 'expo-camera';
 import { Camera as CameraIcon, Grid3X3, Settings, SwitchCamera, Timer, Video, Volume2, VolumeX, X, Zap, ZapOff } from 'lucide-react-native';

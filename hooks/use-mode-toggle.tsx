@@ -1,5 +1,5 @@
 import { Appearance, ColorSchemeName } from 'react-native';
-import { useColorScheme } from '~/hooks/useColorScheme';
+import { useColorScheme } from '~/hooks/use-color-scheme';
 
 type Mode = 'light' | 'dark' | 'system';
 

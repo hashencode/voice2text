@@ -1,7 +1,7 @@
 import { Icon } from '@/components/ui/icon';
 import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
-import { useColor } from '@/hooks/useColor';
+import { useColor } from '@/hooks/use-color';
 import { BUTTON_HEIGHT, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { Search, X } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';
