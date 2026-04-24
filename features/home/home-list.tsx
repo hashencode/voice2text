@@ -3,11 +3,12 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { CassetteTape } from 'lucide-react-native';
 import React from 'react';
-import { View } from 'react-native';
+import { LayoutRectangle, ListRenderItemInfo, View } from 'react-native';
 import CollapsibleStickyHeaderLayout from '~/components/layout/collapsible-sticky-header-layout';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { CommonEmptyState } from '~/components/ui/common-empty-state';
+import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
 import { getSelectedRecordingGroupId, setCurrentRecordingFolderName, setSelectedRecordingGroupId } from '~/data/mmkv/app-config';
@@ -21,7 +22,8 @@ import {
     softDeleteRecordingMeta,
     updateRecordingDisplayName,
 } from '~/data/sqlite/services/recordings.service';
-import FileListView from '~/features/home/components/file-list-view';
+import type { RecordingListItem } from '~/features/home/components/file-list-view';
+import { FileListRow } from '~/features/home/components/file-list-view';
 import GroupControlBar from '~/features/home/components/group-control-bar';
 import HomeTopActions from '~/features/home/components/home-top-actions';
 import NameInputDialog from '~/features/home/components/name-input-dialog';
@@ -132,13 +134,6 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
     );
 
     React.useEffect(() => {
-        refreshList('focus').catch(() => {
-            setItems([]);
-            setLoading(false);
-        });
-    }, [refreshList]);
-
-    React.useEffect(() => {
         setSelectedRecordingGroupId(selectedGroupId);
         const folderName = normalizeGroupNameForWrite(selectedGroupId);
         setCurrentRecordingFolderName(folderName);
@@ -152,6 +147,7 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
 
     const {
         selectedPaths,
+        selectedPathSet,
         setSelectedPaths,
         toggleSelectPath,
         clearSelectedPaths,
@@ -325,6 +321,61 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
         setDeleteDialogVisible(true);
     }, [selectedCount]);
 
+    const handleOpenGroups = React.useCallback(() => {
+        router.push('/recording-groups' as never);
+    }, [router]);
+
+    const handleOpenItem = React.useCallback(
+        (entry: RecordingListItem) => {
+            const initialName = entry.displayName ?? extractFileName(entry.path);
+            router.push({
+                pathname: '/import-audio',
+                params: {
+                    uri: entry.path,
+                    name: initialName,
+                    recordedAtMs: entry.recordedAtMs ? String(entry.recordedAtMs) : undefined,
+                    source: 'list',
+                },
+            });
+        },
+        [router],
+    );
+
+    const renderHeaderTop = React.useCallback(
+        ({
+            onDockLayout,
+            onHeightChange,
+        }: {
+            onDockLayout: (layout: LayoutRectangle) => void;
+            onHeightChange: (height: number) => void;
+        }) => {
+            return <HomeTopActions onDockLayout={onDockLayout} onHeightChange={onHeightChange} />;
+        },
+        [],
+    );
+
+    const renderListItem = React.useCallback(
+        ({ item }: ListRenderItemInfo<unknown>) => {
+            const row = item as HomeRecordingItem;
+            return (
+                <>
+                    <FileListRow
+                        item={row}
+                        isMultiSelectMode={isMultiSelectMode}
+                        isSelected={selectedPathSet.has(row.path)}
+                        extractFileName={extractFileName}
+                        onToggleSelectPath={toggleSelectPath}
+                        onEnterMultiSelectWithItem={enterMultiSelectWithItem}
+                        onOpenSingleActionForItem={openSingleActions}
+                        onOpenItem={handleOpenItem}
+                    />
+                    <Separator />
+                </>
+            );
+        },
+        [enterMultiSelectWithItem, handleOpenItem, isMultiSelectMode, openSingleActions, selectedPathSet, toggleSelectPath],
+    );
+
     React.useEffect(() => {
         if (!isMultiSelectMode || items.length > 0) {
             return;
@@ -339,10 +390,8 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
                 title="音频"
                 description="n个音频"
                 titleDockFontSize={18}
-                contentPaddingBottom={108 + bottomInset}
-                renderHeaderTop={({ onDockLayout, onHeightChange }) => (
-                    <HomeTopActions onDockLayout={onDockLayout} onHeightChange={onHeightChange} />
-                )}
+                contentPaddingBottom={bottomInset}
+                renderHeaderTop={renderHeaderTop}
                 headerBottom={
                     <GroupControlBar
                         isMultiSelectMode={isMultiSelectMode}
@@ -352,45 +401,26 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
                         canSelectAll={items.length > 0}
                         isAllFilteredSelected={isAllFilteredSelected}
                         onPressGroup={setSelectedGroupId}
-                        onOpenGroups={() => router.push('/recording-groups' as never)}
+                        onOpenGroups={handleOpenGroups}
                         onToggleSelectAllFiltered={toggleSelectAllFiltered}
                         onMoveSelected={handleMoveSelected}
                         onDeleteSelected={handleDeleteSelected}
                         onCloseMultiSelect={handleToggleMultiSelectMode}
                     />
-                }>
-                {!loading && items.length === 0 ? (
-                    <CommonEmptyState
-                        text={loadError ?? (selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '最近删除为空' : '暂无录音文件')}
-                        Icon={CassetteTape}
-                    />
-                ) : null}
-
-                {items.length > 0 ? (
-                    <FileListView
-                        items={items}
-                        isMultiSelectMode={isMultiSelectMode}
-                        selectedPaths={selectedPaths}
-                        extractFileName={extractFileName}
-                        onToggleSelectPath={toggleSelectPath}
-                        onEnterMultiSelectWithItem={enterMultiSelectWithItem}
-                        onOpenSingleActionForItem={openSingleActions}
-                        onOpenItem={item => {
-                            const initialName = item.displayName ?? extractFileName(item.path);
-                            router.push({
-                                pathname: '/import-audio',
-                                params: {
-                                    uri: item.path,
-                                    name: initialName,
-                                    recordedAtMs: item.recordedAtMs ? String(item.recordedAtMs) : undefined,
-                                    source: 'list',
-                                },
-                            });
-                        }}
-                    />
-                ) : null}
-
-                {__DEV__ ? <View style={{ height: 520 }} /> : null}
+                }
+                listData={items}
+                listKeyExtractor={item => (item as HomeRecordingItem).path}
+                listEmptyComponent={
+                    !loading ? (
+                        <CommonEmptyState
+                            text={loadError ?? (selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '最近删除为空' : '暂无录音文件')}
+                            Icon={CassetteTape}
+                        />
+                    ) : null
+                }
+                listFooterComponent={__DEV__ ? <View style={{ height: 520 }} /> : null}
+                renderListItem={renderListItem}>
+                {null}
             </CollapsibleStickyHeaderLayout>
 
             <NameInputDialog

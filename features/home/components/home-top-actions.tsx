@@ -30,6 +30,9 @@ export default function HomeTopActions({ onDockLayout, onHeightChange }: HomeTop
         },
     });
 
+    const lastHeightRef = React.useRef<number | null>(null);
+    const lastDockRef = React.useRef<LayoutRectangle | null>(null);
+
     const handleImportAudio = React.useCallback(async () => {
         if (importing) {
             return;
@@ -70,16 +73,39 @@ export default function HomeTopActions({ onDockLayout, onHeightChange }: HomeTop
         }
     }, [importing, pickDocument, router, toast]);
 
+    const handleContainerLayout = React.useCallback(
+        (height: number) => {
+            if (lastHeightRef.current === height) {
+                return;
+            }
+            lastHeightRef.current = height;
+            onHeightChange?.(height);
+        },
+        [onHeightChange],
+    );
+
+    const handleDockLayout = React.useCallback(
+        (layout: LayoutRectangle) => {
+            const prev = lastDockRef.current;
+            if (prev && prev.x === layout.x && prev.y === layout.y && prev.width === layout.width && prev.height === layout.height) {
+                return;
+            }
+            lastDockRef.current = layout;
+            onDockLayout?.(layout);
+        },
+        [onDockLayout],
+    );
+
     return (
         <View
             className="flex-row items-center gap-x-2 px-4 pb-2 pt-4"
             onLayout={event => {
-                onHeightChange?.(event.nativeEvent.layout.height);
+                handleContainerLayout(event.nativeEvent.layout.height);
             }}>
             <View
                 className="min-h-10 flex-1 justify-center"
                 onLayout={event => {
-                    onDockLayout?.(event.nativeEvent.layout);
+                    handleDockLayout(event.nativeEvent.layout);
                 }}
             />
             <View className="flex-row items-center gap-x-2">

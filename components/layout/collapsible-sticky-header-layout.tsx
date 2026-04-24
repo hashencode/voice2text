@@ -1,5 +1,6 @@
 import React from 'react';
-import { AccessibilityInfo, LayoutRectangle, View } from 'react-native';
+import type { ListRenderItem } from 'react-native';
+import { AccessibilityInfo, LayoutChangeEvent, LayoutRectangle, View } from 'react-native';
 import Animated, {
     Easing,
     Extrapolation,
@@ -25,7 +26,15 @@ type CollapsibleStickyHeaderLayoutProps = {
     titleLineHeight?: number;
     contentPaddingBottom?: number;
     headerBottom?: React.ReactNode;
-    renderHeaderTop: (params: { onDockLayout: (layout: LayoutRectangle) => void; onHeightChange: (height: number) => void }) => React.ReactNode;
+    renderHeaderTop: (params: {
+        onDockLayout: (layout: LayoutRectangle) => void;
+        onHeightChange: (height: number) => void;
+    }) => React.ReactNode;
+    listData?: readonly unknown[];
+    renderListItem?: ListRenderItem<unknown>;
+    listKeyExtractor?: (item: unknown, index: number) => string;
+    listEmptyComponent?: React.ReactElement | null;
+    listFooterComponent?: React.ReactElement | null;
     children: React.ReactNode;
 };
 
@@ -38,8 +47,14 @@ export default function CollapsibleStickyHeaderLayout({
     contentPaddingBottom = 0,
     headerBottom,
     renderHeaderTop,
+    listData,
+    renderListItem,
+    listKeyExtractor,
+    listEmptyComponent = null,
+    listFooterComponent = null,
     children,
 }: CollapsibleStickyHeaderLayoutProps) {
+    const backgroundColor = useColor('background');
     const textColor = useColor('text');
     const [topActionsHeight, setTopActionsHeight] = React.useState(0);
     const [dockLayout, setDockLayout] = React.useState<LayoutRectangle>({ x: 16, y: 0, width: 0, height: 0 });
@@ -106,16 +121,15 @@ export default function CollapsibleStickyHeaderLayout({
                 : interpolate(scrollOffsetY.value, [0, COLLAPSE_DISTANCE], [0, 1], Extrapolation.CLAMP);
         const easedProgress = Easing.out(Easing.cubic)(rawProgress);
         const scale = 1 - easedProgress * (1 - dockScale);
-        const scaleXCompensation = (sourceWidth * (1 - scale)) / 2;
-        const translateX = sourceX - scaleXCompensation;
         const translateY = centerY - sourceHeight / 2;
 
         return {
-            transform: [{ translateX }, { translateY }, { scale }],
+            transformOrigin: 'left center',
+            transform: [{ translateX: sourceX }, { translateY }, { scale }],
         };
-    }, [dockLayout, dockScale, sourceHeight, sourceLocalY, sourceWidth, sourceX, topActionsHeight]);
+    }, [dockLayout, dockScale, sourceHeight, sourceLocalY, sourceX, topActionsHeight]);
 
-    const subTextStyle = useAnimatedStyle(() => {
+    const slotContentStyle = useAnimatedStyle(() => {
         const rawProgress =
             reduceMotionValue.value === 1
                 ? dockedState.value
@@ -123,63 +137,135 @@ export default function CollapsibleStickyHeaderLayout({
         const easedProgress = Easing.out(Easing.cubic)(rawProgress);
         return {
             opacity: 1 - easedProgress,
+            transform: [{ translateY: -12 * easedProgress }],
         };
     });
 
-    const slotCollapseStyle = useAnimatedStyle(() => {
-        const rawProgress =
-            reduceMotionValue.value === 1
-                ? dockedState.value
-                : interpolate(scrollOffsetY.value, [0, COLLAPSE_DISTANCE], [0, 1], Extrapolation.CLAMP);
-        const easedProgress = Easing.out(Easing.cubic)(rawProgress);
-        return {
-            height: Math.max(0, slotHeight * (1 - easedProgress)),
-            overflow: 'hidden',
-        };
-    }, [slotHeight]);
+    const handleTitleLayout = React.useCallback(
+        (width: number, height: number, x: number, y: number) => {
+            if (sourceReady) {
+                return;
+            }
+            setSourceWidth(width);
+            setSourceHeight(height);
+            setSourceX(x);
+            setSourceLocalY(y);
+            setSourceReady(true);
+        },
+        [sourceReady],
+    );
+
+    const handleTopActionsHeightChange = React.useCallback((height: number) => {
+        setTopActionsHeight(prev => (prev === height ? prev : height));
+    }, []);
+
+    const handleDockLayoutChange = React.useCallback((layout: LayoutRectangle) => {
+        setDockLayout(prev => {
+            if (prev.x === layout.x && prev.y === layout.y && prev.width === layout.width && prev.height === layout.height) {
+                return prev;
+            }
+            return layout;
+        });
+    }, []);
+
+    const handleSlotLayout = React.useCallback((event: LayoutChangeEvent) => {
+        const height = event.nativeEvent.layout.height;
+        setSlotHeight(prev => (prev > 0 ? prev : height));
+    }, []);
+
+    const headerSlotContent = (
+        <View>
+            <View className="relative overflow-hidden" style={slotHeight > 0 ? { height: slotHeight } : undefined} onLayout={handleSlotLayout}>
+                <Animated.View
+                    pointerEvents="none"
+                    style={
+                        slotHeight > 0
+                            ? [{ position: 'absolute', left: 0, right: 0, top: 0 }, slotContentStyle]
+                            : slotContentStyle
+                    }>
+                    <CollapsibleHeaderSlot
+                        title={title}
+                        description={description}
+                        titleStyle={{ fontSize: titleFontSize, lineHeight: titleLineHeight }}
+                        onTitleLayout={handleTitleLayout}
+                    />
+                </Animated.View>
+            </View>
+        </View>
+    );
+
+    const listModeEnabled = Boolean(listData && renderListItem);
+    const stickyMarker = React.useMemo(() => ({ __sticky: true }), []);
+    const composedData = React.useMemo(() => {
+        if (!listModeEnabled || !listData) {
+            return null;
+        }
+        if (!headerBottom) {
+            return listData as unknown[];
+        }
+        return [stickyMarker, ...(listData as unknown[])];
+    }, [headerBottom, listData, listModeEnabled, stickyMarker]);
 
     return (
         <View className="flex-1">
-            <Animated.ScrollView
-                onScroll={onScroll}
-                scrollEventThrottle={16}
-                stickyHeaderIndices={[0]}
-                contentContainerStyle={{ paddingBottom: contentPaddingBottom }}>
-                <View>
-                    {renderHeaderTop({
-                        onDockLayout: setDockLayout,
-                        onHeightChange: setTopActionsHeight,
-                    })}
-                    <Animated.View style={slotHeight > 0 ? slotCollapseStyle : undefined}>
-                        <Animated.View style={subTextStyle}>
-                            <View
-                                onLayout={event => {
-                                    if (slotHeight <= 0) {
-                                        setSlotHeight(event.nativeEvent.layout.height);
-                                    }
-                                }}>
-                                <CollapsibleHeaderSlot
-                                    title={title}
-                                    description={description}
-                                    titleStyle={{ fontSize: titleFontSize, lineHeight: titleLineHeight }}
-                                    onTitleLayout={(width, height, x, y) => {
-                                        if (sourceReady) {
-                                            return;
-                                        }
-                                        setSourceWidth(width);
-                                        setSourceHeight(height);
-                                        setSourceX(x);
-                                        setSourceLocalY(y);
-                                        setSourceReady(true);
-                                    }}
-                                />
-                            </View>
-                        </Animated.View>
-                    </Animated.View>
-                    {headerBottom}
-                </View>
-                {children}
-            </Animated.ScrollView>
+            {renderHeaderTop({
+                onDockLayout: handleDockLayoutChange,
+                onHeightChange: handleTopActionsHeightChange,
+            })}
+
+            {listModeEnabled && composedData ? (
+                <Animated.FlatList
+                    data={composedData}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
+                    stickyHeaderIndices={headerBottom ? [1] : undefined}
+                    keyExtractor={(item, index) => {
+                        if (headerBottom && index === 0) {
+                            return '__sticky-header__';
+                        }
+                        if (!listKeyExtractor) {
+                            return String(index);
+                        }
+                        const originalIndex = headerBottom ? index - 1 : index;
+                        const originalItem = (listData as unknown[])[originalIndex];
+                        return listKeyExtractor(originalItem, originalIndex);
+                    }}
+                    ListHeaderComponent={headerSlotContent}
+                    ListEmptyComponent={listEmptyComponent}
+                    ListFooterComponent={
+                        <>
+                            {children}
+                            {listFooterComponent}
+                        </>
+                    }
+                    renderItem={params => {
+                        if (headerBottom && params.index === 0) {
+                            return <View style={{ backgroundColor }}>{headerBottom}</View>;
+                        }
+                        const originalIndex = headerBottom ? params.index - 1 : params.index;
+                        const originalItem = (listData as unknown[])[originalIndex];
+                        if (!renderListItem) {
+                            return null;
+                        }
+                        return renderListItem({
+                            ...params,
+                            index: originalIndex,
+                            item: originalItem,
+                        });
+                    }}
+                    contentContainerStyle={{ paddingBottom: contentPaddingBottom }}
+                />
+            ) : (
+                <Animated.ScrollView
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
+                    stickyHeaderIndices={headerBottom ? [1] : undefined}
+                    contentContainerStyle={{ paddingBottom: contentPaddingBottom }}>
+                    {headerSlotContent}
+                    {headerBottom ? <View style={{ backgroundColor }}>{headerBottom}</View> : null}
+                    {children}
+                </Animated.ScrollView>
+            )}
 
             {topActionsHeight > 0 && sourceReady && sourceWidth > 0 ? (
                 <Animated.View pointerEvents="none" className="absolute left-0 top-0" style={titleStyle}>

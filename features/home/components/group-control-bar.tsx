@@ -2,6 +2,7 @@ import { CheckCheck, FolderInput, Library, Trash2, X } from 'lucide-react-native
 import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { IconButton } from '~/components/ui/icon-button';
+import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
 import { getGroupLabel } from '~/data/sqlite/group-model';
 import { useColor } from '~/hooks/useColor';
@@ -43,47 +44,53 @@ export default function GroupControlBar({
     if (isMultiSelectMode) {
         const disableActions = selectedCount <= 0;
         return (
-            <View className="flex-row items-center justify-between gap-x-2 px-4 py-3">
-                <TextX variant="title" numberOfLines={1} className="flex-1">
-                    {selectedCount <= 0 ? '选择项目' : `已选择 ${selectedCount} 项`}
-                </TextX>
-                <View className="flex-row items-center gap-x-2">
-                    <IconButton icon={FolderInput} disabled={disableActions} onPress={onMoveSelected} />
-                    <IconButton
-                        icon={Trash2}
-                        disabled={disableActions}
-                        onPress={onDeleteSelected}
-                        iconProps={{ color: destructiveColor }}
-                    />
-                    <IconButton
-                        icon={CheckCheck}
-                        disabled={!canSelectAll}
-                        onPress={onToggleSelectAllFiltered}
-                        active={isAllFilteredSelected}
-                    />
-                    <IconButton icon={X} onPress={onCloseMultiSelect} />
+            <>
+                <View className="flex-row items-center justify-between gap-x-2 px-4 py-3">
+                    <TextX variant="title" numberOfLines={1} className="flex-1">
+                        {selectedCount <= 0 ? '选择项目' : `已选择 ${selectedCount} 项`}
+                    </TextX>
+                    <View className="flex-row items-center gap-x-2">
+                        <IconButton icon={FolderInput} disabled={disableActions} onPress={onMoveSelected} />
+                        <IconButton
+                            icon={Trash2}
+                            disabled={disableActions}
+                            onPress={onDeleteSelected}
+                            iconProps={{ color: destructiveColor }}
+                        />
+                        <IconButton
+                            icon={CheckCheck}
+                            disabled={!canSelectAll}
+                            onPress={onToggleSelectAllFiltered}
+                            active={isAllFilteredSelected}
+                        />
+                        <IconButton icon={X} onPress={onCloseMultiSelect} />
+                    </View>
                 </View>
-            </View>
+                <Separator />
+            </>
         );
     }
 
     return (
-        <View className="flex-row items-center gap-x-2 px-4 py-3">
-            <IconButton icon={Library} backgroundColor={cardColor} onPress={onOpenGroups} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
-                {groupTabs.map(groupId => {
-                    const isActive = selectedGroupId === groupId;
-                    return (
-                        <Pressable
-                            key={groupId}
-                            onPress={() => onPressGroup?.(groupId)}
-                            className="flex justify-center rounded-xl px-4"
-                            style={{ backgroundColor: isActive ? secondaryColor : cardColor, height: BUTTON_HEIGHT }}>
-                            <TextX className={isActive ? 'font-medium' : ''}>{getGroupLabel(groupId)}</TextX>
-                        </Pressable>
-                    );
-                })}
-            </ScrollView>
-        </View>
+        <>
+            <View className="flex-row items-center gap-x-2 px-4 py-3">
+                <IconButton icon={Library} backgroundColor={cardColor} onPress={onOpenGroups} />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+                    {groupTabs.map(groupId => {
+                        const isActive = selectedGroupId === groupId;
+                        return (
+                            <Pressable
+                                key={groupId}
+                                onPress={() => onPressGroup?.(groupId)}
+                                className="flex justify-center rounded-xl px-4"
+                                style={{ backgroundColor: isActive ? secondaryColor : cardColor, height: BUTTON_HEIGHT }}>
+                                <TextX className={isActive ? 'font-medium' : ''}>{getGroupLabel(groupId)}</TextX>
+                            </Pressable>
+                        );
+                    })}
+                </ScrollView>
+            </View>
+            <Separator />
+        </>
     );
 }

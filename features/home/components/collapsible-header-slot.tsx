@@ -11,7 +11,7 @@ type CollapsibleHeaderSlotProps = {
 
 export default function CollapsibleHeaderSlot({ title, description, titleStyle, onTitleLayout }: CollapsibleHeaderSlotProps) {
     return (
-        <View className="bg-red-500 px-4 pb-2 pt-1">
+        <View className="px-4 pb-2 pt-1">
             <View
                 className="self-start"
                 onLayout={event => {
@@ -20,7 +20,9 @@ export default function CollapsibleHeaderSlot({ title, description, titleStyle, 
                 }}>
                 <TextX style={[titleStyle, { opacity: 0 }]}>{title}</TextX>
             </View>
-            <TextX variant="description">{description}</TextX>
+            <TextX variant="description" className="px-1">
+                {description}
+            </TextX>
         </View>
     );
 }
