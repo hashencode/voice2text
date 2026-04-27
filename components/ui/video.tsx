@@ -4,7 +4,7 @@ import { useEvent } from 'expo';
 import { useVideoPlayer, VideoSource, VideoView } from 'expo-video';
 import { Volume2, VolumeX } from 'lucide-react-native';
 import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { StyleSheet, Text, Pressable, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -323,17 +323,17 @@ export const Video = forwardRef<VideoView, VideoProps>(
                     {...props}
                 />
                 <View style={styles.gestureOverlay}>
-                    <TouchableOpacity style={styles.gestureArea} onPress={handleLeftDoubleTap} activeOpacity={0} />
-                    <TouchableOpacity style={styles.gestureAreaCenter} onPress={handleSingleTap} activeOpacity={0} />
-                    <TouchableOpacity style={styles.gestureArea} onPress={handleRightDoubleTap} activeOpacity={0} />
+                    <Pressable style={styles.gestureArea} onPress={handleLeftDoubleTap} />
+                    <Pressable style={styles.gestureAreaCenter} onPress={handleSingleTap} />
+                    <Pressable style={styles.gestureArea} onPress={handleRightDoubleTap} />
                 </View>
 
                 {showCustomControls && (
                     <Animated.View style={[styles.controlsContainer, controlsAnimatedStyle]} pointerEvents="box-none">
                         <View style={styles.topControls}>
-                            <TouchableOpacity onPress={toggleMute} style={styles.controlButton} activeOpacity={0.7}>
+                            <Pressable onPress={toggleMute} style={styles.controlButton}>
                                 {isMuted ? <VolumeX size={24} color={textColor} /> : <Volume2 size={24} color={textColor} />}
-                            </TouchableOpacity>
+                            </Pressable>
                         </View>
 
                         <View style={styles.bottomControls}>

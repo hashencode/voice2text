@@ -6,7 +6,7 @@ import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, FONT_SIZE } from '@/theme/globals';
 import { Check } from 'lucide-react-native';
 import React, { useEffect } from 'react';
-import { ActionSheetIOS, Platform, ScrollView, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { ActionSheetIOS, Platform, Pressable, ScrollView, StyleSheet, ViewStyle } from 'react-native';
 
 export interface ActionSheetOption {
     title: string;
@@ -100,7 +100,7 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
     return (
         <ModalMask isVisible={visible} onPressMask={handleBackdropPress} statusBarTranslucent contentTransitionPreset="slide-up">
             <View style={styles.container} pointerEvents="box-none">
-                <View className="shadow" style={[styles.sheet, { backgroundColor: cardColor }, style]}>
+                <View style={[styles.sheet, { backgroundColor: cardColor }, style]}>
                     {/* Header */}
                     {(title || message) && (
                         <View style={styles.header}>
@@ -120,7 +120,7 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
                     {/* Options */}
                     <ScrollView style={styles.optionsContainer} showsVerticalScrollIndicator={false}>
                         {options.map((option, index) => (
-                            <TouchableOpacity
+                            <Pressable
                                 key={index}
                                 style={[
                                     styles.option,
@@ -129,8 +129,7 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
                                     option.disabled && styles.disabledOption,
                                 ]}
                                 onPress={() => handleOptionPress(option)}
-                                disabled={option.disabled}
-                                activeOpacity={0.6}>
+                                disabled={option.disabled}>
                                 <View style={styles.optionContent}>
                                     <View style={styles.optionMain}>
                                         {option.icon && <View style={styles.optionIcon}>{option.icon}</View>}
@@ -139,7 +138,11 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
                                                 style={[
                                                     styles.optionText,
                                                     {
-                                                        color: option.destructive ? destructiveColor : option.disabled ? mutedColor : textColor,
+                                                        color: option.destructive
+                                                            ? destructiveColor
+                                                            : option.disabled
+                                                              ? mutedColor
+                                                              : textColor,
                                                     },
                                                 ]}
                                                 numberOfLines={1}>
@@ -154,15 +157,15 @@ function AndroidActionSheet({ visible, onClose, title, message, options, cancelB
                                     </View>
                                     {option.selected ? <Check size={18} color={primaryColor} /> : null}
                                 </View>
-                            </TouchableOpacity>
+                            </Pressable>
                         ))}
                     </ScrollView>
 
                     {/* Cancel Button */}
                     <View style={[styles.cancelContainer, { borderTopColor: borderColor }]}>
-                        <TouchableOpacity style={styles.cancelButton} onPress={onClose} activeOpacity={0.6}>
+                        <Pressable style={styles.cancelButton} onPress={onClose}>
                             <TextX style={[styles.cancelText, { color: textColor }]}>{cancelButtonTitle}</TextX>
-                        </TouchableOpacity>
+                        </Pressable>
                     </View>
                     <BottomSafeAreaSpacer />
                 </View>

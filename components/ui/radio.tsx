@@ -2,7 +2,7 @@ import { TextX } from '@/components/ui/textx';
 import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, CORNERS } from '@/theme/globals';
 import React from 'react';
-import { TextStyle, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { TextStyle, Pressable, View, ViewStyle } from 'react-native';
 
 export interface RadioOption {
     label: string;
@@ -72,12 +72,12 @@ export function RadioButton({ option, selected, onPress, disabled = false, style
     };
 
     return (
-        <TouchableOpacity style={[containerStyle, style]} onPress={onPress} disabled={isDisabled} activeOpacity={0.7}>
+        <Pressable style={[containerStyle, style]} onPress={onPress} disabled={isDisabled}>
             <View style={radioButtonStyle}>
                 <View style={innerCircleStyle} />
             </View>
             <TextX style={[textStyle, labelStyle]}>{option.label}</TextX>
-        </TouchableOpacity>
+        </Pressable>
     );
 }
 

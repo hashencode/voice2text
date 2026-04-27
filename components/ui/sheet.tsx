@@ -6,7 +6,7 @@ import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS } from '@/theme/globals';
 import { X } from 'lucide-react-native';
 import React from 'react';
-import { Dimensions, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, ViewStyle } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -100,7 +100,6 @@ export function SheetContent({ children, style }: SheetContentProps) {
             contentTransitionDistance={sheetWidth}>
             {/* Sheet */}
             <View
-                className="shadow"
                 style={[
                     styles.sheet,
                     {
@@ -112,7 +111,7 @@ export function SheetContent({ children, style }: SheetContentProps) {
                     style,
                 ]}>
                 {/* Close button */}
-                <TouchableOpacity
+                <Pressable
                     style={[
                         styles.closeButton,
                         {
@@ -123,7 +122,7 @@ export function SheetContent({ children, style }: SheetContentProps) {
                     onPress={handleClose}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <X size={20} color={iconColor} />
-                </TouchableOpacity>
+                </Pressable>
 
                 {/* Content */}
                 <View style={styles.contentContainer}>{children}</View>

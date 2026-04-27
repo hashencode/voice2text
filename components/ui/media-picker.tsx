@@ -10,7 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { Aperture, Check, LucideProps, Video, X } from 'lucide-react-native';
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Pressable, View as RNView, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, Pressable, StyleSheet, View as RNView, ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type MediaType = 'image' | 'video' | 'all';
@@ -405,9 +405,9 @@ export const MediaPicker = forwardRef<RNView, MediaPickerProps>(
                         <Video size={16} color="white" />
                     </View>
                 )}
-                <TouchableOpacity style={[styles.removeButton, { backgroundColor: primaryColor }]} onPress={() => removeAsset(item.id)}>
+                <Pressable style={[styles.removeButton, { backgroundColor: primaryColor }]} onPress={() => removeAsset(item.id)}>
                     <X size={12} color={secondary} />
-                </TouchableOpacity>
+                </Pressable>
             </View>
         );
 

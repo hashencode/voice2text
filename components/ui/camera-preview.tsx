@@ -8,7 +8,7 @@ import { useColor } from '@/hooks/use-color';
 import * as MediaLibrary from 'expo-media-library';
 import { Download, Upload, X } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Dimensions, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, Dimensions, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -154,30 +154,30 @@ export function CameraPreview() {
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                             }}>
-                            <TouchableOpacity
+                            <Pressable
                                 className="shadow"
                                 style={[styles.floatingButton, { backgroundColor: cardColor, opacity: 0.9 }]}
                                 onPress={handleRetakeMedia}
-                                activeOpacity={0.8}>
+>
                                 <X size={24} color={textColor} />
-                            </TouchableOpacity>
+                            </Pressable>
 
                             <View className="flex-row items-center justify-between gap-4">
-                                <TouchableOpacity
+                                <Pressable
                                     className="shadow"
                                     style={[styles.floatingButton, { backgroundColor: cardColor, opacity: 0.9 }]}
                                     onPress={handleSaveToAlbum}
-                                    activeOpacity={0.8}>
+>
                                     <Download size={24} color={textColor} />
-                                </TouchableOpacity>
+                                </Pressable>
 
-                                <TouchableOpacity
+                                <Pressable
                                     className="shadow"
                                     style={[styles.floatingButton, { backgroundColor: cardColor, opacity: 0.9 }]}
                                     onPress={handleUploadAction}
-                                    activeOpacity={0.8}>
+>
                                     <Upload size={24} color={textColor} />
-                                </TouchableOpacity>
+                                </Pressable>
                             </View>
                         </View>
                     </View>

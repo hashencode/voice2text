@@ -5,7 +5,7 @@ import { useColor } from '@/hooks/use-color';
 import { BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import { LucideProps } from 'lucide-react-native';
 import React from 'react';
-import { TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { TextStyle, Pressable, ViewStyle } from 'react-native';
 
 type ToggleVariant = 'default' | 'outline';
 type ToggleSize = 'default' | 'icon';
@@ -123,13 +123,13 @@ export function Toggle({
     const finalTextStyle = getToggleTextStyle();
 
     return (
-        <TouchableOpacity
+        <Pressable
             style={[toggleStyle, disabled && { opacity: 0.5 }, style]}
             onPress={handlePress}
             disabled={disabled}
-            activeOpacity={0.8}>
+>
             {typeof children === 'string' ? <TextX style={[finalTextStyle, textStyle]}>{children}</TextX> : children}
-        </TouchableOpacity>
+        </Pressable>
     );
 }
 

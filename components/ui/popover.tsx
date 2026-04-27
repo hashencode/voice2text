@@ -3,7 +3,7 @@ import { ModalMask } from '@/components/ui/modal-mask';
 import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS } from '@/theme/globals';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { Dimensions, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Dimensions, StyleSheet, Pressable, View, ViewStyle } from 'react-native';
 
 // Context for sharing state between popover components
 interface PopoverContextType {
@@ -71,7 +71,7 @@ interface PopoverTriggerProps {
 
 export function PopoverTrigger({ children, asChild = false, style }: PopoverTriggerProps) {
     const { setIsOpen, setTriggerLayout, isOpen } = usePopover();
-    const triggerRef = useRef<React.ComponentRef<typeof TouchableOpacity>>(null);
+    const triggerRef = useRef<React.ComponentRef<typeof Pressable>>(null);
 
     const measureTrigger = () => {
         if (triggerRef.current) {
@@ -345,9 +345,9 @@ export function PopoverClose({ children, asChild = false, style }: PopoverCloseP
     }
 
     return (
-        <TouchableOpacity style={style} onPress={handlePress} activeOpacity={0.7}>
+        <Pressable style={style} onPress={handlePress}>
             {children}
-        </TouchableOpacity>
+        </Pressable>
     );
 }
 

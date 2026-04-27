@@ -5,7 +5,7 @@ import { BORDER_RADIUS } from '@/theme/globals';
 import { CameraMode, CameraRatio, CameraType, CameraView, useCameraPermissions } from 'expo-camera';
 import { Camera as CameraIcon, Grid3X3, Settings, SwitchCamera, Timer, Video, Volume2, VolumeX, X, Zap, ZapOff } from 'lucide-react-native';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, StyleSheet, Pressable, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     interpolate,
@@ -374,13 +374,13 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                 <TextX style={styles.zoomText}>{zoomFactorText}</TextX>
                             </Animated.View>
                             {isTimerActive && (
-                                <TouchableOpacity style={styles.timerOverlay} onPress={cancelTimer} activeOpacity={1}>
+                                <Pressable style={styles.timerOverlay} onPress={cancelTimer}>
                                     <TextX style={styles.timerText}>{timerSeconds}</TextX>
                                     <View style={styles.cancelTimerButton}>
                                         <X size={20} color="white" />
                                     </View>
                                     <TextX style={styles.tapToCancelText}>Tap to cancel</TextX>
-                                </TouchableOpacity>
+                                </Pressable>
                             )}
                             {isRecording && (
                                 <View style={styles.recordingIndicator}>
@@ -393,36 +393,36 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                     <View style={styles.topControls}>
                                         <View style={styles.topLeft}>
                                             {onClose && (
-                                                <TouchableOpacity
+                                                <Pressable
                                                     style={[styles.controlButton, { backgroundColor: cardColor }]}
                                                     onPress={onClose}
-                                                    activeOpacity={0.7}>
+>
                                                     <X size={24} color={textColor} />
-                                                </TouchableOpacity>
+                                                </Pressable>
                                             )}
                                         </View>
                                         <View style={styles.topCenter}>
                                             <TextX style={[styles.modeText, { color: textColor }]}>{mode.toUpperCase()}</TextX>
                                         </View>
                                         <View style={styles.topRight}>
-                                            <TouchableOpacity
+                                            <Pressable
                                                 style={[styles.controlButton, { backgroundColor: cardColor }]}
                                                 onPress={toggleSettings}
-                                                activeOpacity={0.7}>
+>
                                                 <Settings size={24} color={textColor} />
-                                            </TouchableOpacity>
+                                            </Pressable>
                                         </View>
                                     </View>
                                     <Animated.View
                                         style={[styles.settingsPanel, { backgroundColor: cardColor }, animatedSettingsStyle]}
                                         pointerEvents={showSettings ? 'auto' : 'none'}>
                                         <View style={styles.settingsRow}>
-                                            <TouchableOpacity
+                                            <Pressable
                                                 style={[styles.settingButton, showGrid && { backgroundColor: primaryColor }]}
                                                 onPress={() => setShowGrid(!showGrid)}>
                                                 <Grid3X3 size={20} color={showGrid ? cardColor : textColor} />
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
+                                            </Pressable>
+                                            <Pressable
                                                 style={[
                                                     styles.settingButton,
                                                     {
@@ -435,15 +435,15 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                                 ) : (
                                                     <VolumeX size={20} color={textColor} />
                                                 )}
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
+                                            </Pressable>
+                                            <Pressable
                                                 style={[styles.settingButton, { backgroundColor: cardColor }]}
                                                 onPress={() => setAspectRatioIndex(p => (p + 1) % 3)}>
                                                 <TextX style={[styles.settingText, { color: textColor }]}>
                                                     {aspectRatios[aspectRatioIndex]}
                                                 </TextX>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
+                                            </Pressable>
+                                            <Pressable
                                                 style={[
                                                     styles.settingButton,
                                                     {
@@ -465,12 +465,12 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                                     ]}>
                                                     {getTimerButtonText()}
                                                 </TextX>
-                                            </TouchableOpacity>
+                                            </Pressable>
                                         </View>
                                     </Animated.View>
                                     <View style={styles.sideControls}>
                                         {enableTorch && facing === 'back' && (
-                                            <TouchableOpacity
+                                            <Pressable
                                                 style={[
                                                     styles.controlButton,
                                                     {
@@ -478,17 +478,17 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                                     },
                                                 ]}
                                                 onPress={toggleTorch}
-                                                activeOpacity={0.7}>
+>
                                                 {torch ? <Zap size={24} color={cardColor} /> : <ZapOff size={24} color={textColor} />}
-                                            </TouchableOpacity>
+                                            </Pressable>
                                         )}
-                                        <TouchableOpacity
+                                        <Pressable
                                             style={[styles.controlButton, { backgroundColor: cardColor }]}
                                             onPress={toggleCameraFacing}
-                                            activeOpacity={0.7}>
+>
                                             <SwitchCamera size={24} color={textColor} />
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
+                                        </Pressable>
+                                        <Pressable
                                             style={[
                                                 styles.controlButton,
                                                 {
@@ -496,7 +496,7 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                                 },
                                             ]}
                                             onPress={handleZoomButtonTap}
-                                            activeOpacity={0.7}>
+>
                                             <TextX
                                                 style={{
                                                     fontWeight: '600',
@@ -504,23 +504,23 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                                 }}>
                                                 {zoomFactorText}
                                             </TextX>
-                                        </TouchableOpacity>
+                                        </Pressable>
                                         {enableVideo && (
-                                            <TouchableOpacity
+                                            <Pressable
                                                 style={[styles.controlButton, { backgroundColor: cardColor }]}
                                                 onPress={toggleMode}
                                                 disabled={isRecording || isCapturing}
-                                                activeOpacity={0.7}>
+>
                                                 {mode === 'picture' ? (
                                                     <Video size={24} color={textColor} />
                                                 ) : (
                                                     <CameraIcon size={24} color={textColor} />
                                                 )}
-                                            </TouchableOpacity>
+                                            </Pressable>
                                         )}
                                     </View>
                                     <View style={styles.bottomControls}>
-                                        <TouchableOpacity
+                                        <Pressable
                                             style={[
                                                 styles.captureButton,
                                                 {
@@ -531,7 +531,7 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                             ]}
                                             onPress={mode === 'picture' ? handleCapture : isRecording ? handleStopRecording : handleCapture}
                                             disabled={isCapturing || isTimerActive}
-                                            activeOpacity={0.8}>
+>
                                             {isCapturing ? (
                                                 <ActivityIndicator size="small" color={primaryColor} />
                                             ) : (
@@ -545,7 +545,7 @@ export const Camera = forwardRef<CameraRef, CameraProps>(
                                                     ]}
                                                 />
                                             )}
-                                        </TouchableOpacity>
+                                        </Pressable>
                                     </View>
                                 </>
                             )}

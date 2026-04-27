@@ -25,7 +25,7 @@ export default function Home() {
                     size="default"
                     backgroundColor={primaryColor}
                     onPress={() => router.push('/record')}
-                    className="!h-20 !w-20 shadow-sm">
+                    className="!h-20 !w-20">
                     <Microphone width={34} height={34} color={primaryForegroundColor} />
                 </IconButton>
             </View>

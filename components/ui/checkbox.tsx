@@ -4,7 +4,7 @@ import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS } from '@/theme/globals';
 import { Check } from 'lucide-react-native';
 import React from 'react';
-import { TextStyle, TouchableOpacity } from 'react-native';
+import { TextStyle, Pressable } from 'react-native';
 
 interface CheckboxProps {
     checked: boolean;
@@ -22,7 +22,7 @@ export function Checkbox({ checked, error, disabled = false, label, labelStyle, 
     const borderColor = useColor('border');
 
     return (
-        <TouchableOpacity
+        <Pressable
             className="flex-row items-center py-1"
             style={{ opacity: disabled ? 0.5 : 1 }}
             onPress={() => !disabled && onCheckedChange(!checked)}
@@ -55,6 +55,6 @@ export function Checkbox({ checked, error, disabled = false, label, labelStyle, 
                     {label}
                 </TextX>
             )}
-        </TouchableOpacity>
+        </Pressable>
     );
 }

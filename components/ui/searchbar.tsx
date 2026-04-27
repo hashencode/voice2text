@@ -5,7 +5,7 @@ import { useColor } from '@/hooks/use-color';
 import { BUTTON_HEIGHT, CORNERS, FONT_SIZE } from '@/theme/globals';
 import { Search, X } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, TextInput, TextInputProps, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { ActivityIndicator, TextInput, TextInputProps, TextStyle, Pressable, ViewStyle } from 'react-native';
 
 interface SearchBarProps extends Omit<TextInputProps, 'style'> {
     loading?: boolean;
@@ -116,7 +116,7 @@ export function SearchBar({
 
             {/* Clear Button */}
             {showClear && !loading && (
-                <TouchableOpacity
+                <Pressable
                     onPress={handleClear}
                     style={{
                         backgroundColor: icon,
@@ -124,9 +124,9 @@ export function SearchBar({
                         borderRadius: CORNERS,
                         opacity: 0.6,
                     }}
-                    activeOpacity={0.7}>
+>
                     <Icon name={X} size={16} color={cardColor} strokeWidth={2} />
-                </TouchableOpacity>
+                </Pressable>
             )}
 
             {/* Right Icon */}
@@ -193,7 +193,7 @@ export function SearchBarWithSuggestions({
                         zIndex: 999,
                     }}>
                     {filteredSuggestions.map((suggestion, index) => (
-                        <TouchableOpacity
+                        <Pressable
                             key={`${suggestion}-${index}`}
                             onPress={() => handleSuggestionPress(suggestion)}
                             className="px-4 py-3"
@@ -201,9 +201,9 @@ export function SearchBarWithSuggestions({
                                 borderBottomWidth: index < filteredSuggestions.length - 1 ? 0.6 : 0,
                                 borderBottomColor: borderColor,
                             }}
-                            activeOpacity={0.7}>
+>
                             <TextX>{suggestion}</TextX>
-                        </TouchableOpacity>
+                        </Pressable>
                     ))}
                 </View>
             )}

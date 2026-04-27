@@ -8,7 +8,7 @@ import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import { ArrowRight, Calendar, CalendarClock, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { TextStyle, Pressable, ViewStyle } from 'react-native';
 
 export interface DateRange {
     startDate: Date | null;
@@ -377,7 +377,7 @@ export function DatePicker(props: DatePickerProps) {
                 marginBottom: 24,
                 paddingHorizontal: 8,
             }}>
-            <TouchableOpacity
+            <Pressable
                 onPress={() => navigateMonth('prev')}
                 style={{
                     padding: 10,
@@ -385,7 +385,7 @@ export function DatePicker(props: DatePickerProps) {
                     backgroundColor: mutedColor,
                 }}>
                 <ChevronLeft size={20} color={textColor} />
-            </TouchableOpacity>
+            </Pressable>
 
             <View
                 style={{
@@ -396,7 +396,7 @@ export function DatePicker(props: DatePickerProps) {
                     gap: 12,
                     marginHorizontal: 12,
                 }}>
-                <TouchableOpacity
+                <Pressable
                     onPress={() => setShowMonthPicker(true)}
                     style={{
                         flex: 1,
@@ -412,9 +412,9 @@ export function DatePicker(props: DatePickerProps) {
                         {MONTHS[calendarData.month]}
                     </TextX>
                     <ChevronDown size={16} color={textColor} />
-                </TouchableOpacity>
+                </Pressable>
 
-                <TouchableOpacity
+                <Pressable
                     onPress={() => setShowYearPicker(true)}
                     style={{
                         flex: 1,
@@ -430,10 +430,10 @@ export function DatePicker(props: DatePickerProps) {
                         {calendarData.year}
                     </TextX>
                     <ChevronDown size={16} color={textColor} />
-                </TouchableOpacity>
+                </Pressable>
             </View>
 
-            <TouchableOpacity
+            <Pressable
                 onPress={() => navigateMonth('next')}
                 style={{
                     padding: 10,
@@ -441,7 +441,7 @@ export function DatePicker(props: DatePickerProps) {
                     backgroundColor: mutedColor,
                 }}>
                 <ChevronRight size={20} color={textColor} />
-            </TouchableOpacity>
+            </Pressable>
         </View>
     );
 
@@ -521,7 +521,7 @@ export function DatePicker(props: DatePickerProps) {
                                         },
                                     ]}>
                                     {day ? (
-                                        <TouchableOpacity
+                                        <Pressable
                                             onPress={() => !disabled && handleDateSelect(day)}
                                             disabled={disabled}
                                             style={[
@@ -571,7 +571,7 @@ export function DatePicker(props: DatePickerProps) {
                                                 }}>
                                                 {day}
                                             </TextX>
-                                        </TouchableOpacity>
+                                        </Pressable>
                                     ) : (
                                         <View className="h-10 w-10" />
                                     )}
@@ -643,7 +643,7 @@ export function DatePicker(props: DatePickerProps) {
                                 const isSelected = actualHour === selectedHours;
 
                                 return (
-                                    <TouchableOpacity
+                                    <Pressable
                                         key={hour}
                                         onPress={() => handleTimeChange(actualHour, selectedMinutes)}
                                         style={{
@@ -661,7 +661,7 @@ export function DatePicker(props: DatePickerProps) {
                                             }}>
                                             {hour.toString().padStart(2, '0')}
                                         </TextX>
-                                    </TouchableOpacity>
+                                    </Pressable>
                                 );
                             })}
                         </ScrollView>
@@ -678,7 +678,7 @@ export function DatePicker(props: DatePickerProps) {
                                 paddingVertical: 20,
                             }}>
                             {Array.from({ length: 12 }, (_, i) => i * 5).map(minute => (
-                                <TouchableOpacity
+                                <Pressable
                                     key={minute}
                                     onPress={() => handleTimeChange(selectedHours, minute)}
                                     style={{
@@ -696,7 +696,7 @@ export function DatePicker(props: DatePickerProps) {
                                         }}>
                                         {minute.toString().padStart(2, '0')}
                                     </TextX>
-                                </TouchableOpacity>
+                                </Pressable>
                             ))}
                         </ScrollView>
                     </View>
@@ -717,7 +717,7 @@ export function DatePicker(props: DatePickerProps) {
                                     const isSelected = isAM ? !isPM : isPM;
 
                                     return (
-                                        <TouchableOpacity
+                                        <Pressable
                                             key={period}
                                             onPress={() => {
                                                 const newHours = isAM
@@ -743,7 +743,7 @@ export function DatePicker(props: DatePickerProps) {
                                                 }}>
                                                 {period}
                                             </TextX>
-                                        </TouchableOpacity>
+                                        </Pressable>
                                     );
                                 })}
                             </View>
@@ -762,7 +762,7 @@ export function DatePicker(props: DatePickerProps) {
                     paddingVertical: 20,
                 }}>
                 {MONTHS.map((month, index) => (
-                    <TouchableOpacity
+                    <Pressable
                         key={month}
                         onPress={() => handleMonthSelect(index)}
                         style={{
@@ -780,7 +780,7 @@ export function DatePicker(props: DatePickerProps) {
                             }}>
                             {month}
                         </TextX>
-                    </TouchableOpacity>
+                    </Pressable>
                 ))}
             </ScrollView>
         </View>
@@ -794,7 +794,7 @@ export function DatePicker(props: DatePickerProps) {
                     paddingVertical: 20,
                 }}>
                 {YEARS.map(year => (
-                    <TouchableOpacity
+                    <Pressable
                         key={year}
                         onPress={() => handleYearSelect(year)}
                         style={{
@@ -812,7 +812,7 @@ export function DatePicker(props: DatePickerProps) {
                             }}>
                             {year}
                         </TextX>
-                    </TouchableOpacity>
+                    </Pressable>
                 ))}
             </ScrollView>
         </View>
@@ -867,7 +867,7 @@ export function DatePicker(props: DatePickerProps) {
 
     return (
         <>
-            <TouchableOpacity style={[triggerStyle, disabled && { opacity: 0.5 }, style]} onPress={handleOpenPicker} disabled={disabled}>
+            <Pressable style={[triggerStyle, disabled && { opacity: 0.5 }, style]} onPress={handleOpenPicker} disabled={disabled}>
                 <View
                     style={{
                         flex: 1,
@@ -923,7 +923,7 @@ export function DatePicker(props: DatePickerProps) {
                         </TextX>
                     </View>
                 </View>
-            </TouchableOpacity>
+            </Pressable>
 
             <BottomSheet
                 isVisible={isVisible}

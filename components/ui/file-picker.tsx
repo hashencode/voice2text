@@ -6,7 +6,7 @@ import { CORNERS } from '@/theme/globals';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Image, X } from 'lucide-react-native';
 import React, { forwardRef, useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, Pressable, ViewStyle } from 'react-native';
 
 export type FileType = 'image' | 'document' | 'all';
 
@@ -231,12 +231,12 @@ export const FilePicker = forwardRef<FilePickerMethods, FilePickerProps>(
                                         )}
                                     </View>
                                 </View>
-                                <TouchableOpacity
+                                <Pressable
                                     onPress={() => removeFile(index)}
                                     style={styles.removeButton}
                                     accessibilityLabel={`Remove ${file.name}`}>
                                     <X size={16} color={mutedTextColor} />
-                                </TouchableOpacity>
+                                </Pressable>
                             </View>
                         ))}
                     </ScrollView>

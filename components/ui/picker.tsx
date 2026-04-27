@@ -7,7 +7,7 @@ import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_ICON } from '@/theme/globals';
 import { Check, LucideProps } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, TextStyle, TouchableOpacity, ViewStyle, useWindowDimensions } from 'react-native';
+import { ScrollView, StyleSheet, TextStyle, Pressable, ViewStyle, useWindowDimensions } from 'react-native';
 import { BottomSafeAreaSpacer } from '~/components/ui/bottom-safe-area-spacer';
 
 export interface PickerOption {
@@ -149,7 +149,9 @@ export function Picker({
     };
 
     const getDisplayText = () => {
-        if (selectedOptions.length === 0) return placeholder;
+        if (selectedOptions.length === 0) {
+            return multiple ? '选择项目' : placeholder;
+        }
 
         if (multiple) {
             if (selectedOptions.length === 1) {
@@ -165,7 +167,7 @@ export function Picker({
         const isSelected = multiple ? values.includes(option.value) : value === option.value;
 
         return (
-            <TouchableOpacity
+            <Pressable
                 key={`${sectionIndex}-${option.value}`}
                 onPress={() => !option.disabled && handleSelect(option.value)}
                 className="overflow-hidden rounded-lg"
@@ -175,7 +177,7 @@ export function Picker({
                     borderBottomColor: borderColor,
                 }}
                 disabled={option.disabled}
-                activeOpacity={optionActiveOpacity}>
+>
                 <View className="w-full flex-row items-center justify-between p-5">
                     <View>
                         <TextX className="text-center">{option.label}</TextX>
@@ -187,18 +189,18 @@ export function Picker({
                     </View>
                     {isSelected ? <Check color={primary} /> : null}
                 </View>
-            </TouchableOpacity>
+            </Pressable>
         );
     };
 
     return (
         <>
-            <TouchableOpacity
+            <Pressable
                 className="w-full flex-row items-center"
                 style={[{ opacity: disabled ? 0.5 : 1 }, style]}
                 onPress={() => !disabled && setOpen(true)}
                 disabled={disabled}
-                activeOpacity={triggerActiveOpacity}>
+>
                 {/* Icon & Label */}
                 <View className="mr-1.5 flex-row items-center gap-x-1" pointerEvents="none">
                     {icon && <Icon name={icon} size={BUTTON_ICON} />}
@@ -233,7 +235,7 @@ export function Picker({
                         ) : null}
                     </View>
                 </View>
-            </TouchableOpacity>
+            </Pressable>
 
             {/* Error message */}
             {error && (
@@ -316,10 +318,10 @@ export function Picker({
                                 <View className="flex-row">
                                     {showCancelButton && (
                                         <>
-                                            <TouchableOpacity
+                                            <Pressable
                                                 className="flex-1 items-center px-5 py-4"
                                                 onPress={() => setOpen(false)}
-                                                activeOpacity={0.7}>
+>
                                                 <TextX
                                                     style={{
                                                         color: text,
@@ -327,7 +329,7 @@ export function Picker({
                                                     }}>
                                                     {cancelText}
                                                 </TextX>
-                                            </TouchableOpacity>
+                                            </Pressable>
                                             <View
                                                 style={{
                                                     width: StyleSheet.hairlineWidth,
@@ -336,10 +338,10 @@ export function Picker({
                                             />
                                         </>
                                     )}
-                                    <TouchableOpacity
+                                    <Pressable
                                         className="flex-1 items-center px-5 py-4"
                                         onPress={() => setOpen(false)}
-                                        activeOpacity={0.7}>
+>
                                         <TextX
                                             style={{
                                                 color: primary,
@@ -347,11 +349,11 @@ export function Picker({
                                             }}>
                                             {okText}
                                         </TextX>
-                                    </TouchableOpacity>
+                                    </Pressable>
                                 </View>
                             ) : (
                                 showCancelButton && (
-                                    <TouchableOpacity className="items-center px-5 py-4" onPress={() => setOpen(false)} activeOpacity={0.7}>
+                                    <Pressable className="items-center px-5 py-4" onPress={() => setOpen(false)}>
                                         <TextX
                                             style={{
                                                 color: text,
@@ -359,7 +361,7 @@ export function Picker({
                                             }}>
                                             {cancelText}
                                         </TextX>
-                                    </TouchableOpacity>
+                                    </Pressable>
                                 )
                             )}
                         </View>

@@ -5,7 +5,7 @@ import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_HEIGHT, FONT_SIZE } from '@/theme/globals';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Search } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, TextInput, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { ScrollView, TextInput, TextStyle, Pressable, ViewStyle } from 'react-native';
 
 // Types
 export interface TableColumn<T = any> {
@@ -206,7 +206,7 @@ export function Table<T = any>({
                 headerStyle,
             ]}>
             {columns.map(column => (
-                <TouchableOpacity
+                <Pressable
                     key={column.id}
                     style={{
                         flex: column.width ? 0 : 1,
@@ -235,13 +235,13 @@ export function Table<T = any>({
                             {renderSortIcon(column.id)}
                         </>
                     )}
-                </TouchableOpacity>
+                </Pressable>
             ))}
         </View>
     );
 
     const renderRow = (row: T, index: number) => (
-        <TouchableOpacity
+        <Pressable
             key={index}
             style={[
                 {
@@ -254,9 +254,9 @@ export function Table<T = any>({
             ]}
             onPress={() => onRowPress?.(row, index)}
             disabled={!onRowPress}
-            activeOpacity={onRowPress ? 0.7 : 1}>
+>
             {columns.map(column => renderCell(column, row, index))}
-        </TouchableOpacity>
+        </Pressable>
     );
 
     const renderPagination = () => {

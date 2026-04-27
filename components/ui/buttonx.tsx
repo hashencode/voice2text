@@ -19,7 +19,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { LucideProps } from 'lucide-react-native';
 import { forwardRef } from 'react';
-import { Pressable, TextStyle, TouchableOpacity, TouchableOpacityProps, View, ViewStyle } from 'react-native';
+import { Pressable, PressableProps, TextStyle, View, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { TextX } from '~/components/ui/textx';
 
@@ -27,7 +27,7 @@ export type ButtonVariant = 'default' | 'text' | 'primary' | 'destructive' | 'su
 
 export type ButtonSize = 'default' | 'sm' | 'lg';
 
-export interface ButtonProps extends Omit<TouchableOpacityProps, 'style'> {
+export interface ButtonProps extends Omit<PressableProps, 'style'> {
     label?: string;
     children?: React.ReactNode;
     animation?: boolean;
@@ -289,7 +289,7 @@ export const ButtonX = forwardRef<View, ButtonProps>(
             }
         };
 
-        // Handle press for TouchableOpacity (non-animated version)
+        // Handle press for Pressable (non-animated version)
         const handleTouchablePress = () => {
             triggerHapticFeedback();
             handlePress();
@@ -394,12 +394,12 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                 </Animated.View>
             </Pressable>
         ) : (
-            <TouchableOpacity
+            <Pressable
                 ref={ref}
                 style={[buttonStyle, disabled && { opacity: 0.5 }, styleWithoutFlex]}
                 onPress={handleTouchablePress}
                 disabled={disabled || loading}
-                activeOpacity={0.8}
+
                 {...props}>
                 {loading ? (
                     <ButtonSpinner size={size} variant={loadingVariant} color={contentColor} />
@@ -415,7 +415,7 @@ export const ButtonX = forwardRef<View, ButtonProps>(
                 ) : (
                     children
                 )}
-            </TouchableOpacity>
+            </Pressable>
         );
     },
 );

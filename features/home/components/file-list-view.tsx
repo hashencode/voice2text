@@ -3,7 +3,6 @@ import { Ellipsis, Heart } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { Checkbox } from '~/components/ui/checkbox';
-import { Separator } from '~/components/ui/separator';
 import { TextX } from '~/components/ui/textx';
 import { useColor } from '~/hooks/use-color';
 import { FONT_SIZE_LG } from '~/theme/globals';
@@ -14,17 +13,6 @@ export type RecordingListItem = {
     isFavorite: boolean;
     durationMs: number | null;
     recordedAtMs: number | null;
-};
-
-type RecordingListViewProps = {
-    items: RecordingListItem[];
-    isMultiSelectMode: boolean;
-    selectedPathSet: ReadonlySet<string>;
-    extractFileName: (path: string) => string;
-    onToggleSelectPath: (path: string) => void;
-    onEnterMultiSelectWithItem: (path: string) => void;
-    onOpenSingleActionForItem: (path: string) => void;
-    onOpenItem: (item: RecordingListItem) => void;
 };
 
 type FileListRowProps = {
@@ -73,37 +61,6 @@ function formatDate(ms: number | null, fallback = '未知日期'): string {
     const minute = `${date.getMinutes()}`.padStart(2, '0');
 
     return `${year}-${month}-${day} ${hour}:${minute}`;
-}
-
-export default function FileListView({
-    items,
-    isMultiSelectMode,
-    selectedPathSet,
-    extractFileName,
-    onToggleSelectPath,
-    onEnterMultiSelectWithItem,
-    onOpenSingleActionForItem,
-    onOpenItem,
-}: RecordingListViewProps) {
-    return (
-        <>
-            {items.map(item => (
-                <React.Fragment key={item.path}>
-                    <FileListRow
-                        item={item}
-                        isMultiSelectMode={isMultiSelectMode}
-                        isSelected={selectedPathSet.has(item.path)}
-                        extractFileName={extractFileName}
-                        onToggleSelectPath={onToggleSelectPath}
-                        onEnterMultiSelectWithItem={onEnterMultiSelectWithItem}
-                        onOpenSingleActionForItem={onOpenSingleActionForItem}
-                        onOpenItem={onOpenItem}
-                    />
-                    <Separator />
-                </React.Fragment>
-            ))}
-        </>
-    );
 }
 
 function FileListRowImpl({

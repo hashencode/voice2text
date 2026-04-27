@@ -3,7 +3,7 @@ import { TextX } from '@/components/ui/textx';
 import { View } from '@/components/ui/view';
 import { ChevronRight } from 'lucide-react-native';
 import React, { createContext, useContext, useState } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { Pressable } from 'react-native';
 
 // Context for accordion state
 interface AccordionContextType {
@@ -105,7 +105,7 @@ export function AccordionTrigger({ children }: AccordionTriggerProps) {
     }
 
     return (
-        <TouchableOpacity className="flex-row items-center justify-between py-1.5" onPress={context.toggle} activeOpacity={0.8}>
+        <Pressable className="flex-row items-center justify-between py-1.5" onPress={context.toggle}>
             <TextX variant="subtitle">{children}</TextX>
             <Icon
                 name={ChevronRight}
@@ -114,7 +114,7 @@ export function AccordionTrigger({ children }: AccordionTriggerProps) {
                     transform: [{ rotate: context.isOpen ? '90deg' : '0deg' }],
                 }}
             />
-        </TouchableOpacity>
+        </Pressable>
     );
 }
 

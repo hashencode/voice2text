@@ -3,7 +3,7 @@ import { useColor } from '@/hooks/use-color';
 import { BORDER_RADIUS, BUTTON_HEIGHT, CORNERS } from '@/theme/globals';
 import classNames from 'classnames';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ScrollView, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { ScrollView, TextStyle, Pressable, ViewStyle } from 'react-native';
 import { TextX } from '~/components/ui/textx';
 
 // Types
@@ -218,7 +218,7 @@ export function TabsTrigger({
     const IconComp = icon;
 
     return (
-        <TouchableOpacity
+        <Pressable
             className={classNames(
                 'items-center justify-center px-3 py-2',
                 {
@@ -230,7 +230,7 @@ export function TabsTrigger({
             style={triggerStyle}
             onPress={handlePress}
             disabled={disabled}
-            activeOpacity={0.8}
+
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive, disabled }}>
             {typeof children === 'string' ? (
@@ -241,7 +241,7 @@ export function TabsTrigger({
             ) : (
                 children
             )}
-        </TouchableOpacity>
+        </Pressable>
     );
 }
 

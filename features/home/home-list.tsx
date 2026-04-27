@@ -3,8 +3,8 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { CassetteTape } from 'lucide-react-native';
 import React from 'react';
-import { LayoutRectangle, ListRenderItemInfo, type StyleProp, type TextStyle, View } from 'react-native';
-import CollapsibleStickyHeaderLayout from '~/components/layout/collapsible-sticky-header-layout';
+import { FlatList, ListRenderItemInfo, View } from 'react-native';
+import SelectionModeLayout, { BOTTOM_TOOLBAR_HEIGHT, type SelectionModeActionType } from '~/components/layout/selection-mode-layout';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { CommonEmptyState } from '~/components/ui/common-empty-state';
@@ -23,7 +23,6 @@ import {
     updateRecordingDisplayName,
 } from '~/data/sqlite/services/recordings.service';
 import type { RecordingListItem } from '~/features/home/components/file-list-view';
-import CollapsibleHeroHeaderSlot from '~/components/layout/collapsible-hero-header-slot';
 import { FileListRow } from '~/features/home/components/file-list-view';
 import GroupControlBar from '~/features/home/components/group-control-bar';
 import HomeTopActions from '~/features/home/components/home-top-actions';
@@ -81,6 +80,7 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
 
     const textColor = useColor('text');
     const destructiveColor = useColor('red');
+    const cardColor = useColor('card');
 
     const { shareSingleFile } = useItemActions({ toastApi: { toast } });
     const { show: showActionSheet, ActionSheet, isVisible: isActionSheetVisible } = useActionSheet();
@@ -157,7 +157,6 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
     } = useFileSelection(items.map(item => item.path));
 
     const selectedCount = selectedPaths.length;
-    const multiSelectLabel = `已选择${selectedCount}项`;
     const selectedPathForRename = selectedCount === 1 ? selectedPaths[0] : null;
     const validateRenameName = React.useCallback((name: string): string | null => {
         if (!name) {
@@ -182,6 +181,25 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
         setIsMultiSelectMode(prev => !prev);
         clearSelectedPaths();
     }, [clearSelectedPaths]);
+
+    const handleOpenRenameForSelection = React.useCallback(() => {
+        if (selectedCount !== 1) {
+            toast({ title: '请选择 1 个文件后重命名', variant: 'info' });
+            return;
+        }
+        const path = selectedPaths[0];
+        const target = items.find(item => item.path === path);
+        setRenameValue(target?.displayName?.trim() || extractFileName(path));
+        setRenameError('');
+        setRenameDialogVisible(true);
+    }, [items, selectedCount, selectedPaths, toast]);
+
+    const handleOpenDeleteForSelection = React.useCallback(() => {
+        if (selectedCount === 0) {
+            return;
+        }
+        setDeleteDialogVisible(true);
+    }, [selectedCount]);
 
     const enterMultiSelectWithItem = React.useCallback(
         (path: string) => {
@@ -328,42 +346,37 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
         [router],
     );
 
-    const renderTopActions = React.useCallback(
-        (params: {
-            onDockLayout: (layout: LayoutRectangle) => void;
-            onHeightChange: (height: number) => void;
-            isHeaderCollapsed: boolean;
-        }) => {
-            return (
-                <HomeTopActions
-                    onDockLayout={params.onDockLayout}
-                    onHeightChange={params.onHeightChange}
-                    isMultiSelectMode={isMultiSelectMode}
-                    canSelectAll={items.length > 0}
-                    onCloseMultiSelect={handleToggleMultiSelectMode}
-                    onToggleSelectAllFiltered={toggleSelectAllFiltered}
-                />
-            );
+    const handleSelectionAction = React.useCallback(
+        (action: SelectionModeActionType) => {
+            switch (action) {
+                case 'cancel':
+                    handleToggleMultiSelectMode();
+                    return;
+                case 'selectAll':
+                    toggleSelectAllFiltered();
+                    return;
+                case 'rename':
+                    handleOpenRenameForSelection();
+                    return;
+                case 'delete':
+                    handleOpenDeleteForSelection();
+                    return;
+                default:
+                    return;
+            }
         },
-        [handleToggleMultiSelectMode, isMultiSelectMode, items.length, toggleSelectAllFiltered],
+        [handleOpenDeleteForSelection, handleOpenRenameForSelection, handleToggleMultiSelectMode, toggleSelectAllFiltered],
     );
 
-    const renderHeroHeader = React.useCallback(
-        (params: {
-            title: string;
-            description: string;
-            titleStyle: StyleProp<TextStyle>;
-            onTitleLayout: (width: number, height: number, x: number, y: number) => void;
-        }) => {
-            return (
-                <CollapsibleHeroHeaderSlot
-                    title={params.title}
-                    description={params.description}
-                    titleStyle={params.titleStyle}
-                    onTitleLayout={params.onTitleLayout}
-                />
-            );
-        },
+    const topBarLeft = React.useMemo(
+        () => (
+            <>
+                <TextX className="text-[24px] font-semibold">音频</TextX>
+                <TextX variant="description" className="px-1 !text-base">
+                    n个音频
+                </TextX>
+            </>
+        ),
         [],
     );
 
@@ -398,37 +411,40 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
 
     return (
         <View className="flex-1">
-            <CollapsibleStickyHeaderLayout
-                title={isMultiSelectMode ? multiSelectLabel : '音频'}
-                description={isMultiSelectMode ? '' : 'n个音频'}
-                titleDockAlign={isMultiSelectMode ? 'center' : 'left'}
-                titleDockVerticalAlign="dock"
-                titleDockFontSize={18}
-                contentPaddingBottom={bottomInset + 500}
-                renderTopActions={renderTopActions}
-                renderHeroHeader={renderHeroHeader}
-                renderStickyBar={
-                    <GroupControlBar
-                        groupTabs={groupTabs}
-                        selectedGroupId={selectedGroupId}
-                        onPressGroup={setSelectedGroupId}
-                        onOpenGroups={handleOpenGroups}
-                    />
-                }
-                listData={items}
-                listKeyExtractor={item => item.path}
-                listEmptyComponent={
-                    !loading ? (
-                        <CommonEmptyState
-                            text={loadError ?? (selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '最近删除为空' : '暂无录音文件')}
-                            Icon={CassetteTape}
-                        />
-                    ) : null
-                }
-                listFooterComponent={__DEV__ ? <View style={{ height: 520 }} /> : null}
-                renderListItem={renderListItem}>
-                {null}
-            </CollapsibleStickyHeaderLayout>
+            <SelectionModeLayout
+                left={<TextX className="!text-3xl !font-semibold">音频</TextX>}
+                right={<HomeTopActions />}
+                isSelectionMode={isMultiSelectMode}
+                selectedCount={selectedCount}
+                canSelectAll={items.length > 0}
+                bottomActions={['rename', 'delete']}
+                onAction={handleSelectionAction}
+                topBarMinHeight={56}
+            />
+            <GroupControlBar
+                groupTabs={groupTabs}
+                selectedGroupId={selectedGroupId}
+                onPressGroup={setSelectedGroupId}
+                onOpenGroups={handleOpenGroups}
+            />
+            <View className="mt-2 flex-1 overflow-hidden rounded-t-2xl" style={{ backgroundColor: cardColor }}>
+                <FlatList<HomeRecordingItem>
+                    className="flex-1"
+                    data={items}
+                    keyExtractor={item => item.path}
+                    ListEmptyComponent={
+                        !loading ? (
+                            <CommonEmptyState
+                                text={loadError ?? (selectedGroupId === SYSTEM_GROUPS.recentlyDeleted ? '最近删除为空' : '暂无录音文件')}
+                                Icon={CassetteTape}
+                            />
+                        ) : null
+                    }
+                    renderItem={renderListItem}
+                    contentContainerStyle={{ paddingBottom: bottomInset + 500 + (isMultiSelectMode ? BOTTOM_TOOLBAR_HEIGHT : 0) }}
+                    scrollEventThrottle={16}
+                />
+            </View>
 
             <NameInputDialog
                 isVisible={renameDialogVisible}

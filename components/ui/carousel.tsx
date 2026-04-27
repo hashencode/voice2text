@@ -4,7 +4,7 @@ import { BORDER_RADIUS } from '@/theme/globals';
 import { BlurView } from 'expo-blur';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Dimensions, NativeScrollEvent, NativeSyntheticEvent, ScrollView, TouchableOpacity, ViewStyle } from 'react-native';
+import { Dimensions, NativeScrollEvent, NativeSyntheticEvent, ScrollView, Pressable, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -438,7 +438,7 @@ export function CarouselIndicators({ total, current, onPress, style }: CarouselI
                 style,
             ]}>
             {Array.from({ length: total }, (_, index) => (
-                <TouchableOpacity
+                <Pressable
                     key={index}
                     onPress={() => onPress?.(index)}
                     style={{
@@ -458,7 +458,7 @@ export function CarouselArrow({ direction, onPress, disabled = false, style }: C
     const primaryColor = useColor('primary');
 
     return (
-        <TouchableOpacity
+        <Pressable
             onPress={onPress}
             disabled={disabled}
             style={[
@@ -471,7 +471,7 @@ export function CarouselArrow({ direction, onPress, disabled = false, style }: C
                 },
                 style,
             ]}
-            activeOpacity={0.7}>
+>
             <BlurView
                 tint="systemChromeMaterial" // or "light"/"dark" depending on theme
                 intensity={100}
@@ -483,6 +483,6 @@ export function CarouselArrow({ direction, onPress, disabled = false, style }: C
                 }}>
                 {direction === 'left' ? <ChevronLeft size={20} color={primaryColor} /> : <ChevronRight size={20} color={primaryColor} />}
             </BlurView>
-        </TouchableOpacity>
+        </Pressable>
     );
 }
