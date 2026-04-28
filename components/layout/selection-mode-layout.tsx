@@ -1,4 +1,4 @@
-import { CheckCheck, Pencil, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, CheckCheck, Pencil, Trash2, X } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,10 +11,12 @@ export type SelectionModeActionType = 'cancel' | 'selectAll' | 'rename' | 'delet
 export const BOTTOM_TOOLBAR_HEIGHT = BUTTON_HEIGHT_LG + 20;
 
 type SelectionModeLayoutProps = {
-    left: React.ReactNode;
+    left: string | React.ReactNode;
     right: React.ReactNode;
     isSelectionMode: boolean;
     selectedCount: number;
+    showBackButton?: boolean;
+    onBackPress?: () => void;
     canSelectAll?: boolean;
     bottomActions?: SelectionModeActionType[];
     onAction?: (action: SelectionModeActionType) => void;
@@ -26,6 +28,8 @@ export default function SelectionModeLayout({
     right,
     isSelectionMode,
     selectedCount,
+    showBackButton = false,
+    onBackPress,
     canSelectAll = true,
     bottomActions = [],
     onAction,
@@ -90,7 +94,14 @@ export default function SelectionModeLayout({
                         </>
                     ) : (
                         <>
-                            <View className="flex-1">{left}</View>
+                            <View className="flex-1 flex-row items-center gap-x-1.5">
+                                {showBackButton ? (
+                                    <Pressable onPress={onBackPress} className="mr-1 items-center justify-center rounded-full">
+                                        <ArrowLeft size={28} color={textColor} strokeWidth={1.8} />
+                                    </Pressable>
+                                ) : null}
+                                {typeof left === 'string' ? <TextX className="!text-3xl !font-semibold">{left}</TextX> : left}
+                            </View>
                             <View className="flex-row items-center gap-x-2">{right}</View>
                         </>
                     )}

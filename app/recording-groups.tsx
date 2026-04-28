@@ -3,6 +3,7 @@ import { PencilLine, Plus, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/default-layout';
+import SelectionModeLayout from '~/components/layout/selection-mode-layout';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { AlertDialog } from '~/components/ui/alert-dialog';
 import { IconButton } from '~/components/ui/icon-button';
@@ -182,12 +183,17 @@ export default function RecordingGroupsPage() {
     }, [loadGroups, pendingGroupId, selectedGroupId, submitting, toast]);
 
     return (
-        <DefaultLayout
-            safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }}
-            scrollable={false}
-            headTitle="分组"
-            headExtra={<IconButton icon={Plus} size="sm" onPress={() => setCreatingVisible(true)} />}>
-            <View className="px-4 pt-4">
+        <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
+            <SelectionModeLayout
+                left="分组"
+                right={<IconButton icon={Plus} size="sm" onPress={() => setCreatingVisible(true)} />}
+                isSelectionMode={false}
+                selectedCount={0}
+                showBackButton
+                onBackPress={() => router.back()}
+            />
+
+            <View className="px-4 pt-2">
                 <TextX variant="subtitle" className="mb-2">
                     全部音频
                 </TextX>
