@@ -17,7 +17,7 @@ export default function Home() {
     return (
         <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
             <Stack.Screen options={{ headerShown: false }} />
-            <HomeList bottomInset={insets.bottom} />
+            <HomeList />
 
             <View className="absolute p-4" pointerEvents="box-none" style={{ bottom: insets.bottom }}>
                 <IconButton

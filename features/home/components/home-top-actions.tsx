@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import { FileInput, Moon, Search, Sun } from 'lucide-react-native';
 import React from 'react';
 import { View } from 'react-native';
+import { IconButton } from '~/components/ui/icon-button';
 import { useToast } from '~/components/ui/toast';
-import { useColor } from '~/hooks/use-color';
 import { useFilePicker } from '~/hooks/use-file-picker';
 import { useModeToggle } from '~/hooks/use-mode-toggle';
 
@@ -15,14 +15,8 @@ type HomeTopActionsProps = {
 export default function HomeTopActions({ rightContent }: HomeTopActionsProps) {
     const router = useRouter();
     const { toast } = useToast();
-    const iconColor = useColor('text');
     const { isDark, toggleMode } = useModeToggle();
     const ModeIcon = isDark ? Moon : Sun;
-    const iconProps = {
-        size: 24 as const,
-        strokeWidth: 1.5,
-        color: iconColor,
-    };
     const [importing, setImporting] = React.useState(false);
     const { pickDocument } = useFilePicker({
         multiple: false,
@@ -77,9 +71,9 @@ export default function HomeTopActions({ rightContent }: HomeTopActionsProps) {
 
     const defaultNormalRight = (
         <View className="flex flex-row items-center gap-x-8">
-            <Search {...iconProps} onPress={() => toast({ title: '搜索功能即将上线', variant: 'info' })} />
-            <FileInput {...iconProps} onPress={handleImportAudio} />
-            <ModeIcon {...iconProps} onPress={toggleMode} />
+            <IconButton icon={Search} onPress={() => toast({ title: '搜索功能即将上线', variant: 'info' })} />
+            <IconButton icon={FileInput} onPress={handleImportAudio} />
+            <IconButton icon={ModeIcon} onPress={toggleMode} />
         </View>
     );
 

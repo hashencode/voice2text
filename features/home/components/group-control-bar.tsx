@@ -1,7 +1,6 @@
 import { Library } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { IconButton } from '~/components/ui/icon-button';
 import { TextX } from '~/components/ui/textx';
 import { getGroupLabel } from '~/data/sqlite/group-model';
 import { useColor } from '~/hooks/use-color';
@@ -20,7 +19,12 @@ export default function GroupControlBar({ groupTabs = [], selectedGroupId = '', 
 
     return (
         <View className="flex-row items-center gap-x-2 px-4 py-3">
-            <IconButton icon={Library} backgroundColor={cardColor} onPress={onOpenGroups} />
+            <Pressable
+                onPress={onOpenGroups}
+                className="flex items-center justify-center rounded-xl"
+                style={{ backgroundColor: cardColor, height: BUTTON_HEIGHT, aspectRatio: 1 }}>
+                <Library strokeWidth={1.5} size={18} />
+            </Pressable>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
                 {groupTabs.map(groupId => {
                     const isActive = selectedGroupId === groupId;

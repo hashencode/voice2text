@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { CassetteTape } from 'lucide-react-native';
 import React from 'react';
 import { FlatList, ListRenderItemInfo, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SelectionModeLayout, { BOTTOM_TOOLBAR_HEIGHT, type SelectionModeActionType } from '~/components/layout/selection-mode-layout';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { AlertDialog } from '~/components/ui/alert-dialog';
@@ -58,12 +59,9 @@ function normalizeGroupNameForWrite(groupId: string): string | null {
     return groupId;
 }
 
-type HomeListProps = {
-    bottomInset?: number;
-};
-
-export default function HomeList({ bottomInset = 0 }: HomeListProps) {
+export default function HomeList() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const { toast } = useToast();
     const [items, setItems] = React.useState<HomeRecordingItem[]>([]);
     const [folders, setFolders] = React.useState<Folder[]>([]);
@@ -368,18 +366,6 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
         [handleOpenDeleteForSelection, handleOpenRenameForSelection, handleToggleMultiSelectMode, toggleSelectAllFiltered],
     );
 
-    const topBarLeft = React.useMemo(
-        () => (
-            <>
-                <TextX className="text-[24px] font-semibold">音频</TextX>
-                <TextX variant="description" className="px-1 !text-base">
-                    n个音频
-                </TextX>
-            </>
-        ),
-        [],
-    );
-
     const renderListItem = React.useCallback(
         ({ item: row }: ListRenderItemInfo<HomeRecordingItem>) => {
             return (
@@ -441,7 +427,7 @@ export default function HomeList({ bottomInset = 0 }: HomeListProps) {
                         ) : null
                     }
                     renderItem={renderListItem}
-                    contentContainerStyle={{ paddingBottom: bottomInset + 500 + (isMultiSelectMode ? BOTTOM_TOOLBAR_HEIGHT : 0) }}
+                    contentContainerStyle={{ paddingBottom: insets.bottom + (isMultiSelectMode ? BOTTOM_TOOLBAR_HEIGHT : 0) }}
                     scrollEventThrottle={16}
                 />
             </View>
