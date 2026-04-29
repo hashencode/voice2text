@@ -1,30 +1,35 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { PencilLine, Plus, Trash2 } from 'lucide-react-native';
+import { CassetteTape, LucideProps, Mic, Trash2 } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { DefaultLayout } from '~/components/layout/default-layout';
 import SelectionModeLayout from '~/components/layout/selection-mode-layout';
 import { useActionSheet } from '~/components/ui/action-sheet';
 import { AlertDialog } from '~/components/ui/alert-dialog';
-import { IconButton } from '~/components/ui/icon-button';
-import { PullToRefreshScrollView } from '~/components/ui/pull-to-refresh-scrollview';
+import { List, ListItem } from '~/components/ui/list';
 import { TextX } from '~/components/ui/textx';
 import { useToast } from '~/components/ui/toast';
 import { getSelectedRecordingGroupId, setCurrentRecordingFolderName, setSelectedRecordingGroupId } from '~/data/mmkv/app-config';
 import { getGroupLabel, isReservedGroupName, SYSTEM_GROUPS } from '~/data/sqlite/group-model';
 import { createFolder, deleteFolder, listFolders, updateFolderName } from '~/data/sqlite/services/folders.service';
+import { listActiveRecordingMetaOverview, listDeletedRecordingMetaOverview } from '~/data/sqlite/services/recordings.service';
 import NameInputDialog from '~/features/home/components/name-input-dialog';
+import { useColor } from '~/hooks/use-color';
 
 type GroupItem = {
     id: string;
     isSystem: boolean;
+    isMock?: boolean;
 };
+
+const MOCK_GROUPS_ENABLED = true;
+const MOCK_GROUP_NAMES = Array.from({ length: 16 }, (_, index) => `示例分组 ${index + 1}`);
 
 export default function RecordingGroupsPage() {
     const router = useRouter();
     const { toast } = useToast();
     const [groups, setGroups] = React.useState<GroupItem[]>([]);
-    const [loading, setLoading] = React.useState(true);
+    const [, setLoading] = React.useState(true);
     const [creatingVisible, setCreatingVisible] = React.useState(false);
     const [renamingVisible, setRenamingVisible] = React.useState(false);
     const [deleteVisible, setDeleteVisible] = React.useState(false);
@@ -33,13 +38,23 @@ export default function RecordingGroupsPage() {
     const [pendingGroupId, setPendingGroupId] = React.useState<string | null>(null);
     const [submitting, setSubmitting] = React.useState(false);
     const [selectedGroupId, setSelectedGroupIdState] = React.useState(() => getSelectedRecordingGroupId());
+    const [groupCounts, setGroupCounts] = React.useState<Record<string, number>>({});
     const { show: showActionSheet, ActionSheet } = useActionSheet();
+    const cardColor = useColor('card');
+    const secondaryColor = useColor('secondary');
+    const iconColor = useColor('text');
+    const dividerColor = useColor('muted');
+    const primaryColor = useColor('primary');
 
     const loadGroups = React.useCallback(async () => {
         setLoading(true);
         try {
-            const rows = await listFolders();
-            const customGroups = rows
+            const [folderRows, activeRows, deletedRows] = await Promise.all([
+                listFolders(),
+                listActiveRecordingMetaOverview(),
+                listDeletedRecordingMetaOverview(),
+            ]);
+            const customGroups = folderRows
                 .map(row => row.name.trim())
                 .filter(name => name && !isReservedGroupName(name))
                 .map(name => ({ id: name, isSystem: false as const }));
@@ -49,7 +64,27 @@ export default function RecordingGroupsPage() {
                 { id: SYSTEM_GROUPS.recentlyDeleted, isSystem: true },
             ];
 
-            setGroups([...systemGroups, ...customGroups]);
+            const mockGroups: GroupItem[] = MOCK_GROUPS_ENABLED
+                ? MOCK_GROUP_NAMES.map(name => ({ id: name, isSystem: false, isMock: true }))
+                : [];
+            setGroups([...systemGroups, ...customGroups, ...mockGroups]);
+            const counts: Record<string, number> = {
+                [SYSTEM_GROUPS.all]: activeRows.length,
+                [SYSTEM_GROUPS.recentlyDeleted]: deletedRows.length,
+            };
+            for (const row of activeRows) {
+                const key = row.groupName?.trim();
+                if (!key) {
+                    continue;
+                }
+                counts[key] = (counts[key] ?? 0) + 1;
+            }
+            if (MOCK_GROUPS_ENABLED) {
+                MOCK_GROUP_NAMES.forEach((name, index) => {
+                    counts[name] = (index + 1) * 3;
+                });
+            }
+            setGroupCounts(counts);
             setSelectedGroupIdState(getSelectedRecordingGroupId());
         } finally {
             setLoading(false);
@@ -182,83 +217,108 @@ export default function RecordingGroupsPage() {
         }
     }, [loadGroups, pendingGroupId, selectedGroupId, submitting, toast]);
 
+    const openGroupActions = React.useCallback(
+        (group: GroupItem) => {
+            if (group.isSystem || group.isMock) {
+                if (group.isMock) {
+                    toast({ title: 'Mock 分组仅用于预览样式', variant: 'info' });
+                }
+                return;
+            }
+            showActionSheet({
+                title: group.id,
+                options: [
+                    {
+                        title: '重命名',
+                        onPress: () => {
+                            setPendingGroupId(group.id);
+                            setInputValue(group.id);
+                            setInputError('');
+                            setRenamingVisible(true);
+                        },
+                    },
+                    {
+                        title: '删除',
+                        destructive: true,
+                        icon: <Trash2 size={18} color="#EF4444" />,
+                        onPress: () => {
+                            setPendingGroupId(group.id);
+                            setDeleteVisible(true);
+                        },
+                    },
+                ],
+            });
+        },
+        [showActionSheet, toast],
+    );
+
+    const getRowCount = React.useCallback(
+        (groupId: string) => {
+            return groupCounts[groupId] ?? 0;
+        },
+        [groupCounts],
+    );
+
+    const getGroupIcon = React.useCallback((groupId: string): React.ComponentType<LucideProps> => {
+        if (groupId === SYSTEM_GROUPS.recentlyDeleted) {
+            return Trash2;
+        }
+        if (groupId === SYSTEM_GROUPS.meeting) {
+            return Mic;
+        }
+        return CassetteTape;
+    }, []);
+
     return (
-        <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right'] }} scrollable={false}>
-            <SelectionModeLayout
-                left="分组"
-                right={<IconButton icon={Plus} size="sm" onPress={() => setCreatingVisible(true)} />}
-                isSelectionMode={false}
-                selectedCount={0}
-                showBackButton
-                onBackPress={() => router.back()}
-            />
+        <DefaultLayout safeAreaViewConfig={{ edges: ['top', 'left', 'right', 'bottom'] }} scrollable={false}>
+            <SelectionModeLayout left="分组" isSelectionMode={false} showBackButton onBackPress={() => router.back()} />
 
             <View className="px-4 pt-2">
-                <TextX variant="subtitle" className="mb-2">
-                    全部音频
-                </TextX>
-                <Pressable className="rounded-2xl border px-4 py-3" onPress={() => setSelectedGroup(SYSTEM_GROUPS.all)}>
-                    <TextX className={selectedGroupId === SYSTEM_GROUPS.all ? 'font-semibold' : ''}>
-                        {getGroupLabel(SYSTEM_GROUPS.all)}
-                    </TextX>
-                </Pressable>
-
-                <View className="mb-2 mt-6 flex-row items-center justify-between">
-                    <TextX variant="subtitle">我的分组</TextX>
-                    <Pressable onPress={() => setCreatingVisible(true)}>
-                        <TextX className="text-primary">新建分组</TextX>
-                    </Pressable>
-                </View>
+                <List
+                    contentStyle={{ backgroundColor: cardColor }}
+                    footer={
+                        <View className="mb-2 mt-4 flex-row items-center justify-between">
+                            <TextX variant="subtitle">我的分组</TextX>
+                            <Pressable onPress={() => setCreatingVisible(true)}>
+                                <TextX style={{ color: primaryColor }}>新建</TextX>
+                            </Pressable>
+                        </View>
+                    }>
+                    <ListItem
+                        icon={getGroupIcon(SYSTEM_GROUPS.all)}
+                        iconProps={{ color: iconColor }}
+                        title={getGroupLabel(SYSTEM_GROUPS.all)}
+                        titleClassName={selectedGroupId === SYSTEM_GROUPS.all ? 'font-semibold' : undefined}
+                        rightText={getRowCount(SYSTEM_GROUPS.all)}
+                        showChevron
+                        backgroundColor={selectedGroupId === SYSTEM_GROUPS.all ? secondaryColor : cardColor}
+                        onPress={() => setSelectedGroup(SYSTEM_GROUPS.all)}
+                    />
+                </List>
             </View>
 
-            <PullToRefreshScrollView
-                onRefresh={loadGroups}
-                isEmpty={!loading && groups.length === 0}
-                emptyText="暂无分组"
-                isLoadedAll={!loading && groups.length > 0}
-                contentContainerStyle={{ paddingBottom: 16 }}>
+            <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
                 <View className="px-4 pb-4">
-                    {groups.map(group => (
-                        <Pressable
-                            key={group.id}
-                            className="mb-2 flex-row items-center justify-between rounded-2xl border px-4 py-3"
-                            onPress={() => setSelectedGroup(group.id)}>
-                            <TextX className={selectedGroupId === group.id ? 'font-semibold' : ''}>{getGroupLabel(group.id)}</TextX>
-                            {!group.isSystem ? (
-                                <IconButton
-                                    icon={PencilLine}
-                                    size="sm"
-                                    onPress={() => {
-                                        showActionSheet({
-                                            title: group.id,
-                                            options: [
-                                                {
-                                                    title: '重命名',
-                                                    onPress: () => {
-                                                        setPendingGroupId(group.id);
-                                                        setInputValue(group.id);
-                                                        setInputError('');
-                                                        setRenamingVisible(true);
-                                                    },
-                                                },
-                                                {
-                                                    title: '删除',
-                                                    destructive: true,
-                                                    icon: <Trash2 size={18} color="#EF4444" />,
-                                                    onPress: () => {
-                                                        setPendingGroupId(group.id);
-                                                        setDeleteVisible(true);
-                                                    },
-                                                },
-                                            ],
-                                        });
-                                    }}
-                                />
-                            ) : null}
-                        </Pressable>
-                    ))}
+                    <List contentStyle={{ backgroundColor: cardColor }}>
+                        {groups.map((group, index) => (
+                            <ListItem
+                                key={group.id}
+                                icon={getGroupIcon(group.id)}
+                                iconProps={{ color: iconColor }}
+                                title={getGroupLabel(group.id)}
+                                titleClassName={selectedGroupId === group.id ? 'font-semibold' : undefined}
+                                rightText={getRowCount(group.id)}
+                                showChevron
+                                backgroundColor={selectedGroupId === group.id ? secondaryColor : cardColor}
+                                showDivider={index < groups.length - 1}
+                                dividerColor={dividerColor}
+                                onPress={() => setSelectedGroup(group.id)}
+                                onLongPress={() => openGroupActions(group)}
+                            />
+                        ))}
+                    </List>
                 </View>
-            </PullToRefreshScrollView>
+            </ScrollView>
 
             <NameInputDialog
                 isVisible={creatingVisible}

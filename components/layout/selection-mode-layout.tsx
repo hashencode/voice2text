@@ -11,10 +11,12 @@ export type SelectionModeActionType = 'cancel' | 'selectAll' | 'rename' | 'delet
 export const BOTTOM_TOOLBAR_HEIGHT = BUTTON_HEIGHT_LG + 20;
 
 type SelectionModeLayoutProps = {
-    left: string | React.ReactNode;
-    right: React.ReactNode;
+    left?: string | React.ReactNode;
+    right?: React.ReactNode;
+    leftContainerClassName?: string;
+    rightContainerClassName?: string;
     isSelectionMode: boolean;
-    selectedCount: number;
+    selectedCount?: number;
     showBackButton?: boolean;
     onBackPress?: () => void;
     canSelectAll?: boolean;
@@ -26,8 +28,10 @@ type SelectionModeLayoutProps = {
 export default function SelectionModeLayout({
     left,
     right,
+    leftContainerClassName,
+    rightContainerClassName,
     isSelectionMode,
-    selectedCount,
+    selectedCount = 0,
     showBackButton = false,
     onBackPress,
     canSelectAll = true,
@@ -94,7 +98,7 @@ export default function SelectionModeLayout({
                         </>
                     ) : (
                         <>
-                            <View className="flex-1 flex-row items-center gap-x-1.5">
+                            <View className={`flex-1 flex-row items-center gap-x-1.5 ${leftContainerClassName ?? ''}`}>
                                 {showBackButton ? (
                                     <Pressable onPress={onBackPress} className="mr-1 items-center justify-center rounded-full">
                                         <ArrowLeft size={28} color={textColor} strokeWidth={1.8} />
@@ -102,7 +106,7 @@ export default function SelectionModeLayout({
                                 ) : null}
                                 {typeof left === 'string' ? <TextX className="!text-3xl !font-semibold">{left}</TextX> : left}
                             </View>
-                            <View className="flex-row items-center gap-x-2">{right}</View>
+                            <View className={`flex-row items-center gap-x-2 ${rightContainerClassName ?? ''}`}>{right}</View>
                         </>
                     )}
                 </View>
