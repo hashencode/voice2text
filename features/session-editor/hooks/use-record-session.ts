@@ -3,12 +3,10 @@ import { useNavigation } from 'expo-router';
 import React, { useCallback, useEffect } from 'react';
 import { useToast } from '~/components/ui/toast';
 import { getCurrentRecordingFolderName } from '~/data/mmkv/app-config';
-import { getCurrentModel } from '~/data/mmkv/model-selection';
 import { upsertRecordingMeta } from '~/data/sqlite/services/recordings.service';
 import { useWavRecording } from '~/features/record/hooks/use-wav-recording';
 import { useDirtyBackGuard } from '~/features/session-editor/hooks/use-dirty-back-guard';
-import type { EditorTabValue } from '~/features/session-editor/types';
-import SherpaOnnx, { getSherpaDownloadedModelOptions } from '~/modules/sherpa';
+import SherpaOnnx from '~/modules/sherpa';
 
 type ConfirmButtonVariant = 'primary' | 'destructive';
 
@@ -39,19 +37,6 @@ function createRecordingPath(folderName?: string | null): string {
 }
 
 export function useRecordSession() {
-    const REALTIME_RECORD_MODE = 'official_simulated_vad' as const;
-    const realtimeModelId = React.useRef(getCurrentModel()).current;
-    const realtimeOptions = React.useMemo(
-        () =>
-            getSherpaDownloadedModelOptions(realtimeModelId, {
-                debug: true,
-                enableDenoise: false,
-                enableSpeakerDiarization: false,
-                wavReadMode: 'streaming',
-            }),
-        [realtimeModelId],
-    );
-
     const [confirmDialogState, setConfirmDialogState] = React.useState<ConfirmDialogState>({
         isVisible: false,
         title: '',
@@ -59,9 +44,10 @@ export function useRecordSession() {
         confirmText: '确定',
     });
     const [displayName, setDisplayName] = React.useState('新录音');
-    const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
     const [headerAtMs, setHeaderAtMs] = React.useState(() => Date.now());
-    const [recordingEndedAtMs, setRecordingEndedAtMs] = React.useState<number | null>(null);
+    const [remarkText, setRemarkText] = React.useState('');
+    const [markerTimestamps, setMarkerTimestamps] = React.useState<number[]>([]);
+    const remarkDraftRef = React.useRef('');
     const recordingStartedAtRef = React.useRef<number | null>(null);
 
     const navigation = useNavigation();
@@ -88,76 +74,78 @@ export function useRecordSession() {
         [toast],
     );
 
-    const { phase, isPaused, actionLoading, elapsedText, startRecord, pauseRecord, resumeRecord, stopRecord } = useWavRecording({
-        sampleRate: 16000,
-        createTargetPath: async () => {
-            const recordingFolderName = getCurrentRecordingFolderName();
-            const directory = getRecordingsDir(recordingFolderName);
-            await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
-            return createRecordingPath(recordingFolderName);
-        },
-        onStart: () => {
-            const startedAt = Date.now();
-            recordingStartedAtRef.current = startedAt;
-            setHeaderAtMs(startedAt);
-            setRecordingEndedAtMs(null);
-        },
-        onStop: async wavResult => {
-            if (!wavResult.path) {
-                showRecordError('未能获取录音文件，请重试');
-                return;
-            }
+    const { phase, isPaused, actionLoading, elapsedMs, elapsedText, elapsedPreciseText, startRecord, pauseRecord, resumeRecord, stopRecord } =
+        useWavRecording({
+            sampleRate: 16000,
+            createTargetPath: async () => {
+                const recordingFolderName = getCurrentRecordingFolderName();
+                const directory = getRecordingsDir(recordingFolderName);
+                await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+                return createRecordingPath(recordingFolderName);
+            },
+            onStart: () => {
+                const startedAt = Date.now();
+                recordingStartedAtRef.current = startedAt;
+                setHeaderAtMs(startedAt);
+                setRemarkText('');
+                remarkDraftRef.current = '';
+                setMarkerTimestamps([]);
+            },
+            onStop: async wavResult => {
+                if (!wavResult.path) {
+                    showRecordError('未能获取录音文件，请重试');
+                    return;
+                }
 
-            const durationMs = wavResult.sampleRate > 0 ? Math.round((wavResult.numSamples / wavResult.sampleRate) * 1000) : null;
-            const sessionId = wavResult.sessionId?.trim() || undefined;
-
-            try {
-                const recordedAtMs = recordingStartedAtRef.current ?? Date.now();
-                const recordingGroupName = getCurrentRecordingFolderName();
-                await upsertRecordingMeta({
-                    path: wavResult.path,
-                    groupName: recordingGroupName,
-                    sampleRate: wavResult.sampleRate,
-                    numSamples: wavResult.numSamples,
-                    durationMs,
-                    recordedAtMs,
-                    sessionId,
-                });
-
-                toast({
-                    title: '录音已保存',
-                    variant: 'success',
-                });
+                const durationMs = wavResult.sampleRate > 0 ? Math.round((wavResult.numSamples / wavResult.sampleRate) * 1000) : null;
+                const sessionId = wavResult.sessionId?.trim() || undefined;
 
                 try {
-                    await SherpaOnnx.stopRealtimeAsr();
+                    const recordedAtMs = recordingStartedAtRef.current ?? Date.now();
+                    const recordingGroupName = getCurrentRecordingFolderName();
+                    await upsertRecordingMeta({
+                        path: wavResult.path,
+                        groupName: recordingGroupName,
+                        noteRichText: remarkDraftRef.current || null,
+                        sampleRate: wavResult.sampleRate,
+                        numSamples: wavResult.numSamples,
+                        durationMs,
+                        recordedAtMs,
+                        sessionId,
+                    });
+
+                    toast({
+                        title: '录音已保存',
+                        variant: 'success',
+                    });
+
+                    try {
+                        await SherpaOnnx.stopRealtimeAsr();
+                    } catch (error) {
+                        console.warn('[record] stop realtime asr failed', error);
+                    }
                 } catch (error) {
-                    console.warn('[record] stop realtime asr failed', error);
+                    console.error('[record] upsertRecordingMeta failed', error);
+                    showRecordError('录音已生成，但保存元数据失败');
+                } finally {
+                    recordingStartedAtRef.current = null;
                 }
-            } catch (error) {
-                console.error('[record] upsertRecordingMeta failed', error);
-                showRecordError('录音已生成，但保存元数据失败');
-            } finally {
-                recordingStartedAtRef.current = null;
-                setRecordingEndedAtMs(Date.now());
-            }
-        },
-        onPermissionDenied: () => {
-            showRecordError('麦克风权限被拒绝');
-        },
-        onError: error => {
-            console.error('[record] recording error', error);
-            showRecordError(error.message || '录音过程中发生错误');
-        },
-        realtimeMode: REALTIME_RECORD_MODE,
-        realtimeOptions,
-    });
+            },
+            onPermissionDenied: () => {
+                showRecordError('麦克风权限被拒绝');
+            },
+            onError: error => {
+                console.error('[record] recording error', error);
+                showRecordError(error.message || '录音过程中发生错误');
+            },
+            realtimeMode: 'disabled',
+        });
 
     const isRecordingOrPaused = phase === 'recording' || phase === 'paused' || phase === 'stopping';
     const isStopping = phase === 'stopping';
     const canStop = phase === 'recording' || phase === 'paused';
     const isIdleLike = phase === 'idle' || phase === 'error';
-    const isMicVisualState = isIdleLike || isStopping;
+
     const handleLeftAction = useCallback(() => {
         if (isStopping || actionLoading) {
             return;
@@ -172,6 +160,24 @@ export function useRecordSession() {
         }
         pauseRecord();
     }, [actionLoading, isIdleLike, isPaused, isStopping, pauseRecord, resumeRecord, startRecord]);
+
+    const handleRemarkTextChange = useCallback((text: string) => {
+        setRemarkText(text);
+        remarkDraftRef.current = text;
+    }, []);
+
+    const handleAddMarker = useCallback(() => {
+        if (!canStop || isStopping) {
+            return;
+        }
+
+        setMarkerTimestamps(prev => [...prev, elapsedMs]);
+        toast({
+            message: `已打标记 ${elapsedText}`,
+            variant: 'info',
+            preset: 'compact',
+        });
+    }, [canStop, elapsedMs, elapsedText, isStopping, toast]);
 
     const handleConfirmStop = useCallback(() => {
         if (!canStop || isStopping) {
@@ -253,24 +259,26 @@ export function useRecordSession() {
     return {
         displayName,
         setDisplayName,
-        editorTab,
-        setEditorTab,
         headerAtMs,
+        remarkText,
+        markerTimestamps,
+        handleRemarkTextChange,
+        handleAddMarker,
         confirmDialogState,
         closeConfirmDialog,
         cancelConfirmDialog,
         phase,
         isPaused,
         actionLoading,
+        elapsedMs,
         elapsedText,
+        elapsedPreciseText,
         isRecordingOrPaused,
         isStopping,
         canStop,
         isIdleLike,
-        isMicVisualState,
         handleLeftAction,
         handleConfirmStop,
         handleBackPress,
-        recordingEndedAtMs,
     };
 }
