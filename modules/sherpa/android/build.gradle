@@ -4,6 +4,8 @@ apply plugin: 'org.jetbrains.kotlin.android'
 group = 'expo.modules.sherpa'
 version = '1.0.0'
 
+def sherpaCmakeFile = file("src/main/cpp/CMakeLists.txt")
+
 android {
   namespace "expo.modules.sherpa"
   compileSdkVersion 34
@@ -12,10 +14,14 @@ android {
     minSdkVersion 24
   }
 
-  externalNativeBuild {
-    cmake {
-      path "src/main/cpp/CMakeLists.txt"
+  if (sherpaCmakeFile.exists()) {
+    externalNativeBuild {
+      cmake {
+        path sherpaCmakeFile
+      }
     }
+  } else {
+    logger.lifecycle("[sherpa] Skip CMake: ${sherpaCmakeFile} not found. Build continues without local sherpaaudio native target.")
   }
 }
 

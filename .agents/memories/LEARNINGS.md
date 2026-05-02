@@ -19,3 +19,4 @@
 - 2026-04-10: sherpa AAR 升级必须做“同编译链成对替换 + APK 符号验收”（`libsherpa-onnx-jni.so` 与 `libonnxruntime.so` 版本需一致），否则会在加载期出现 `OrtGetApiBase` 符号崩溃。 #promote
 - 2026-04-17: 用户要求仅在 TextX 调用处把字号类写成 `!text-*`（手动显式），不要在 `TextX` 组件内部做自动改写。
 - 2026-04-20: 导入音频页识别策略以结果精度优先：禁用分段识别与准确率对比测试展示，保留整段离线识别主流程。
+- 2026-05-02：`modules/sherpa/android/build.gradle` 若无 `src/main/cpp/CMakeLists.txt`，AGP 会在配置 `:sherpa:configureCMakeDebug[abi]` 时直接报 `[CXX1400]`。稳定修复是对 CMake 配置加 `exists()` 条件，仅在文件存在时启用 `externalNativeBuild.cmake`。
