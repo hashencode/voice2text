@@ -114,6 +114,9 @@ class SherpaOnnxModule : Module() {
   @Volatile
   private var wavAudioManager: AudioManager? = null
 
+  @Volatile
+  private var wavLastWaveformEmitAtMs = 0L
+
   private val wavLock = Any()
   private val realtimeLock = Any()
   private val offlineCacheLock = Any()
@@ -238,7 +241,7 @@ class SherpaOnnxModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("SherpaOnnx")
-    Events(REALTIME_ASR_UPDATE_EVENT)
+    Events(REALTIME_ASR_UPDATE_EVENT, WAV_RECORDING_WAVEFORM_EVENT)
 
     OnDestroy {
       stopWavRecordingInternal(STOP_REASON_MODULE_DESTROYED, interruptedBySystem = true)
@@ -396,6 +399,7 @@ class SherpaOnnxModule : Module() {
           wavSessionStartedAtMs = System.currentTimeMillis()
           wavChunkDurationMs = chunkDurationMs
           wavSessionState = SESSION_STATE_RECORDING
+          wavLastWaveformEmitAtMs = 0L
           wavChunkList.clear()
           wavStopLatch = CountDownLatch(1)
           persistCurrentWavSessionMeta()
@@ -1204,10 +1208,19 @@ class SherpaOnnxModule : Module() {
         }
 
         val floatSamples = FloatArray(read)
+        var peak = 0f
+        var energy = 0.0
         for (i in 0 until read) {
-          floatSamples[i] = shortBuffer[i] / 32768.0f
+          val normalized = shortBuffer[i] / 32768.0f
+          floatSamples[i] = normalized
+          val absValue = kotlin.math.abs(normalized)
+          if (absValue > peak) {
+            peak = absValue
+          }
+          energy += (normalized * normalized).toDouble()
         }
         appendRealtimeAsrSamplesInternal(floatSamples, sampleRate)
+        emitWavRecordingWaveform(sampleRate, peak, kotlin.math.sqrt(energy / read.coerceAtLeast(1)).toFloat())
 
         var offset = 0
         for (i in 0 until read) {
@@ -1283,6 +1296,7 @@ class SherpaOnnxModule : Module() {
 
       abandonWavAudioFocus()
       wavAudioRecord = null
+      wavLastWaveformEmitAtMs = 0L
       wavRecordingPaused = false
       wavRecordingRunning = false
       wavStopLatch?.countDown()
@@ -1313,6 +1327,23 @@ class SherpaOnnxModule : Module() {
       raf.writeBytes("data")
       raf.write(intToLittleEndianBytes(dataSize))
     }
+  }
+
+  private fun emitWavRecordingWaveform(sampleRate: Int, peak: Float, rms: Float) {
+    val now = System.currentTimeMillis()
+    if (now - wavLastWaveformEmitAtMs < WAV_WAVEFORM_EMIT_INTERVAL_MS) {
+      return
+    }
+    wavLastWaveformEmitAtMs = now
+    sendEvent(
+      WAV_RECORDING_WAVEFORM_EVENT,
+      mapOf(
+        "peak" to peak.coerceIn(0f, 1f).toDouble(),
+        "rms" to rms.coerceIn(0f, 1f).toDouble(),
+        "sampleRate" to sampleRate,
+        "updatedAtMs" to now.toDouble(),
+      ),
+    )
   }
 
   private fun readWavInfo(file: File): WavInfo {
@@ -3261,6 +3292,8 @@ class SherpaOnnxModule : Module() {
     private const val STREAMING_PARTIAL_DECODE_INTERVAL_MS = 200L
     private const val STREAMING_SPEECH_START_OFFSET_SAMPLES = 6400
     private const val REALTIME_ASR_UPDATE_EVENT = "onRealtimeAsrUpdate"
+    private const val WAV_RECORDING_WAVEFORM_EVENT = "onWavRecordingWaveform"
+    private const val WAV_WAVEFORM_EMIT_INTERVAL_MS = 80L
     private const val WAV_HEADER_SIZE = 44
     private const val TEN_VAD_MODEL_ASSET = "sherpa/onnx/ten-vad.onnx"
     private const val SILERO_VAD_MODEL_ASSET = "sherpa/onnx/silero-vad.onnx"

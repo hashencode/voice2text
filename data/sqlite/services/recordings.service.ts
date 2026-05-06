@@ -6,8 +6,10 @@ export {
     hasRecordingSession,
     listActiveRecordingMetaOverview,
     listDeletedRecordingMetaOverview,
+    listRecordingMarkersByRecordingPath,
     listRecordingMeta,
     listRecordingMetaOverview,
+    replaceRecordingMarkers,
     restoreRecordingMeta,
     softDeleteRecordingMeta,
     updateRecordingDisplayName,
@@ -16,4 +18,4 @@ export {
     upsertRecordingMeta,
 } from '~/data/sqlite/repositories/recordings.repository';
 export type { RecordingMetaOverview } from '~/data/sqlite/repositories/recordings.repository';
-export type { RecordingMeta } from '~/data/sqlite/types';
+export type { RecordingMarker, RecordingMeta } from '~/data/sqlite/types';

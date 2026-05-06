@@ -19,6 +19,17 @@ export type RecordingMeta = {
     reason?: string | null;
 };
 
+export type RecordingMarker = {
+    id?: number;
+    recordingPath?: string | null;
+    sessionId?: string | null;
+    timeMs: number;
+    noteText?: string | null;
+    sortOrder: number;
+    createdAtMs?: number;
+    updatedAtMs?: number;
+};
+
 export type RecordingMetaRow = {
     path: string;
     display_name: string | null;
@@ -38,6 +49,17 @@ export type RecordingMetaRow = {
     recorded_at_ms: number | null;
     session_id: string | null;
     reason: string | null;
+};
+
+export type RecordingMarkerRow = {
+    id: number;
+    recording_path: string | null;
+    session_id: string | null;
+    time_ms: number;
+    note_text: string | null;
+    sort_order: number;
+    created_at_ms: number;
+    updated_at_ms: number;
 };
 
 export type Folder = {

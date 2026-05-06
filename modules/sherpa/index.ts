@@ -159,8 +159,18 @@ export type RealtimeAsrSnapshot = {
 };
 
 export type RealtimeAsrUpdateEvent = RealtimeAsrSnapshot;
+export type WavRecordingWaveformEvent = {
+    peak: number;
+    rms: number;
+    sampleRate: number;
+    updatedAtMs: number;
+};
 
 export type RealtimeAsrSubscription = {
+    remove: () => void;
+};
+
+export type WavRecordingWaveformSubscription = {
     remove: () => void;
 };
 
@@ -259,7 +269,7 @@ type SherpaOnnxNative = {
 };
 
 type SherpaOnnxNativeWithEvents = SherpaOnnxNative & {
-    addListener?: (eventName: string, listener: (event: RealtimeAsrUpdateEvent) => void) => RealtimeAsrSubscription;
+    addListener?: (eventName: string, listener: (event: unknown) => void) => { remove: () => void };
 };
 
 type SherpaModelPreset = SherpaTranscribeOptions & {
@@ -1435,7 +1445,13 @@ const SherpaOnnx = {
         if (typeof NativeSherpaOnnxWithEvents.addListener !== 'function') {
             return { remove: () => {} };
         }
-        return NativeSherpaOnnxWithEvents.addListener('onRealtimeAsrUpdate', listener);
+        return NativeSherpaOnnxWithEvents.addListener('onRealtimeAsrUpdate', listener as (event: unknown) => void);
+    },
+    addWavRecordingWaveformListener(listener: (event: WavRecordingWaveformEvent) => void): WavRecordingWaveformSubscription {
+        if (typeof NativeSherpaOnnxWithEvents.addListener !== 'function') {
+            return { remove: () => {} };
+        }
+        return NativeSherpaOnnxWithEvents.addListener('onWavRecordingWaveform', listener as (event: unknown) => void);
     },
     recoverWavRecordings: NativeSherpaOnnx.recoverWavRecordings,
     listRecoverableWavRecordings: NativeSherpaOnnx.listRecoverableWavRecordings,

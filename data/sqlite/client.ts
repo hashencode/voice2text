@@ -29,6 +29,19 @@ CREATE INDEX IF NOT EXISTS idx_recordings_recorded_at ON recordings(recorded_at_
 CREATE INDEX IF NOT EXISTS idx_recordings_session_id ON recordings(session_id);
 CREATE INDEX IF NOT EXISTS idx_recordings_group_name ON recordings(group_name);
 CREATE INDEX IF NOT EXISTS idx_recordings_deleted_at_ms ON recordings(deleted_at_ms);
+CREATE TABLE IF NOT EXISTS recording_markers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recording_path TEXT,
+  session_id TEXT,
+  time_ms INTEGER NOT NULL,
+  note_text TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recording_markers_recording_path ON recording_markers(recording_path);
+CREATE INDEX IF NOT EXISTS idx_recording_markers_session_id ON recording_markers(session_id);
+CREATE INDEX IF NOT EXISTS idx_recording_markers_recording_path_sort_order ON recording_markers(recording_path, sort_order);
 CREATE TABLE IF NOT EXISTS folders (
   name TEXT PRIMARY KEY NOT NULL,
   created_at_ms INTEGER NOT NULL,
@@ -70,6 +83,23 @@ async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recordings_source_file_name ON recordings(source_file_name);');
     await db.execAsync(
         'CREATE INDEX IF NOT EXISTS idx_recordings_source_file_name_file_size ON recordings(source_file_name, file_size_bytes);',
+    );
+    await db.execAsync(
+        `CREATE TABLE IF NOT EXISTS recording_markers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          recording_path TEXT,
+          session_id TEXT,
+          time_ms INTEGER NOT NULL,
+          note_text TEXT,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL
+        );`,
+    );
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recording_markers_recording_path ON recording_markers(recording_path);');
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recording_markers_session_id ON recording_markers(session_id);');
+    await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_recording_markers_recording_path_sort_order ON recording_markers(recording_path, sort_order);',
     );
 
     const foldersTableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(folders)');

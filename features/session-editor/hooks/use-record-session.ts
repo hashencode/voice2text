@@ -1,14 +1,19 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import React, { useCallback, useEffect } from 'react';
 import { useToast } from '~/components/ui/toast';
 import { getCurrentRecordingFolderName } from '~/data/mmkv/app-config';
-import { getCurrentModel } from '~/data/mmkv/model-selection';
-import { upsertRecordingMeta } from '~/data/sqlite/services/recordings.service';
+import type { RecordingMarker } from '~/data/sqlite/services/recordings.service';
+import {
+    formatRecordingDisplayName,
+    loadRecordSessionDraft,
+    saveRecordSessionDraft,
+    type RecordSessionDraft,
+} from '~/features/session-editor/services/record-session-draft';
+import { discardRecordSessionDraft } from '~/features/session-editor/services/record-session-workflow';
 import { useWavRecording } from '~/features/record/hooks/use-wav-recording';
 import { useDirtyBackGuard } from '~/features/session-editor/hooks/use-dirty-back-guard';
-import type { EditorTabValue } from '~/features/session-editor/types';
-import SherpaOnnx, { getSherpaDownloadedModelOptions } from '~/modules/sherpa';
+import SherpaOnnx from '~/modules/sherpa';
 
 type ConfirmButtonVariant = 'primary' | 'destructive';
 
@@ -20,6 +25,15 @@ type ConfirmDialogState = {
     confirmButtonProps?: { variant?: ConfirmButtonVariant };
     onConfirm?: () => void;
     onCancel?: () => void;
+};
+
+type WaveformPoint = {
+    level: number;
+    timeMs: number;
+};
+
+type ActiveDraft = RecordSessionDraft & {
+    sessionId: string;
 };
 
 function getRecordingsDir(folderName?: string | null): string {
@@ -38,39 +52,37 @@ function createRecordingPath(folderName?: string | null): string {
     return `${getRecordingsDir(folderName)}${fileName}`;
 }
 
-export function useRecordSession() {
-    const REALTIME_RECORD_MODE = 'official_simulated_vad' as const;
-    const realtimeModelId = React.useRef(getCurrentModel()).current;
-    const realtimeOptions = React.useMemo(
-        () =>
-            getSherpaDownloadedModelOptions(realtimeModelId, {
-                debug: true,
-                enableDenoise: false,
-                enableSpeakerDiarization: false,
-                wavReadMode: 'streaming',
-            }),
-        [realtimeModelId],
-    );
+function normalizeMarkers(markers: RecordingMarker[], sessionId: string): RecordingMarker[] {
+    return markers.map((marker, index) => ({
+        ...marker,
+        sessionId,
+        timeMs: Math.max(0, Math.floor(marker.timeMs)),
+        noteText: marker.noteText ?? '',
+        sortOrder: index,
+    }));
+}
 
+export function useRecordSession() {
     const [confirmDialogState, setConfirmDialogState] = React.useState<ConfirmDialogState>({
         isVisible: false,
         title: '',
         description: '',
         confirmText: '确定',
     });
-    const [displayName, setDisplayName] = React.useState('新录音');
-    const [editorTab, setEditorTab] = React.useState<EditorTabValue>('remark');
-    const [headerAtMs, setHeaderAtMs] = React.useState(() => Date.now());
-    const [recordingEndedAtMs, setRecordingEndedAtMs] = React.useState<number | null>(null);
-    const recordingStartedAtRef = React.useRef<number | null>(null);
+    const [activeDraft, setActiveDraft] = React.useState<ActiveDraft | null>(null);
+    const [waveformPoints, setWaveformPoints] = React.useState<WaveformPoint[]>([]);
 
     const navigation = useNavigation();
+    const router = useRouter();
     const { toast } = useToast();
+    const lastPersistSecondRef = React.useRef(-1);
+    const lastWaveformLevelRef = React.useRef(0);
+    const elapsedMsRef = React.useRef(0);
     const { resetDirtyBackGuard, runDirtyBackAttempt } = useDirtyBackGuard({
         timeoutMs: 2000,
         onFirstBackWhenDirty: () => {
             toast({
-                message: '再次点击按钮返回',
+                message: '再次点击返回以进入保存确认',
                 variant: 'warning',
                 preset: 'compact',
             });
@@ -88,7 +100,27 @@ export function useRecordSession() {
         [toast],
     );
 
-    const { phase, isPaused, actionLoading, elapsedText, startRecord, pauseRecord, resumeRecord, stopRecord } = useWavRecording({
+    const persistDraft = useCallback(async (draft: RecordSessionDraft | null) => {
+        if (!draft) {
+            return;
+        }
+        await saveRecordSessionDraft({
+            ...draft,
+            markers: normalizeMarkers(draft.markers, draft.sessionId),
+            updatedAtMs: Date.now(),
+        });
+    }, []);
+
+    const {
+        phase,
+        isPaused,
+        actionLoading,
+        elapsedMs,
+        elapsedPreciseText,
+        startRecord,
+        pauseRecord,
+        resumeRecord,
+    } = useWavRecording({
         sampleRate: 16000,
         createTargetPath: async () => {
             const recordingFolderName = getCurrentRecordingFolderName();
@@ -96,51 +128,25 @@ export function useRecordSession() {
             await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
             return createRecordingPath(recordingFolderName);
         },
-        onStart: () => {
+        onStart: result => {
             const startedAt = Date.now();
-            recordingStartedAtRef.current = startedAt;
-            setHeaderAtMs(startedAt);
-            setRecordingEndedAtMs(null);
-        },
-        onStop: async wavResult => {
-            if (!wavResult.path) {
-                showRecordError('未能获取录音文件，请重试');
-                return;
-            }
-
-            const durationMs = wavResult.sampleRate > 0 ? Math.round((wavResult.numSamples / wavResult.sampleRate) * 1000) : null;
-            const sessionId = wavResult.sessionId?.trim() || undefined;
-
-            try {
-                const recordedAtMs = recordingStartedAtRef.current ?? Date.now();
-                const recordingGroupName = getCurrentRecordingFolderName();
-                await upsertRecordingMeta({
-                    path: wavResult.path,
-                    groupName: recordingGroupName,
-                    sampleRate: wavResult.sampleRate,
-                    numSamples: wavResult.numSamples,
-                    durationMs,
-                    recordedAtMs,
-                    sessionId,
-                });
-
-                toast({
-                    title: '录音已保存',
-                    variant: 'success',
-                });
-
-                try {
-                    await SherpaOnnx.stopRealtimeAsr();
-                } catch (error) {
-                    console.warn('[record] stop realtime asr failed', error);
-                }
-            } catch (error) {
-                console.error('[record] upsertRecordingMeta failed', error);
-                showRecordError('录音已生成，但保存元数据失败');
-            } finally {
-                recordingStartedAtRef.current = null;
-                setRecordingEndedAtMs(Date.now());
-            }
+            lastPersistSecondRef.current = -1;
+            lastWaveformLevelRef.current = 0;
+            const nextDraft: ActiveDraft = {
+                sessionId: result.sessionId?.trim() || `session-${startedAt}`,
+                outputPath: result.path,
+                displayName: formatRecordingDisplayName(startedAt),
+                noteText: '',
+                groupName: getCurrentRecordingFolderName(),
+                recordedAtMs: startedAt,
+                durationMs: 0,
+                state: 'recording',
+                markers: [],
+                updatedAtMs: startedAt,
+            };
+            setWaveformPoints([]);
+            setActiveDraft(nextDraft);
+            void persistDraft(nextDraft);
         },
         onPermissionDenied: () => {
             showRecordError('麦克风权限被拒绝');
@@ -149,70 +155,141 @@ export function useRecordSession() {
             console.error('[record] recording error', error);
             showRecordError(error.message || '录音过程中发生错误');
         },
-        realtimeMode: REALTIME_RECORD_MODE,
-        realtimeOptions,
     });
+
+    const syncDraftOnFocus = useCallback(async () => {
+        if (!activeDraft?.sessionId) {
+            return;
+        }
+        const latestDraft = await loadRecordSessionDraft(activeDraft.sessionId);
+        if (!latestDraft) {
+            return;
+        }
+        setActiveDraft(latestDraft);
+    }, [activeDraft?.sessionId]);
+
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', () => {
+            void syncDraftOnFocus();
+        });
+        return unsubscribe;
+    }, [navigation, syncDraftOnFocus]);
+
+    useEffect(() => {
+        elapsedMsRef.current = elapsedMs;
+    }, [elapsedMs]);
+
+    useEffect(() => {
+        if (!activeDraft?.sessionId) {
+            return;
+        }
+
+        const subscription = SherpaOnnx.addWavRecordingWaveformListener(event => {
+            const rawLevel = Math.max(event.peak * 0.9, event.rms * 1.35, event.peak * 0.35 + event.rms * 1.1);
+            const smoothedLevel = lastWaveformLevelRef.current * 0.32 + rawLevel * 0.68;
+            const nextValue = Math.max(0, Math.min(1, smoothedLevel));
+            lastWaveformLevelRef.current = nextValue;
+            setWaveformPoints(prev => {
+                const next = [
+                    ...prev,
+                    {
+                        level: nextValue,
+                        timeMs: elapsedMsRef.current,
+                    },
+                ];
+                return next.length > 480 ? next.slice(next.length - 480) : next;
+            });
+        });
+
+        return () => subscription.remove();
+    }, [activeDraft?.sessionId]);
+
+    useEffect(() => {
+        if (!activeDraft?.sessionId) {
+            return;
+        }
+        const wholeSecond = Math.floor(elapsedMs / 1000);
+        if (wholeSecond <= lastPersistSecondRef.current) {
+            return;
+        }
+        lastPersistSecondRef.current = wholeSecond;
+        void persistDraft({
+            ...activeDraft,
+            durationMs: elapsedMs,
+            state: phase === 'paused' ? 'confirming' : 'recording',
+        });
+    }, [activeDraft, elapsedMs, persistDraft, phase]);
 
     const isRecordingOrPaused = phase === 'recording' || phase === 'paused' || phase === 'stopping';
     const isStopping = phase === 'stopping';
     const canStop = phase === 'recording' || phase === 'paused';
     const isIdleLike = phase === 'idle' || phase === 'error';
-    const isMicVisualState = isIdleLike || isStopping;
+
+    const updateDraft = useCallback(
+        (updater: (draft: ActiveDraft) => ActiveDraft) => {
+            setActiveDraft(prev => {
+                if (!prev) {
+                    return prev;
+                }
+                const nextDraft = updater(prev);
+                void persistDraft(nextDraft);
+                return nextDraft;
+            });
+        },
+        [persistDraft],
+    );
+
+    const setNoteText = useCallback(
+        (nextText: string) => {
+            updateDraft(draft => ({
+                ...draft,
+                noteText: nextText,
+            }));
+        },
+        [updateDraft],
+    );
+
     const handleLeftAction = useCallback(() => {
         if (isStopping || actionLoading) {
             return;
         }
         if (isIdleLike) {
-            startRecord();
+            void startRecord();
             return;
         }
         if (isPaused) {
-            resumeRecord();
+            void resumeRecord();
             return;
         }
-        pauseRecord();
+        void pauseRecord();
     }, [actionLoading, isIdleLike, isPaused, isStopping, pauseRecord, resumeRecord, startRecord]);
+
+    const goToReview = useCallback(async () => {
+        if (!activeDraft?.sessionId) {
+            return;
+        }
+        if (phase === 'recording') {
+            await pauseRecord();
+        }
+        const nextDraft: ActiveDraft = {
+            ...activeDraft,
+            durationMs: elapsedMs,
+            state: 'confirming',
+        };
+        setActiveDraft(nextDraft);
+        await persistDraft(nextDraft);
+        router.push({
+            pathname: '/record-review',
+            params: { sessionId: nextDraft.sessionId },
+        });
+    }, [activeDraft, elapsedMs, pauseRecord, persistDraft, phase, router]);
 
     const handleConfirmStop = useCallback(() => {
         if (!canStop || isStopping) {
             return;
         }
-
-        setConfirmDialogState({
-            isVisible: true,
-            title: '结束录音',
-            description: '确认结束并保存当前录音吗？',
-            confirmText: '结束',
-            confirmButtonProps: { variant: 'destructive' },
-            onConfirm: () => {
-                void stopRecord();
-            },
-        });
-    }, [canStop, isStopping, stopRecord]);
-
-    useEffect(() => {
-        const unsubscribe = navigation.addListener('beforeRemove', event => {
-            if (!canStop || isStopping) {
-                return;
-            }
-
-            event.preventDefault();
-            void runDirtyBackAttempt({
-                isDirty: true,
-                onConfirmed: async () => {
-                    try {
-                        await stopRecord();
-                        resetDirtyBackGuard();
-                        navigation.dispatch(event.data.action);
-                    } catch {
-                        // stopRecord already reports errors via toast
-                    }
-                },
-            });
-        });
-
-        return unsubscribe;
-    }, [navigation, canStop, isStopping, stopRecord, runDirtyBackAttempt, resetDirtyBackGuard]);
+        void goToReview();
+    }, [canStop, goToReview, isStopping]);
 
     const closeConfirmDialog = useCallback(() => {
         setConfirmDialogState(prev => ({ ...prev, isVisible: false, onCancel: undefined }));
@@ -233,16 +310,16 @@ export function useRecordSession() {
         void runDirtyBackAttempt({
             isDirty: true,
             onConfirmed: async () => {
-                try {
-                    await stopRecord();
-                    resetDirtyBackGuard();
-                    navigation.goBack();
-                } catch {
-                    // stopRecord already reports errors via toast
-                }
+                await goToReview();
+                resetDirtyBackGuard();
             },
         });
-    }, [canStop, isStopping, navigation, stopRecord, runDirtyBackAttempt, resetDirtyBackGuard]);
+    }, [canStop, goToReview, isStopping, navigation, resetDirtyBackGuard, runDirtyBackAttempt]);
+
+    const leaveRecordPage = useCallback(() => {
+        resetDirtyBackGuard();
+        navigation.goBack();
+    }, [navigation, resetDirtyBackGuard]);
 
     useEffect(() => {
         return () => {
@@ -250,27 +327,79 @@ export function useRecordSession() {
         };
     }, [resetDirtyBackGuard]);
 
+    const handleAddMarker = useCallback(() => {
+        if (!activeDraft || !isRecordingOrPaused) {
+            return;
+        }
+
+        const nextMarkers: RecordingMarker[] = [
+            ...activeDraft.markers,
+            {
+                sessionId: activeDraft.sessionId,
+                timeMs: elapsedMs,
+                noteText: '',
+                sortOrder: activeDraft.markers.length,
+            },
+        ];
+
+        setActiveDraft({
+            ...activeDraft,
+            markers: nextMarkers,
+        });
+        void persistDraft({
+            ...activeDraft,
+            markers: nextMarkers,
+            durationMs: elapsedMs,
+        });
+        toast({
+            message: `已标记 ${elapsedPreciseText.replace('.', ':')}`,
+            variant: 'success',
+            preset: 'compact',
+        });
+    }, [activeDraft, elapsedMs, elapsedPreciseText, isRecordingOrPaused, persistDraft, toast]);
+
+    const discardSession = useCallback(async () => {
+        if (!activeDraft) {
+            return;
+        }
+        try {
+            if (SherpaOnnx.isWavRecording()) {
+                await SherpaOnnx.stopWavRecording().catch(error => {
+                    console.warn('[record] stop before discard failed', error);
+                });
+            }
+            await discardRecordSessionDraft(activeDraft);
+        } catch (error) {
+            console.warn('[record] discard draft failed', error);
+        }
+    }, [activeDraft]);
+
     return {
-        displayName,
-        setDisplayName,
-        editorTab,
-        setEditorTab,
-        headerAtMs,
+        noteText: activeDraft?.noteText ?? '',
+        setNoteText,
+        displayName: activeDraft?.displayName ?? '录音',
+        recordedAtMs: activeDraft?.recordedAtMs ?? Date.now(),
+        markers: activeDraft?.markers ?? [],
+        sessionId: activeDraft?.sessionId ?? null,
+        waveformPoints,
         confirmDialogState,
         closeConfirmDialog,
         cancelConfirmDialog,
         phase,
         isPaused,
         actionLoading,
-        elapsedText,
+        elapsedMs,
+        elapsedPreciseText,
         isRecordingOrPaused,
         isStopping,
         canStop,
         isIdleLike,
-        isMicVisualState,
+        handleAddMarker,
         handleLeftAction,
         handleConfirmStop,
+        goToReview,
         handleBackPress,
-        recordingEndedAtMs,
+        leaveRecordPage,
+        discardSession,
     };
 }

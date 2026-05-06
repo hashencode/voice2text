@@ -1,5 +1,5 @@
 import { getSqliteDb } from '~/data/sqlite/client';
-import type { RecordingMeta, RecordingMetaRow } from '~/data/sqlite/types';
+import type { RecordingMarker, RecordingMarkerRow, RecordingMeta, RecordingMetaRow } from '~/data/sqlite/types';
 
 function normalizeRecognitionMode(value: string | null | undefined): 'offline' | 'online' | null {
     if (value === 'offline' || value === 'online') {
@@ -233,4 +233,64 @@ export async function hasRecordingSession(sessionId: string): Promise<boolean> {
     const db = await getSqliteDb();
     const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(1) AS count FROM recordings WHERE session_id = ?', sessionId);
     return (row?.count ?? 0) > 0;
+}
+
+function toMarker(row: RecordingMarkerRow): RecordingMarker {
+    return {
+        id: row.id,
+        recordingPath: row.recording_path,
+        sessionId: row.session_id,
+        timeMs: row.time_ms,
+        noteText: row.note_text,
+        sortOrder: row.sort_order,
+        createdAtMs: row.created_at_ms,
+        updatedAtMs: row.updated_at_ms,
+    };
+}
+
+export async function listRecordingMarkersByRecordingPath(recordingPath: string): Promise<RecordingMarker[]> {
+    const normalizedPath = recordingPath.trim();
+    if (!normalizedPath) {
+        return [];
+    }
+    const db = await getSqliteDb();
+    const rows = await db.getAllAsync<RecordingMarkerRow>(
+        `SELECT id, recording_path, session_id, time_ms, note_text, sort_order, created_at_ms, updated_at_ms
+         FROM recording_markers
+         WHERE recording_path = ?
+         ORDER BY sort_order ASC, id ASC`,
+        normalizedPath,
+    );
+    return rows.map(toMarker);
+}
+
+export async function replaceRecordingMarkers(markers: RecordingMarker[]): Promise<void> {
+    const db = await getSqliteDb();
+    const now = Date.now();
+    const normalizedRecordingPath = markers[0]?.recordingPath?.trim() ?? null;
+    const normalizedSessionId = markers[0]?.sessionId?.trim() ?? null;
+
+    await db.withExclusiveTransactionAsync(async txn => {
+        if (normalizedRecordingPath) {
+            await txn.runAsync('DELETE FROM recording_markers WHERE recording_path = ?', normalizedRecordingPath);
+        } else if (normalizedSessionId) {
+            await txn.runAsync('DELETE FROM recording_markers WHERE session_id = ? AND recording_path IS NULL', normalizedSessionId);
+        }
+
+        for (let index = 0; index < markers.length; index += 1) {
+            const marker = markers[index];
+            await txn.runAsync(
+                `INSERT INTO recording_markers (
+                    recording_path, session_id, time_ms, note_text, sort_order, created_at_ms, updated_at_ms
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                marker.recordingPath?.trim() ?? null,
+                marker.sessionId?.trim() ?? null,
+                Math.max(0, Math.floor(marker.timeMs)),
+                marker.noteText?.trim() ?? null,
+                Number.isFinite(marker.sortOrder) ? marker.sortOrder : index,
+                now,
+                now,
+            );
+        }
+    });
 }
